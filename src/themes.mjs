@@ -1,0 +1,240 @@
+/**
+ * Theme library for the WeChat article studio.
+ *
+ * A theme owns palette + type scale; a variant owns the decoration vocabulary
+ * (title treatment, section header, divider, quote, list, image). Every value
+ * here ends up as an inline CSS declaration, because the WeChat editor drops
+ * stylesheets and class names.
+ *
+ * Topic affinity keys must match the topic ids declared in engine.mjs.
+ */
+
+const SANS = 'sans'
+const SERIF = 'serif'
+const ROUND = 'round'
+
+/** @typedef {{ bg:string, card:string, text:string, secondary:string, accent:string, accentSoft:string, border:string }} Palette */
+
+export const THEMES = [
+
+  {
+    id: 'column',
+    name: '专栏',
+    tagline: '衬线标题、细线与编号，克制的杂志内页',
+    mood: ['克制', '耐读', '编辑感'],
+    topics: { writing: 0.9, culture: 0.75, lifestyle: 0.5, emotion: 0.4, academic: 0.5, business: 0.3, tech: 0.2 },
+    palette: {
+      bg: '#FFFFFF', card: '#F7F4EE', text: '#171614', secondary: '#6F6A62',
+      accent: '#8C3B2E', accentSoft: '#F3EAE5', border: '#E3DED4',
+    },
+    type: { titleFont: SERIF, bodyFont: SERIF, titleSize: 31, titleWeight: 600, titleTracking: '0.01em', bodySize: 16, lineHeight: 1.92, letterSpacing: '0.015em', paraGap: 24, paddingX: 20 },
+    variants: [
+      { id: 'essay', name: '随笔', titleStyle: 'kicker', sectionStyle: 'rule', dividerStyle: 'line', quoteStyle: 'pull', listStyle: 'num', imageStyle: 'plain' },
+      { id: 'feature', name: '特稿', titleStyle: 'kicker', sectionStyle: 'numbered', dividerStyle: 'none', quoteStyle: 'pull', listStyle: 'num', imageStyle: 'plain' },
+    ],
+  },
+  {
+    id: 'ink',
+    name: '墨白',
+    tagline: '黑字、细线、大留白，让文章自己说话',
+    mood: ['克制', '深度', '编辑感'],
+    topics: { academic: 0.55, culture: 0.6, tech: 0.5, business: 0.5, lifestyle: 0.35, writing: 0.85 },
+    palette: {
+      bg: '#FFFFFF', card: '#F6F5F2', text: '#18191B', secondary: '#6B6D70',
+      accent: '#18191B', accentSoft: '#EDEBE6', border: '#E5E2DB',
+    },
+    type: { titleFont: SERIF, bodyFont: SANS, titleSize: 30, titleWeight: 600, titleTracking: '0.03em', bodySize: 15.5, lineHeight: 1.85, letterSpacing: '0.015em', paraGap: 22, paddingX: 18 },
+    variants: [
+      { id: 'editorial', name: '社论', titleStyle: 'rule', sectionStyle: 'bar', dividerStyle: 'diamond', quoteStyle: 'bar', listStyle: 'dot', imageStyle: 'plain' },
+      { id: 'index', name: '索引', titleStyle: 'eyebrow', sectionStyle: 'numbered', dividerStyle: 'line', quoteStyle: 'center', listStyle: 'num', imageStyle: 'shadow' },
+    ],
+  },
+  {
+    id: 'paper',
+    name: '米纸',
+    tagline: '旧纸的暖调，像一本翻旧了的随笔集',
+    mood: ['温润', '文学', '慢'],
+    topics: { culture: 0.85, lifestyle: 0.6, emotion: 0.75, academic: 0.3, writing: 0.5 },
+    palette: {
+      bg: '#FBF7EF', card: '#F4EDDF', text: '#3A322A', secondary: '#7C7163',
+      accent: '#A8763E', accentSoft: '#F0E5D2', border: '#E5D9C4',
+    },
+    type: { titleFont: SERIF, bodyFont: SERIF, titleSize: 29, titleWeight: 600, titleTracking: '0.04em', bodySize: 15.5, lineHeight: 1.95, letterSpacing: '0.02em', paraGap: 24, paddingX: 20 },
+    variants: [
+      { id: 'letter', name: '书信', titleStyle: 'rule', sectionStyle: 'tag', dividerStyle: 'ornament', quoteStyle: 'card', listStyle: 'dot', imageStyle: 'polaroid' },
+      { id: 'scroll', name: '卷轴', titleStyle: 'vertical', sectionStyle: 'bar', dividerStyle: 'dash', quoteStyle: 'tint', listStyle: 'square', imageStyle: 'frame' },
+    ],
+  },
+  {
+    id: 'pine',
+    name: '青松',
+    tagline: '清爽的绿，适合讲方法、讲经验',
+    mood: ['清新', '成长', '利落'],
+    topics: { education: 0.8, lifestyle: 0.65, health: 0.7, tech: 0.45, parent: 0.55, writing: 0.35 },
+    palette: {
+      bg: '#FFFFFF', card: '#F2F8F3', text: '#1C2B22', secondary: '#5F7268',
+      accent: '#2E7D5B', accentSoft: '#E3F2E9', border: '#D8E7DD',
+    },
+    type: { titleFont: SANS, bodyFont: SANS, titleSize: 28, titleWeight: 600, titleTracking: '0.02em', bodySize: 15.5, lineHeight: 1.8, letterSpacing: '0.01em', paraGap: 20, paddingX: 18 },
+    variants: [
+      { id: 'garden', name: '花园', titleStyle: 'ribbon', sectionStyle: 'tag', dividerStyle: 'dots', quoteStyle: 'tint', listStyle: 'dot', imageStyle: 'rounded' },
+      { id: 'clean', name: '留白', titleStyle: 'underline', sectionStyle: 'bar', dividerStyle: 'line', quoteStyle: 'bar', listStyle: 'arrow', imageStyle: 'rounded' },
+    ],
+  },
+  {
+    id: 'ocean',
+    name: '深海蓝',
+    tagline: '结构清楚、层级分明，适合分析与复盘',
+    mood: ['专业', '理性', '结构'],
+    topics: { business: 0.9, tech: 0.75, finance: 0.8, academic: 0.6, education: 0.5, writing: 0.45 },
+    palette: {
+      bg: '#FFFFFF', card: '#F1F5FA', text: '#17233A', secondary: '#5A6A82',
+      accent: '#1F5FA8', accentSoft: '#E6EFF9', border: '#D7E2EF',
+    },
+    type: { titleFont: SANS, bodyFont: SANS, titleSize: 28, titleWeight: 700, titleTracking: '0.01em', bodySize: 15.5, lineHeight: 1.8, letterSpacing: '0.01em', paraGap: 20, paddingX: 18 },
+    variants: [
+      { id: 'report', name: '报告', titleStyle: 'boxed', sectionStyle: 'numbered', dividerStyle: 'line', quoteStyle: 'card', listStyle: 'num', imageStyle: 'shadow' },
+      { id: 'brief', name: '简报', titleStyle: 'eyebrow', sectionStyle: 'bar', dividerStyle: 'dash', quoteStyle: 'bar', listStyle: 'square', imageStyle: 'plain' },
+    ],
+  },
+  {
+    id: 'magazine',
+    name: '摩登',
+    tagline: '大标题、强对比，像一页封面',
+    mood: ['锋利', '时髦', '视觉'],
+    topics: { lifestyle: 0.8, business: 0.7, tech: 0.6, beauty: 0.8, food: 0.5, writing: 0.6 },
+    palette: {
+      bg: '#FFFFFF', card: '#FAFAF8', text: '#101010', secondary: '#6E6E6E',
+      accent: '#E8A600', accentSoft: '#FFF4D6', border: '#EBEBEB',
+    },
+    type: { titleFont: SANS, bodyFont: SANS, titleSize: 34, titleWeight: 800, titleTracking: '0em', bodySize: 16, lineHeight: 1.75, letterSpacing: '0.01em', paraGap: 20, paddingX: 16 },
+    variants: [
+      { id: 'cover', name: '封面', titleStyle: 'ribbon', sectionStyle: 'ghost', dividerStyle: 'line', quoteStyle: 'center', listStyle: 'num', imageStyle: 'full' },
+      { id: 'feature', name: '特写', titleStyle: 'eyebrow', sectionStyle: 'bar', dividerStyle: 'dots', quoteStyle: 'tint', listStyle: 'arrow', imageStyle: 'shadow' },
+    ],
+  },
+  {
+    id: 'rose',
+    name: '玫瑰',
+    tagline: '柔和的粉调，适合审美、人物与生活方式',
+    mood: ['柔和', '精致', '亲近'],
+    topics: { beauty: 0.95, lifestyle: 0.75, emotion: 0.7, food: 0.45, writing: 0.3 },
+    palette: {
+      bg: '#FFFBFB', card: '#FDF1F2', text: '#2E2225', secondary: '#7C6B6F',
+      accent: '#C2606F', accentSoft: '#FBE7EA', border: '#F0DDE0',
+    },
+    type: { titleFont: SANS, bodyFont: SANS, titleSize: 28, titleWeight: 600, titleTracking: '0.03em', bodySize: 15.5, lineHeight: 1.85, letterSpacing: '0.015em', paraGap: 22, paddingX: 18 },
+    variants: [
+      { id: 'soft', name: '软光', titleStyle: 'centered', sectionStyle: 'tag', dividerStyle: 'ornament', quoteStyle: 'card', listStyle: 'dot', imageStyle: 'rounded' },
+      { id: 'glossy', name: '缎面', titleStyle: 'underline', sectionStyle: 'numbered', dividerStyle: 'line', quoteStyle: 'center', listStyle: 'num', imageStyle: 'polaroid' },
+    ],
+  },
+  {
+    id: 'amber',
+    name: '暖橙',
+    tagline: '暖色叙事，适合故事、经历与人物',
+    mood: ['温暖', '叙事', '生活'],
+    topics: { emotion: 0.9, lifestyle: 0.7, food: 0.6, education: 0.35, parent: 0.5, writing: 0.35 },
+    palette: {
+      bg: '#FFFDF8', card: '#FFF3E6', text: '#2D2419', secondary: '#7A6A57',
+      accent: '#D97B29', accentSoft: '#FDEBD9', border: '#F0E0CD',
+    },
+    type: { titleFont: SERIF, bodyFont: SANS, titleSize: 28, titleWeight: 600, titleTracking: '0.03em', bodySize: 15.5, lineHeight: 1.9, letterSpacing: '0.015em', paraGap: 23, paddingX: 18 },
+    variants: [
+      { id: 'warm', name: '暖房', titleStyle: 'ribbon', sectionStyle: 'bar', dividerStyle: 'dash', quoteStyle: 'tint', listStyle: 'dot', imageStyle: 'rounded' },
+      { id: 'story', name: '口述', titleStyle: 'eyebrow', sectionStyle: 'tag', dividerStyle: 'ornament', quoteStyle: 'center', listStyle: 'arrow', imageStyle: 'polaroid' },
+    ],
+  },
+  {
+    id: 'night',
+    name: '夜幕',
+    tagline: '深靛蓝配浅底，安静但有分量',
+    mood: ['沉静', '思辨', '夜读'],
+    topics: { tech: 0.85, academic: 0.65, culture: 0.55, business: 0.55, emotion: 0.45, writing: 0.35 },
+    palette: {
+      bg: '#FFFFFF', card: '#F2F4F8', text: '#1B2440', secondary: '#5D6780',
+      accent: '#3A4E8C', accentSoft: '#E9EDF7', border: '#DCE2EF',
+    },
+    type: { titleFont: SANS, bodyFont: SANS, titleSize: 28, titleWeight: 700, titleTracking: '0.02em', bodySize: 15.5, lineHeight: 1.85, letterSpacing: '0.01em', paraGap: 22, paddingX: 18 },
+    variants: [
+      { id: 'night', name: '夜航', titleStyle: 'boxed', sectionStyle: 'numbered', dividerStyle: 'line', quoteStyle: 'stamp', listStyle: 'num', imageStyle: 'shadow' },
+      { id: 'calm', name: '静水', titleStyle: 'centered', sectionStyle: 'line', dividerStyle: 'dots', quoteStyle: 'bar', listStyle: 'dot', imageStyle: 'plain' },
+    ],
+  },
+  {
+    id: 'festival',
+    name: '节庆',
+    tagline: '红金配色，用在祝福、周年与节点',
+    mood: ['热闹', '祝福', '仪式'],
+    topics: { festival: 0.95, culture: 0.5, business: 0.4, emotion: 0.5, writing: 0.2 },
+    palette: {
+      bg: '#FFFFFF', card: '#FFF4F2', text: '#2A1512', secondary: '#7D5A54',
+      accent: '#C8342C', accentSoft: '#FCE7E4', border: '#F3D8D4',
+    },
+    type: { titleFont: SERIF, bodyFont: SANS, titleSize: 30, titleWeight: 700, titleTracking: '0.05em', bodySize: 15.5, lineHeight: 1.85, letterSpacing: '0.015em', paraGap: 22, paddingX: 18 },
+    variants: [
+      { id: 'celebrate', name: '庆典', titleStyle: 'ribbon', sectionStyle: 'tag', dividerStyle: 'ornament', quoteStyle: 'stamp', listStyle: 'dot', imageStyle: 'frame' },
+      { id: 'greeting', name: '贺卡', titleStyle: 'centered', sectionStyle: 'numbered', dividerStyle: 'line', quoteStyle: 'center', listStyle: 'num', imageStyle: 'rounded' },
+    ],
+  },
+  {
+    id: 'scholar',
+    name: '学术',
+    tagline: '编号、脚注式引用，适合研究与长文',
+    mood: ['严谨', '正式', '论证'],
+    topics: { academic: 0.95, education: 0.7, business: 0.55, finance: 0.6, tech: 0.5, writing: 0.4 },
+    palette: {
+      bg: '#FFFFFF', card: '#F4F6F9', text: '#14202E', secondary: '#55637A',
+      accent: '#24486E', accentSoft: '#E8EEF4', border: '#D9E1EA',
+    },
+    type: { titleFont: SERIF, bodyFont: SERIF, titleSize: 26, titleWeight: 700, titleTracking: '0.02em', bodySize: 15, lineHeight: 1.95, letterSpacing: '0.02em', paraGap: 20, paddingX: 18 },
+    variants: [
+      { id: 'paper', name: '论文', titleStyle: 'rule', sectionStyle: 'numbered', dividerStyle: 'line', quoteStyle: 'bar', listStyle: 'num', imageStyle: 'plain' },
+      { id: 'notebook', name: '笔记', titleStyle: 'eyebrow', sectionStyle: 'bar', dividerStyle: 'dash', quoteStyle: 'tint', listStyle: 'square', imageStyle: 'frame' },
+    ],
+  },
+  {
+    id: 'mint',
+    name: '薄荷',
+    tagline: '干净的科学感，适合产品与工具说明',
+    mood: ['干净', '轻快', '说明'],
+    topics: { tech: 0.85, health: 0.75, education: 0.6, lifestyle: 0.5, writing: 0.35 },
+    palette: {
+      bg: '#FFFFFF', card: '#F0FAF8', text: '#16302C', secondary: '#5B756F',
+      accent: '#149E8C', accentSoft: '#DFF5F1', border: '#D3EDE8',
+    },
+    type: { titleFont: SANS, bodyFont: SANS, titleSize: 28, titleWeight: 600, titleTracking: '0.02em', bodySize: 15.5, lineHeight: 1.8, letterSpacing: '0.01em', paraGap: 20, paddingX: 18 },
+    variants: [
+      { id: 'fresh', name: '清透', titleStyle: 'ribbon', sectionStyle: 'tag', dividerStyle: 'dots', quoteStyle: 'tint', listStyle: 'dot', imageStyle: 'rounded' },
+      { id: 'minimal', name: '极简', titleStyle: 'underline', sectionStyle: 'line', dividerStyle: 'line', quoteStyle: 'bar', listStyle: 'arrow', imageStyle: 'plain' },
+    ],
+  },
+  {
+    id: 'mono',
+    name: '灰阶',
+    tagline: '无彩色，信息密度优先',
+    mood: ['中性', '效率', '清单'],
+    topics: { tech: 0.6, business: 0.6, education: 0.5, academic: 0.5, writing: 0.4 },
+    palette: {
+      bg: '#FCFCFC', card: '#F3F3F3', text: '#191919', secondary: '#6A6A6A',
+      accent: '#3D3D3D', accentSoft: '#ECECEC', border: '#E2E2E2',
+    },
+    type: { titleFont: SANS, bodyFont: SANS, titleSize: 27, titleWeight: 700, titleTracking: '0.01em', bodySize: 15, lineHeight: 1.8, letterSpacing: '0.01em', paraGap: 18, paddingX: 18 },
+    variants: [
+      { id: 'grid', name: '网格', titleStyle: 'boxed', sectionStyle: 'bar', dividerStyle: 'dash', quoteStyle: 'bar', listStyle: 'square', imageStyle: 'frame' },
+      { id: 'plain', name: '素面', titleStyle: 'underline', sectionStyle: 'line', dividerStyle: 'line', quoteStyle: 'center', listStyle: 'dot', imageStyle: 'plain' },
+    ],
+  },
+]
+
+export const THEME_IDS = THEMES.map(theme => theme.id)
+
+/** Find a theme by id, falling back to the first one so a stale stored design still renders. */
+export function themeOf(id) {
+  return THEMES.find(theme => theme.id === id) ?? THEMES[0]
+}
+
+/** Find a variant inside a theme, falling back to its first variant. */
+export function variantOf(theme, id) {
+  return theme.variants.find(variant => variant.id === id) ?? theme.variants[0]
+}

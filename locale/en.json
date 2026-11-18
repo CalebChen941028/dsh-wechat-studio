@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "WeChat article studio",
+    "description": "Opens as a sidebar panel. Paste copy into the editor and the WeChat layout renders live; pick a theme on the right, press Auto compose to choose one from the content, or open the AI tab and say what to change in plain language (the model edits copy, theme, or type and every change can be undone). Then fine-tune type, spacing, and decoration. Copy the inline-styled HTML into the WeChat editor, or connect an AppID and AppSecret to save a draft or publish directly. The secret stays in this machine's credential store and is never returned to the page.",
+    "detail": "docs/DETAIL.md"
+  }
+}
