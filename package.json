@@ -35,5 +35,10 @@
         "@deepseek-ai/dsh-client-ui-sidebar"
       ]
     }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CalebChen941028/dsh-wechat-studio.git"
   }
 }

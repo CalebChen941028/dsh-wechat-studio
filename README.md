@@ -1,5 +1,8 @@
 # 公众号排版工作台（WeChat article studio）
 
+[![test](https://github.com/CalebChen941028/dsh-wechat-studio/actions/workflows/test.yml/badge.svg)](https://github.com/CalebChen941028/dsh-wechat-studio/actions/workflows/test.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 DSH 侧边栏插件：把公众号文案写成 Markdown，实时渲染成微信可粘贴的版式，按内容自动选主题，改完直接复制或发布。
 
 ## 打开方式
@@ -61,3 +64,7 @@ node --test test/*.test.mjs   # 解析、编排、渲染、Host 服务与 AI 编
 - 微信对草稿正文、标题（64 字）、作者（8 字）、摘要（120 字）有限制；超长会截断并在发布面板提示。
 - 复杂排版（表格、嵌套列表、公式）暂不支持，会按普通段落渲染；Word 表格会转成「单元格 ｜ 单元格」的普通行。
 - `.docx` 解析在浏览器里完成：正文、标题层级和常用内嵌图片会带过来；页眉页脚、批注、文本框里的图不处理。PDF 与旧版 `.doc` 不支持。
+
+## 许可
+
+MIT，见 [LICENSE](LICENSE)。
