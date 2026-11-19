@@ -485,7 +485,7 @@ function StudioPanel(props) {
     const html = serializeNodes(tree.nodes)
     try {
       const mode = await copyRichHtml(html)
-      toast(mode === 'rich' ? '已复制带样式的正文，粘到公众号编辑器即可' : '已复制，样式可能不完整', 'success')
+      toast(mode === 'rich' ? '已复制带样式的正文，粘到公众号编辑器即可' : t('已复制，样式可能不完整'), 'success')
     } catch (error) {
       toast(error.message || t('复制失败'), 'error')
     }
@@ -588,7 +588,7 @@ function StudioPanel(props) {
       store.addDoc(body, designNow)
       if (narrow) setNarrowView('preview')
       const composed = composeDesign(designNow)
-      const imageNote = typeof images === 'number' && images > 0 ? `，含 ${images} 张插图` : ''
+      const imageNote = typeof images === 'number' && images > 0 ? t('，含 {count} 张插图', { count: images }) : ''
       toast(`已导入「${parsedNow.title || file.name}」，自动编排为 ${composed.themeName} · ${composed.variantName}${imageNote}`, 'success')
       if (autoRefine) {
         clearTimeout(refineTimerRef.current)

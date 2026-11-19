@@ -62,9 +62,9 @@ function TopBar(props) {
     ),
     narrow
       ? h('div', { className: 'ws-seg' },
-        h('button', { type: 'button', className: narrowView === 'write' ? 'on' : '', onClick: () => setNarrowView('write') }, '编辑'),
-        h('button', { type: 'button', className: narrowView === 'preview' ? 'on' : '', onClick: () => setNarrowView('preview') }, '预览'),
-        h('button', { type: 'button', className: narrowView === 'design' ? 'on' : '', onClick: () => setNarrowView('design') }, '设计'),
+        h('button', { type: 'button', className: narrowView === 'write' ? 'on' : '', onClick: () => setNarrowView('write') }, t('编辑')),
+        h('button', { type: 'button', className: narrowView === 'preview' ? 'on' : '', onClick: () => setNarrowView('preview') }, t('预览')),
+        h('button', { type: 'button', className: narrowView === 'design' ? 'on' : '', onClick: () => setNarrowView('design') }, t('设计')),
       )
       : null,
     h('div', { className: 'ws-top-spacer' }),
@@ -201,7 +201,7 @@ function DocRail(props) {
       if (typeof onImagesChanged === 'function') onImagesChanged()
       toast('图片已插入正文，发布时会自动转存到微信 CDN', 'success')
     } catch (error) {
-      toast(error.message || '图片处理失败', 'error')
+      toast(error.message || t('图片处理失败'), 'error')
     }
   }
 
@@ -225,16 +225,16 @@ function DocRail(props) {
 
   const words = features.chars
   const toolbar = [
-    { label: 'H2', title: t('小节标题'), run: () => insertBlock('## 小节标题') },
-    { label: 'H3', title: t('小标题'), run: () => insertBlock('### 小标题') },
-    { label: '“', title: t('引用'), run: () => insertBlock('> 写一句值得被记住的话') },
+    { label: 'H2', title: t('小节标题'), run: () => insertBlock(t('## 小节标题')) },
+    { label: 'H3', title: t('小标题'), run: () => insertBlock(t('### 小标题')) },
+    { label: '“', title: t('引用'), run: () => insertBlock(t('> 写一句值得被记住的话')) },
     { label: '•', title: t('无序列表'), run: () => insertBlock('- 第一点\n- 第二点\n- 第三点') },
     { label: '1.', title: t('有序列表'), run: () => insertBlock('1. 第一步\n2. 第二步\n3. 第三步') },
     { label: '—', title: t('分割线'), run: () => insertBlock('---') },
     { label: t('图'), title: t('插入本地图片'), run: () => imageRef.current?.click() },
     { label: 'B', title: t('加粗'), run: () => insert('**', '**', t('加粗文字')) },
     { label: t('高'), title: t('高亮'), run: () => insert('==', '==', t('高亮文字')) },
-    { label: '码', title: '行内代码', run: () => insert('`', '`', 'code') },
+    { label: t('码'), title: t('行内代码'), run: () => insert('`', '`', 'code') },
   ]
 
   return h('aside', {
@@ -304,11 +304,11 @@ function DocRail(props) {
       ? h('div', { className: 'ws-title-hint' }, `正文 H1 是「${parsed.title}」，发布与预览当前用上面这个标题；留空则回到 H1。`)
       : null,
     doc.meta.sample === true
-      ? h('div', { className: 'ws-title-hint' }, '这是示例文案。粘贴你的内容、上传文档或直接编辑，就会替换掉它。')
+      ? h('div', { className: 'ws-title-hint' }, t('这是示例文案。粘贴你的内容、上传文档或直接编辑，就会替换掉它。'))
       : null,
     h('input', {
       className: 'ws-title-input',
-      placeholder: parsed.title !== '' ? parsed.title : '文章标题（也可以直接写 # 标题）',
+      placeholder: parsed.title !== '' ? parsed.title : t('文章标题（也可以直接写 # 标题）'),
       value: doc.meta.title,
       onChange: event => store.updateMeta({ title: event.target.value }),
     }),
@@ -326,7 +326,7 @@ function DocRail(props) {
       className: 'ws-editor',
       value: doc.text,
       spellCheck: false,
-      placeholder: '把公众号文案粘到这里。支持 Markdown：## 小节、> 引用、- 列表、![图片](url)、--- 分割线、**加粗**、==高亮==。',
+      placeholder: t('把公众号文案粘到这里。支持 Markdown：## 小节、> 引用、- 列表、![图片](url)、--- 分割线、**加粗**、==高亮==。'),
       onChange: event => store.updateDoc(current => ({
         ...current,
         text: event.target.value,
@@ -346,7 +346,7 @@ function DocRail(props) {
             insertText(text)
             if (typeof onImagesChanged === 'function') onImagesChanged()
             if (text.trim().length >= 240) onContentPasted()
-          }).catch(error => toast(error.message || '图片处理失败', 'error'))
+          }).catch(error => toast(error.message || t('图片处理失败'), 'error'))
           return
         }
         const element = event.currentTarget
@@ -360,10 +360,10 @@ function DocRail(props) {
       },
     }),
     h('div', { className: 'ws-left-foot' },
-      h('span', null, `${features.chars} 字 · 约 ${features.readingMinutes} 分钟`),
-      selectedBlock !== null ? h('span', { className: 'ws-foot-hint' }, '已选中第 ' + (selectedBlock + 1) + ' 段') : null,
+      h('span', null, t('{chars} 字 · 约 {minutes} 分钟', { chars: features.chars, minutes: features.readingMinutes })),
+      selectedBlock !== null ? h('span', { className: 'ws-foot-hint' }, t('已选中第 {index} 段', { index: selectedBlock + 1 })) : null,
       h('span', { className: 'ws-top-spacer' }),
-      h('span', { className: 'ws-saved' }, h(Icon, { name: 'check', size: 12 }), '本地自动保存'),
+      h('span', { className: 'ws-saved' }, h(Icon, { name: 'check', size: 12 }), t('本地自动保存')),
     ),
   )
 }
@@ -469,7 +469,7 @@ function WechatPhoneChrome(props) {
         h('span', { className: 'ws-nav-more' }, h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'currentColor', 'aria-hidden': 'true' }, h('circle', { cx: 5, cy: 12, r: 1.7 }), h('circle', { cx: 12, cy: 12, r: 1.7 }), h('circle', { cx: 19, cy: 12, r: 1.7 }))),
       ),
       h('div', { className: 'ws-phone-scroll' },
-        empty ? h('div', { className: 'ws-empty' }, '把文案粘到左侧，或上传 .md / .docx 文档，这里会实时出现公众号版式。也可以点下方「插入图片」放一张插图。') : children,
+        empty ? h('div', { className: 'ws-empty' }, t('把文案粘到左侧，或上传 .md / .docx 文档，这里会实时出现公众号版式。也可以点下方「插入图片」放一张插图。')) : children,
         !empty && source !== ''
           ? h('div', { className: 'ws-read-original' }, t('阅读原文'), h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M9 5l7 7-7 7' })))
           : null,
@@ -511,7 +511,7 @@ function PreviewStage(props) {
       if (typeof onImagesChanged === 'function') onImagesChanged()
       toast('图片已替换')
     } catch (error) {
-      toast(error.message || '图片处理失败', 'error')
+      toast(error.message || t('图片处理失败'), 'error')
     }
   }
   const insertPreviewImage = async (file) => {
@@ -528,7 +528,7 @@ function PreviewStage(props) {
       if (typeof onImagesChanged === 'function') onImagesChanged()
       toast('插图已加到正文末尾')
     } catch (error) {
-      toast(error.message || '图片处理失败', 'error')
+      toast(error.message || t('图片处理失败'), 'error')
     }
   }
   const root = article.nodes[0]
@@ -576,16 +576,16 @@ function PreviewStage(props) {
 
   const blockLabel = (block) => {
     if (!block) return ''
-    if (block.type === 'heading') return '小节'
-    if (block.type === 'quote') return '引用'
-    if (block.type === 'list') return '列表'
-    if (block.type === 'image') return '图片'
-    if (block.type === 'code') return '代码'
-    if (block.type === 'divider') return '分割线'
+    if (block.type === 'heading') return t('小节')
+    if (block.type === 'quote') return t('引用')
+    if (block.type === 'list') return t('列表')
+    if (block.type === 'image') return t('图片')
+    if (block.type === 'code') return t('代码')
+    if (block.type === 'divider') return t('分割线')
     return t('段落')
   }
 
-  const brand = (doc.meta.brand ?? '').trim() || '公众号'
+  const brand = (doc.meta.brand ?? '').trim() || t('公众号')
   const source = (doc.meta.sourceUrl ?? '').trim()
 
   return h('section', { className: 'ws-mid' },
@@ -649,7 +649,7 @@ function ArticleBody(props) {
     isSelected ? h('div', { className: 'ws-block-tag' }, blockLabel(block)) : null,
     content,
     h('div', { className: 'ws-block-tools' },
-      block.type === 'image' ? h('button', { type: 'button', title: '替换图片', onClick: event => { event.stopPropagation(); replaceImage(blockIndex) } }, h(Icon, { name: 'image', size: 12 })) : null,
+      block.type === 'image' ? h('button', { type: 'button', title: t('替换图片'), onClick: event => { event.stopPropagation(); replaceImage(blockIndex) } }, h(Icon, { name: 'image', size: 12 })) : null,
       h('button', { type: 'button', title: t('上移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, -1) } }, h(Icon, { name: 'arrowUp', size: 12 })),
       h('button', { type: 'button', title: t('下移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, 1) } }, h(Icon, { name: 'arrowDown', size: 12 })),
       h('button', { type: 'button', title: t('删除这一段'), onClick: event => { event.stopPropagation(); removeBlock(blockIndex) } }, h(Icon, { name: 'trash', size: 12 })),

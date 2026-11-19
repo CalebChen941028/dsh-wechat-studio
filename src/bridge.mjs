@@ -134,7 +134,7 @@ export async function callHostStream(action, payload = {}, options = {}) {
 }
 
 function bridgeError(code, message) {
-  const error = new Error(message)
+  const error = new Error(localizeError(code, message))
   error.code = code
   return error
 }
