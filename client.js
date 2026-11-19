@@ -489,6 +489,14 @@ const UI_EN = {
   '已应用 AI 修改：{parts}': 'AI changes applied: {parts}',
   '已放弃这次 AI 修改': 'AI suggestion discarded',
 
+  '大纲': 'Outline',
+
+  '编辑图注': 'Edit caption',
+  '图片说明，留空则不显示': 'Image caption; empty hides it',
+  '图注已更新': 'Caption updated',
+
+  '浏览器存储写入失败，这轮修改只保存在内存里，刷新会丢失。请导出草稿 JSON，或删掉带大图的草稿。': 'Browser storage write failed; this round of edits stays in memory and will be lost on reload. Export the draft JSON or delete drafts with large images.',
+
 }
 
 
@@ -1413,6 +1421,24 @@ function tidyMarkdown(text) {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+/**
+ * Replace the caption/alt text of one Markdown image line.
+ * @param {string} text Markdown source.
+ * @param {number} lineIndex zero-based line to edit.
+ * @param {string} caption new caption (brackets/newlines are stripped).
+ * @returns {string} updated source; unchanged when the line is not an image.
+ */
+function replaceImageCaption(text, lineIndex, caption) {
+  const lines = String(text ?? '').split('\n')
+  const line = lines[lineIndex]
+  if (typeof line !== 'string') return text
+  const match = /^(\s*!\[)([^\]]*)(\]\([^)]*\)\s*)$/.exec(line)
+  if (!match) return text
+  const safeCaption = String(caption ?? '').replace(/[\[\]\n\r]/g, '').trim()
+  lines[lineIndex] = `${match[1]}${safeCaption}${match[3]}`
+  return lines.join('\n')
 }
 
 /**
@@ -3026,6 +3052,92 @@ async function pruneImages(texts) {
   return stale.length
 }
 
+/* ===== src/docdb.mjs ===== */
+/**
+ * Document body persistence (IndexedDB).
+ *
+ * localStorage keeps preferences and small UI state; draft bodies live here so
+ * long articles and many drafts do not hit the ~5 MB localStorage quota.
+ * Falls back to the caller's localStorage path when IndexedDB is unavailable.
+ */
+
+const DOC_DB_NAME = 'dsh-wechat-studio-docs'
+const DOC_STORE_NAME = 'state'
+const DOC_ROW_ID = 'docs'
+
+let docDbPromise
+let docLoadingPromise
+
+function hasDocIndexedDb() {
+  try {
+    return typeof indexedDB !== 'undefined' && indexedDB !== null
+  } catch {
+    return false
+  }
+}
+
+function openDocDb() {
+  if (docDbPromise !== undefined) return docDbPromise
+  docDbPromise = new Promise((resolve) => {
+    if (!hasDocIndexedDb()) { resolve(null); return }
+    let request
+    try { request = indexedDB.open(DOC_DB_NAME, 1) } catch { resolve(null); return }
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(DOC_STORE_NAME)) db.createObjectStore(DOC_STORE_NAME, { keyPath: 'id' })
+    }
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => resolve(null)
+    request.onblocked = () => resolve(null)
+  })
+  return docDbPromise
+}
+
+function withDocStore(mode, run) {
+  return openDocDb().then(db => {
+    if (db === null) return null
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(DOC_STORE_NAME, mode)
+        const request = run(tx.objectStore(DOC_STORE_NAME))
+        let result = null
+        if (request !== undefined && request !== null) {
+          request.onsuccess = () => { result = request.result }
+          request.onerror = () => { result = null }
+        }
+        tx.oncomplete = () => resolve(result)
+        tx.onerror = () => resolve(result)
+        tx.onabort = () => resolve(result)
+      } catch {
+        resolve(null)
+      }
+    })
+  }).catch(() => null)
+}
+
+/** Load stored drafts; null when IndexedDB is unavailable or empty. */
+function loadDocsFromDb() {
+  if (docLoadingPromise !== undefined) return docLoadingPromise
+  docLoadingPromise = withDocStore('readonly', store => store.get(DOC_ROW_ID)).then(row => {
+    if (row === null || row === undefined || !Array.isArray(row.items)) return null
+    const items = row.items.filter(entry => entry && typeof entry.id === 'string' && typeof entry.text === 'string')
+    return items.length === 0 ? null : items
+  })
+  return docLoadingPromise
+}
+
+/** Persist the full draft array as one record. */
+async function saveDocsToDb(items) {
+  if (!Array.isArray(items)) return false
+  const result = await withDocStore('readwrite', store => store.put({ id: DOC_ROW_ID, items, updatedAt: Date.now() }))
+  return result !== null && result !== undefined
+}
+
+/** Remove the stored draft array (not used by normal flows). */
+async function clearDocsDb() {
+  await withDocStore('readwrite', store => store.delete(DOC_ROW_ID))
+}
+
 /* ===== src/bridge.mjs ===== */
 /**
  * Browser to Host bridge.
@@ -3290,6 +3402,7 @@ function base64Bytes(dataUrl) {
 
 const PANEL_ID = 'wechat-studio'
 const STORAGE_KEY = 'dsh.wechat-studio.docs.v1'
+const ACTIVE_KEY = 'dsh.wechat-studio.active.v1'
 const APPEARANCE_KEY = 'dsh.wechat-studio.appearance.v1'
 const LONG_TEXT_CHUNK_THRESHOLD = 7000
 const DEVICE_KEY = 'dsh.wechat-studio.device.v1'
@@ -3436,7 +3549,9 @@ function loadStore() {
       if (parsed && Array.isArray(parsed.docs) && parsed.docs.length > 0) {
         const docs = parsed.docs.filter(entry => entry && typeof entry.text === 'string')
         if (docs.length > 0) {
-          const activeId = docs.some(entry => entry.id === parsed.activeId) ? parsed.activeId : docs[0].id
+          const remembered = localStorage.getItem(ACTIVE_KEY)
+          const preferred = remembered ?? parsed.activeId
+          const activeId = docs.some(entry => entry.id === preferred) ? preferred : docs[0].id
           return { docs, activeId }
         }
       }
@@ -3492,6 +3607,8 @@ function useDocumentStore() {
   const [past, setPast] = React.useState([])
   const [future, setFuture] = React.useState([])
   const [persistError, setPersistError] = React.useState(false)
+  const [hydrated, setHydrated] = React.useState(false)
+  const [storageMode, setStorageMode] = React.useState('local')
   const lastPushRef = React.useRef({ key: '', at: 0 })
 
   const doc = React.useMemo(
@@ -3504,9 +3621,64 @@ function useDocumentStore() {
   pastRef.current = past
 
   React.useEffect(() => {
+    let cancelled = false
+    const initial = initialRef.current
+    loadDocsFromDb().then((stored) => {
+      if (cancelled) return
+      if (Array.isArray(stored) && stored.length > 0) {
+        setDocs(stored)
+        let remembered = ''
+        try { remembered = localStorage.getItem(ACTIVE_KEY) ?? '' } catch { remembered = '' }
+        setActiveId((current) => (
+          stored.some(entry => entry.id === current) ? current
+            : stored.some(entry => entry.id === remembered) ? remembered
+              : stored[0].id
+        ))
+        setStorageMode('idb')
+        setHydrated(true)
+        return
+      }
+      saveDocsToDb(serializeDocs(initial.docs)).then((saved) => {
+        if (cancelled) return
+        setStorageMode(saved ? 'idb' : 'local')
+        setHydrated(true)
+        if (saved) {
+          try { localStorage.removeItem(STORAGE_KEY) } catch { /* private mode */ }
+        }
+      }).catch(() => {
+        if (!cancelled) { setStorageMode('local'); setHydrated(true) }
+      })
+    }).catch(() => {
+      if (!cancelled) { setStorageMode('local'); setHydrated(true) }
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  React.useEffect(() => {
+    if (!hydrated) return undefined
     const timer = setTimeout(() => {
+      const cleaned = serializeDocs(docs)
+      if (storageMode === 'idb') {
+        saveDocsToDb(cleaned).then((saved) => {
+          if (!saved) {
+            setPersistError(true)
+            setStorageMode('local')
+            return
+          }
+          setPersistError(false)
+          try {
+            localStorage.setItem(ACTIVE_KEY, activeId)
+            localStorage.removeItem(STORAGE_KEY)
+          } catch { /* private mode */ }
+        }).catch(() => {
+          setPersistError(true)
+          setStorageMode('local')
+        })
+        return
+      }
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ docs: serializeDocs(docs), activeId }))
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ docs: cleaned, activeId }))
+        localStorage.setItem(ACTIVE_KEY, activeId)
         setPersistError(false)
       } catch {
         // Quota or privacy mode: the panel keeps working in memory, and the
@@ -3515,7 +3687,7 @@ function useDocumentStore() {
       }
     }, 350)
     return () => clearTimeout(timer)
-  }, [docs, activeId])
+  }, [docs, activeId, hydrated, storageMode])
 
   const updateDoc = React.useCallback((updater, options = {}) => {
     const current = docRef.current
@@ -3702,7 +3874,7 @@ function StudioPanel(props) {
     }
     if (persistWarnedRef.current) return
     persistWarnedRef.current = true
-    toast('本地存储已满，这轮修改只保存在内存里，刷新会丢失。请导出草稿 JSON，或删掉带大图的草稿。', 'error')
+    toast(t('浏览器存储写入失败，这轮修改只保存在内存里，刷新会丢失。请导出草稿 JSON，或删掉带大图的草稿。'), 'error')
   }, [store.persistError, toast])
 
 
@@ -3722,9 +3894,12 @@ function StudioPanel(props) {
     return () => { cancelled = true }
   }, [])
 
-  const renderText = React.useMemo(() => expandImageRefs(doc.text), [doc.text, imageVersion])
+  // Keep typing responsive on long articles: the preview catches up through a
+  // deferred value while the editor itself updates immediately.
+  const deferredText = React.useDeferredValue(doc.text)
+  const renderText = React.useMemo(() => expandImageRefs(deferredText), [deferredText, imageVersion])
   // Counting/ranking must not count base64 payloads as article characters.
-  const measureText = React.useMemo(() => doc.text.replace(/data:image\/[a-zA-Z+]+;base64,[^)\s]+/g, ''), [doc.text])
+  const measureText = React.useMemo(() => deferredText.replace(/data:image\/[a-zA-Z+]+;base64,[^)\s]+/g, ''), [deferredText])
   const parsed = React.useMemo(() => parseArticle(renderText), [renderText])
   const design = React.useMemo(() => composeDesign(doc.design), [doc.design])
   const features = React.useMemo(() => measure(parsed.blocks, measureText), [parsed.blocks, measureText])
@@ -3740,6 +3915,48 @@ function StudioPanel(props) {
     () => buildArticle({ blocks: parsed.blocks, design, meta }),
     [parsed.blocks, design, meta.author, meta.title, date, features.readingMinutes],
   )
+
+  const scrollEditorToBlock = React.useCallback((index, shouldFocus) => {
+    const block = parsed.blocks[index]
+    const element = textareaRef.current
+    if (block === undefined || element === null) return
+    const lines = doc.text.split('\n')
+    const firstLine = block.lines?.[0] ?? 0
+    const lastLine = block.lines?.[1] ?? firstLine
+    const start = lines.slice(0, firstLine).join('\n').length + (firstLine > 0 ? 1 : 0)
+    const end = lines.slice(0, lastLine + 1).join('\n').length
+    requestAnimationFrame(() => {
+      try {
+        if (shouldFocus) {
+          element.focus({ preventScroll: true })
+          element.setSelectionRange(start, end)
+        }
+        const lineHeight = parseFloat(window.getComputedStyle(element).lineHeight) || 22
+        element.scrollTop = Math.max(0, firstLine * lineHeight - element.clientHeight / 3)
+      } catch {
+        // Editor may be unmounted in narrow view.
+      }
+    })
+  }, [parsed.blocks, doc.text])
+
+  const goToBlock = React.useCallback((index) => {
+    setSelectedBlock(index)
+    scrollEditorToBlock(index, true)
+  }, [scrollEditorToBlock])
+
+  const syncBlockFromCaret = React.useCallback((event) => {
+    const element = event.currentTarget
+    const line = element.value.slice(0, element.selectionStart).split('\n').length - 1
+    let found = -1
+    for (let index = 0; index < parsed.blocks.length; index += 1) {
+      const block = parsed.blocks[index]
+      const first = block.lines?.[0] ?? -1
+      const last = block.lines?.[1] ?? first
+      if (first <= line && line <= last) { found = index; break }
+      if (first <= line) found = index
+    }
+    setSelectedBlock(found >= 0 ? found : null)
+  }, [parsed.blocks])
 
   const runCompose = () => {
     const result = autoCompose(parsed.blocks, doc.text, 0)
@@ -3916,6 +4133,7 @@ function StudioPanel(props) {
     h('div', { className: 'ws-body' },
       h(DocRail, {
         store, parsed, features, textareaRef, toast, narrow, selectedBlock, setSelectedBlock,
+        onGoToBlock: goToBlock, onEditorCaret: syncBlockFromCaret,
         onImportDocument: importDocument, onContentPasted: () => scheduleAutoCompose(true),
         onImagesChanged: bumpImages,
         onOpenAi: () => openDesign('ai'),
@@ -4111,7 +4329,7 @@ function TopBar(props) {
  * ------------------------------------------------------------------ */
 
 function DocRail(props) {
-  const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onImportDocument, onContentPasted, onOpenAi, onImagesChanged } = props
+  const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onGoToBlock, onEditorCaret, onImportDocument, onContentPasted, onOpenAi, onImagesChanged } = props
   const { doc } = store
   const [docMenu, setDocMenu] = React.useState(false)
   React.useEffect(() => {
@@ -4192,6 +4410,9 @@ function DocRail(props) {
   }
 
   const words = features.chars
+  const outline = parsed.blocks
+    .map((block, index) => ({ block, index }))
+    .filter(entry => entry.block.type === 'title' || entry.block.type === 'heading')
   const toolbar = [
     { label: 'H2', title: t('小节标题'), run: () => insertBlock(t('## 小节标题')) },
     { label: 'H3', title: t('小标题'), run: () => insertBlock(t('### 小标题')) },
@@ -4280,6 +4501,21 @@ function DocRail(props) {
       value: doc.meta.title,
       onChange: event => store.updateMeta({ title: event.target.value }),
     }),
+    outline.length > 1
+      ? h('div', { className: 'ws-outline' },
+        h('span', { className: 'ws-outline-label' }, t('大纲')),
+        h('div', { className: 'ws-outline-list' },
+          outline.map(({ block, index }) => h('button', {
+            key: index,
+            type: 'button',
+            className: 'ws-outline-item' + (selectedBlock === index ? ' on' : ''),
+            'data-level': block.level ?? 2,
+            title: block.text,
+            onClick: () => onGoToBlock(index),
+          }, block.type === 'title' ? t('标题') : block.text)),
+        ),
+      )
+      : null,
     h('div', { className: 'ws-toolbar' },
       toolbar.map(item => h('button', {
         key: item.label,
@@ -4295,6 +4531,8 @@ function DocRail(props) {
       value: doc.text,
       spellCheck: false,
       placeholder: t('把公众号文案粘到这里。支持 Markdown：## 小节、> 引用、- 列表、![图片](url)、--- 分割线、**加粗**、==高亮==。'),
+      onSelect: onEditorCaret,
+      onClick: onEditorCaret,
       onChange: event => store.updateDoc(current => ({
         ...current,
         text: event.target.value,
@@ -4469,6 +4707,31 @@ function PreviewStage(props) {
   const { article, design, doc, parsed, features, selectedBlock, setSelectedBlock, store, toast, narrow, date, onImagesChanged, device, setDevice } = props
   const previewImageRef = React.useRef(null)
   const pendingReplaceRef = React.useRef(null)
+  React.useEffect(() => {
+    if (selectedBlock === null) return
+    const element = document.querySelector(`.ws-article [data-block="${selectedBlock}"]`)
+    if (element !== null && typeof element.scrollIntoView === 'function') {
+      element.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
+  }, [selectedBlock])
+  const [captionBlock, setCaptionBlock] = React.useState(null)
+  const [captionDraft, setCaptionDraft] = React.useState('')
+  const startCaption = (blockIndex) => {
+    const block = sourceBlocks[blockIndex]
+    if (!block || block.type !== 'image') return
+    setCaptionBlock(blockIndex)
+    setCaptionDraft(block.alt ?? '')
+  }
+  const saveCaption = (blockIndex, value) => {
+    const block = sourceBlocks[blockIndex]
+    if (!block || block.type !== 'image') return
+    const next = replaceImageCaption(doc.text, block.lines[0], value)
+    store.updateDoc(current => ({ ...current, text: next }))
+    setCaptionBlock(null)
+    setCaptionDraft('')
+    toast(t('图注已更新'))
+  }
+  const cancelCaption = () => { setCaptionBlock(null); setCaptionDraft('') }
   const replaceImage = (blockIndex) => {
     pendingReplaceRef.current = blockIndex
     previewImageRef.current?.click()
@@ -4537,6 +4800,7 @@ function PreviewStage(props) {
     void blocks
     store.updateDoc(current => ({ ...current, text: next }))
     setSelectedBlock(target)
+    setCaptionBlock(null)
   }
 
   const removeBlock = (index) => {
@@ -4551,6 +4815,7 @@ function PreviewStage(props) {
     const next = [...lines.slice(0, start), ...lines.slice(end + 1)].join('\n')
     store.updateDoc(current => ({ ...current, text: next }))
     setSelectedBlock(null)
+    setCaptionBlock(null)
     toast('已删除这一段')
   }
 
@@ -4573,6 +4838,7 @@ function PreviewStage(props) {
       h(WechatPhoneChrome, { brand, source, empty: doc.text.trim() === '', device },
         h(ArticleBody, {
           root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel,
+          captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption,
         }),
       ),
       h('input', {
@@ -4606,7 +4872,7 @@ function PreviewStage(props) {
 }
 
 function ArticleBody(props) {
-  const { root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage } = props
+  const { root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption } = props
   const [hovered, setHovered] = React.useState(null)
   const children = root.children
 
@@ -4622,13 +4888,33 @@ function ArticleBody(props) {
     return h('div', {
       key: index,
       className: 'ws-block' + (isSelected ? ' selected' : '') + (hovered === blockIndex ? ' hovered' : ''),
+      'data-block': blockIndex,
       onMouseEnter: () => setHovered(blockIndex),
       onMouseLeave: () => setHovered(value => (value === blockIndex ? null : value)),
       onClick: () => setSelectedBlock(isSelected ? null : blockIndex),
     },
     isSelected ? h('div', { className: 'ws-block-tag' }, blockLabel(block)) : null,
     content,
+    captionBlock === blockIndex && block.type === 'image'
+      ? h('div', { className: 'ws-caption-editor', onClick: event => event.stopPropagation() },
+        h('input', {
+          className: 'ws-input',
+          value: captionDraft,
+          placeholder: t('图片说明，留空则不显示'),
+          autoFocus: true,
+          onChange: event => setCaptionDraft(event.target.value),
+          onKeyDown: event => {
+            if (event.key === 'Enter') { event.preventDefault(); saveCaption(blockIndex, captionDraft) }
+            if (event.key === 'Escape') { event.preventDefault(); cancelCaption() }
+          },
+        }),
+        h('button', { type: 'button', className: 'ws-link', onClick: () => saveCaption(blockIndex, captionDraft) }, t('保存')),
+        h('button', { type: 'button', className: 'ws-link', onClick: () => saveCaption(blockIndex, '') }, t('清除')),
+        h('button', { type: 'button', className: 'ws-link', onClick: cancelCaption }, t('取消')),
+      )
+      : null,
     h('div', { className: 'ws-block-tools' },
+      block.type === 'image' ? h('button', { type: 'button', title: t('编辑图注'), onClick: event => { event.stopPropagation(); startCaption(blockIndex) } }, h(Icon, { name: 'pen', size: 12 })) : null,
       block.type === 'image' ? h('button', { type: 'button', title: t('替换图片'), onClick: event => { event.stopPropagation(); replaceImage(blockIndex) } }, h(Icon, { name: 'image', size: 12 })) : null,
       h('button', { type: 'button', title: t('上移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, -1) } }, h(Icon, { name: 'arrowUp', size: 12 })),
       h('button', { type: 'button', title: t('下移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, 1) } }, h(Icon, { name: 'arrowDown', size: 12 })),
@@ -6316,6 +6602,18 @@ const STUDIO_CSS = `
 .ws-title-input{flex:none;margin:0 12px 6px;height:34px;padding:0 10px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--ws-text);font:inherit;font-size:15px;font-weight:600;outline:none}
 .ws-title-input::placeholder{color:var(--ws-muted);font-weight:400}
 .ws-title-input:focus{border-color:var(--ws-border);background:var(--ws-surface)}
+.ws-caption-editor{position:relative;display:flex;align-items:center;gap:6px;margin:4px 0 6px;padding:6px;border:1px solid var(--ws-border);border-radius:8px;background:var(--ws-surface);z-index:5}
+.ws-caption-editor .ws-input{height:28px;font-size:12px;flex:1}
+.ws-caption-editor .ws-link{white-space:nowrap;font-size:11px}
+.ws-outline{display:flex;align-items:center;gap:6px;padding:6px 14px 0;overflow:hidden}
+.ws-outline-label{font-size:10px;color:var(--ws-muted);letter-spacing:.08em;flex:none}
+.ws-outline-list{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.ws-outline-list::-webkit-scrollbar{display:none}
+.ws-outline-item{flex:none;border:0;background:transparent;color:var(--ws-muted);font:inherit;font-size:11px;padding:2px 5px;border-radius:5px;cursor:pointer;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-outline-item:hover{background:var(--ws-surface2);color:var(--ws-text)}
+.ws-outline-item.on{background:var(--ws-surface2);color:var(--ws-text);font-weight:600}
+.ws-outline-item[data-level="2"]{padding-left:4px}
+.ws-outline-item[data-level="3"]{padding-left:10px}
 .ws-toolbar{flex:none;display:flex;flex-wrap:wrap;gap:2px;padding:4px 12px 8px;border-bottom:1px solid var(--ws-border)}
 .ws-tool{min-width:26px;height:26px;padding:0 6px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--ws-muted);font:inherit;font-size:12px;cursor:pointer}
 .ws-tool:hover{background:var(--ws-surface2);color:var(--ws-text);border-color:var(--ws-border)}

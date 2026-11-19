@@ -11,7 +11,7 @@ const { createRoot } = ReactDOMClient
 const h = React.createElement
 
 /** Mount the generated client bundle in jsdom and return the container. */
-async function mountPanel({ width = 1280, language = '', fetchImpl = null } = {}) {
+async function mountPanel({ width = 1280, language = '', fetchImpl = null, seedDocs = null } = {}) {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
     url: 'http://127.0.0.1:52889/',
     pretendToBeVisual: true,
@@ -25,6 +25,7 @@ async function mountPanel({ width = 1280, language = '', fetchImpl = null } = {}
   // jsdom has no canvas; cover generation catches the failure.
   window.HTMLCanvasElement.prototype.getContext = () => null
   if (language !== '') window.localStorage.setItem('dsh.wechat-studio.uiLang', language)
+  if (Array.isArray(seedDocs) && seedDocs.length > 0) window.localStorage.setItem('dsh.wechat-studio.docs.v1', JSON.stringify({ docs: seedDocs, activeId: seedDocs[0].id }))
 
   const sandbox = {
     window,
@@ -267,6 +268,51 @@ test('AI 修改先出 diff，确认后才写入正文', async () => {
     apply.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await new Promise(resolve => setTimeout(resolve, 250))
     assert.match(container.querySelector('.ws-editor').value, /AI 改写后的正文/)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('大纲点击会选中段落并定位编辑器', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const outline = [...container.querySelectorAll('.ws-outline-item')]
+    assert.ok(outline.length >= 2, 'outline renders headings')
+    outline[1].dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 200))
+    assert.ok(container.querySelector('.ws-block.selected'), 'preview marks the selected block')
+    assert.ok(container.querySelector('.ws-editor').selectionStart > 0, 'editor selection moved')
+    assert.ok(outline[1].className.includes(' on'), 'outline item is active')
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+
+test('图片图注可以独立编辑并写回 Markdown', async () => {
+  const seed = [{
+    id: 'doc-caption',
+    text: '# 图注测试\n\n![旧图注](https://example.com/a.png)\n\n正文内容。',
+    design: { themeId: 'column', variantId: 'essay', overrides: {} },
+    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false },
+    createdAt: 1,
+    updatedAt: 1,
+  }]
+  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
+  try {
+    const captionTool = [...container.querySelectorAll('button')].find(button => button.getAttribute('title') === '编辑图注')
+    assert.ok(captionTool, 'caption tool renders for images')
+    captionTool.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.ok(container.querySelector('.ws-caption-editor input'), 'caption editor opens')
+
+    const clear = [...container.querySelectorAll('.ws-caption-editor button')].find(button => button.textContent.trim() === '清除')
+    assert.ok(clear)
+    clear.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 160))
+    assert.match(container.querySelector('.ws-editor').value, /!\[\]\(https:\/\/example\.com\/a\.png\)/)
   } finally {
     root.unmount()
     dom.window.close()

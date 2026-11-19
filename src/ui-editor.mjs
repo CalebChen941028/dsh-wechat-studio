@@ -162,7 +162,7 @@ function TopBar(props) {
  * ------------------------------------------------------------------ */
 
 function DocRail(props) {
-  const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onImportDocument, onContentPasted, onOpenAi, onImagesChanged } = props
+  const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onGoToBlock, onEditorCaret, onImportDocument, onContentPasted, onOpenAi, onImagesChanged } = props
   const { doc } = store
   const [docMenu, setDocMenu] = React.useState(false)
   React.useEffect(() => {
@@ -243,6 +243,9 @@ function DocRail(props) {
   }
 
   const words = features.chars
+  const outline = parsed.blocks
+    .map((block, index) => ({ block, index }))
+    .filter(entry => entry.block.type === 'title' || entry.block.type === 'heading')
   const toolbar = [
     { label: 'H2', title: t('小节标题'), run: () => insertBlock(t('## 小节标题')) },
     { label: 'H3', title: t('小标题'), run: () => insertBlock(t('### 小标题')) },
@@ -331,6 +334,21 @@ function DocRail(props) {
       value: doc.meta.title,
       onChange: event => store.updateMeta({ title: event.target.value }),
     }),
+    outline.length > 1
+      ? h('div', { className: 'ws-outline' },
+        h('span', { className: 'ws-outline-label' }, t('大纲')),
+        h('div', { className: 'ws-outline-list' },
+          outline.map(({ block, index }) => h('button', {
+            key: index,
+            type: 'button',
+            className: 'ws-outline-item' + (selectedBlock === index ? ' on' : ''),
+            'data-level': block.level ?? 2,
+            title: block.text,
+            onClick: () => onGoToBlock(index),
+          }, block.type === 'title' ? t('标题') : block.text)),
+        ),
+      )
+      : null,
     h('div', { className: 'ws-toolbar' },
       toolbar.map(item => h('button', {
         key: item.label,
@@ -346,6 +364,8 @@ function DocRail(props) {
       value: doc.text,
       spellCheck: false,
       placeholder: t('把公众号文案粘到这里。支持 Markdown：## 小节、> 引用、- 列表、![图片](url)、--- 分割线、**加粗**、==高亮==。'),
+      onSelect: onEditorCaret,
+      onClick: onEditorCaret,
       onChange: event => store.updateDoc(current => ({
         ...current,
         text: event.target.value,
@@ -520,6 +540,31 @@ function PreviewStage(props) {
   const { article, design, doc, parsed, features, selectedBlock, setSelectedBlock, store, toast, narrow, date, onImagesChanged, device, setDevice } = props
   const previewImageRef = React.useRef(null)
   const pendingReplaceRef = React.useRef(null)
+  React.useEffect(() => {
+    if (selectedBlock === null) return
+    const element = document.querySelector(`.ws-article [data-block="${selectedBlock}"]`)
+    if (element !== null && typeof element.scrollIntoView === 'function') {
+      element.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
+  }, [selectedBlock])
+  const [captionBlock, setCaptionBlock] = React.useState(null)
+  const [captionDraft, setCaptionDraft] = React.useState('')
+  const startCaption = (blockIndex) => {
+    const block = sourceBlocks[blockIndex]
+    if (!block || block.type !== 'image') return
+    setCaptionBlock(blockIndex)
+    setCaptionDraft(block.alt ?? '')
+  }
+  const saveCaption = (blockIndex, value) => {
+    const block = sourceBlocks[blockIndex]
+    if (!block || block.type !== 'image') return
+    const next = replaceImageCaption(doc.text, block.lines[0], value)
+    store.updateDoc(current => ({ ...current, text: next }))
+    setCaptionBlock(null)
+    setCaptionDraft('')
+    toast(t('图注已更新'))
+  }
+  const cancelCaption = () => { setCaptionBlock(null); setCaptionDraft('') }
   const replaceImage = (blockIndex) => {
     pendingReplaceRef.current = blockIndex
     previewImageRef.current?.click()
@@ -588,6 +633,7 @@ function PreviewStage(props) {
     void blocks
     store.updateDoc(current => ({ ...current, text: next }))
     setSelectedBlock(target)
+    setCaptionBlock(null)
   }
 
   const removeBlock = (index) => {
@@ -602,6 +648,7 @@ function PreviewStage(props) {
     const next = [...lines.slice(0, start), ...lines.slice(end + 1)].join('\n')
     store.updateDoc(current => ({ ...current, text: next }))
     setSelectedBlock(null)
+    setCaptionBlock(null)
     toast('已删除这一段')
   }
 
@@ -624,6 +671,7 @@ function PreviewStage(props) {
       h(WechatPhoneChrome, { brand, source, empty: doc.text.trim() === '', device },
         h(ArticleBody, {
           root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel,
+          captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption,
         }),
       ),
       h('input', {
@@ -657,7 +705,7 @@ function PreviewStage(props) {
 }
 
 function ArticleBody(props) {
-  const { root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage } = props
+  const { root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption } = props
   const [hovered, setHovered] = React.useState(null)
   const children = root.children
 
@@ -673,13 +721,33 @@ function ArticleBody(props) {
     return h('div', {
       key: index,
       className: 'ws-block' + (isSelected ? ' selected' : '') + (hovered === blockIndex ? ' hovered' : ''),
+      'data-block': blockIndex,
       onMouseEnter: () => setHovered(blockIndex),
       onMouseLeave: () => setHovered(value => (value === blockIndex ? null : value)),
       onClick: () => setSelectedBlock(isSelected ? null : blockIndex),
     },
     isSelected ? h('div', { className: 'ws-block-tag' }, blockLabel(block)) : null,
     content,
+    captionBlock === blockIndex && block.type === 'image'
+      ? h('div', { className: 'ws-caption-editor', onClick: event => event.stopPropagation() },
+        h('input', {
+          className: 'ws-input',
+          value: captionDraft,
+          placeholder: t('图片说明，留空则不显示'),
+          autoFocus: true,
+          onChange: event => setCaptionDraft(event.target.value),
+          onKeyDown: event => {
+            if (event.key === 'Enter') { event.preventDefault(); saveCaption(blockIndex, captionDraft) }
+            if (event.key === 'Escape') { event.preventDefault(); cancelCaption() }
+          },
+        }),
+        h('button', { type: 'button', className: 'ws-link', onClick: () => saveCaption(blockIndex, captionDraft) }, t('保存')),
+        h('button', { type: 'button', className: 'ws-link', onClick: () => saveCaption(blockIndex, '') }, t('清除')),
+        h('button', { type: 'button', className: 'ws-link', onClick: cancelCaption }, t('取消')),
+      )
+      : null,
     h('div', { className: 'ws-block-tools' },
+      block.type === 'image' ? h('button', { type: 'button', title: t('编辑图注'), onClick: event => { event.stopPropagation(); startCaption(blockIndex) } }, h(Icon, { name: 'pen', size: 12 })) : null,
       block.type === 'image' ? h('button', { type: 'button', title: t('替换图片'), onClick: event => { event.stopPropagation(); replaceImage(blockIndex) } }, h(Icon, { name: 'image', size: 12 })) : null,
       h('button', { type: 'button', title: t('上移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, -1) } }, h(Icon, { name: 'arrowUp', size: 12 })),
       h('button', { type: 'button', title: t('下移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, 1) } }, h(Icon, { name: 'arrowDown', size: 12 })),

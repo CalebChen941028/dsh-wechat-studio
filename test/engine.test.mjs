@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import {
   parseArticle, parseInline, plainText, detectTopic, measure, composeDesign,
   autoCompose, rankThemes, nextVariant, mixHex, readableOn, splitMarkdownChunks,
-  auditTypography, splitLongParagraphs, normalizeCjkPunctuation, tidyMarkdown, diffTextLines,
+  auditTypography, splitLongParagraphs, normalizeCjkPunctuation, tidyMarkdown, diffTextLines, replaceImageCaption,
 } from '../src/engine.mjs'
 import { THEMES } from '../src/themes.mjs'
 import {
@@ -383,4 +383,12 @@ test('diffTextLines 标记新增与删除行', () => {
   assert.deepEqual(operations.map(item => item.type), ['same', 'remove', 'add', 'same'])
   assert.equal(operations[1].text, '第二行')
   assert.equal(operations[2].text, '修改后的第二行')
+})
+
+
+test('replaceImageCaption 只改图片说明，不动地址', () => {
+  const source = '# 标题\n\n![旧图注](https://example.com/a.png)\n'
+  const next = replaceImageCaption(source, 2, '新的图注')
+  assert.match(next, /!\[新的图注\]\(https:\/\/example\.com\/a\.png\)/)
+  assert.equal(replaceImageCaption(next, 0, 'x'), next)
 })

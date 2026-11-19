@@ -130,6 +130,18 @@ const STUDIO_CSS = `
 .ws-title-input{flex:none;margin:0 12px 6px;height:34px;padding:0 10px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--ws-text);font:inherit;font-size:15px;font-weight:600;outline:none}
 .ws-title-input::placeholder{color:var(--ws-muted);font-weight:400}
 .ws-title-input:focus{border-color:var(--ws-border);background:var(--ws-surface)}
+.ws-caption-editor{position:relative;display:flex;align-items:center;gap:6px;margin:4px 0 6px;padding:6px;border:1px solid var(--ws-border);border-radius:8px;background:var(--ws-surface);z-index:5}
+.ws-caption-editor .ws-input{height:28px;font-size:12px;flex:1}
+.ws-caption-editor .ws-link{white-space:nowrap;font-size:11px}
+.ws-outline{display:flex;align-items:center;gap:6px;padding:6px 14px 0;overflow:hidden}
+.ws-outline-label{font-size:10px;color:var(--ws-muted);letter-spacing:.08em;flex:none}
+.ws-outline-list{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.ws-outline-list::-webkit-scrollbar{display:none}
+.ws-outline-item{flex:none;border:0;background:transparent;color:var(--ws-muted);font:inherit;font-size:11px;padding:2px 5px;border-radius:5px;cursor:pointer;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-outline-item:hover{background:var(--ws-surface2);color:var(--ws-text)}
+.ws-outline-item.on{background:var(--ws-surface2);color:var(--ws-text);font-weight:600}
+.ws-outline-item[data-level="2"]{padding-left:4px}
+.ws-outline-item[data-level="3"]{padding-left:10px}
 .ws-toolbar{flex:none;display:flex;flex-wrap:wrap;gap:2px;padding:4px 12px 8px;border-bottom:1px solid var(--ws-border)}
 .ws-tool{min-width:26px;height:26px;padding:0 6px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--ws-muted);font:inherit;font-size:12px;cursor:pointer}
 .ws-tool:hover{background:var(--ws-surface2);color:var(--ws-text);border-color:var(--ws-border)}

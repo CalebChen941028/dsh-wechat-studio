@@ -589,6 +589,24 @@ export function tidyMarkdown(text) {
 }
 
 /**
+ * Replace the caption/alt text of one Markdown image line.
+ * @param {string} text Markdown source.
+ * @param {number} lineIndex zero-based line to edit.
+ * @param {string} caption new caption (brackets/newlines are stripped).
+ * @returns {string} updated source; unchanged when the line is not an image.
+ */
+export function replaceImageCaption(text, lineIndex, caption) {
+  const lines = String(text ?? '').split('\n')
+  const line = lines[lineIndex]
+  if (typeof line !== 'string') return text
+  const match = /^(\s*!\[)([^\]]*)(\]\([^)]*\)\s*)$/.exec(line)
+  if (!match) return text
+  const safeCaption = String(caption ?? '').replace(/[\[\]\n\r]/g, '').trim()
+  lines[lineIndex] = `${match[1]}${safeCaption}${match[3]}`
+  return lines.join('\n')
+}
+
+/**
  * Line-level diff for previewing an AI rewrite.
  * Returns same/add/remove operations; very large inputs fall back to a
  * common-prefix/suffix diff so the panel stays responsive.

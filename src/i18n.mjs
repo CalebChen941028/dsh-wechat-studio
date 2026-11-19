@@ -478,6 +478,14 @@ const UI_EN = {
   '已应用 AI 修改：{parts}': 'AI changes applied: {parts}',
   '已放弃这次 AI 修改': 'AI suggestion discarded',
 
+  '大纲': 'Outline',
+
+  '编辑图注': 'Edit caption',
+  '图片说明，留空则不显示': 'Image caption; empty hides it',
+  '图注已更新': 'Caption updated',
+
+  '浏览器存储写入失败，这轮修改只保存在内存里，刷新会丢失。请导出草稿 JSON，或删掉带大图的草稿。': 'Browser storage write failed; this round of edits stays in memory and will be lost on reload. Export the draft JSON or delete drafts with large images.',
+
 }
 
 
