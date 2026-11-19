@@ -250,6 +250,7 @@ const STUDIO_CSS = `
 .ws-bundle-check{width:16px;height:16px;border:1px solid var(--ws-border2);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;flex:none}
 .ws-bundle-row.on .ws-bundle-check{border-color:var(--ws-accent);color:var(--ws-accent)}
 .ws-bundle-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-draft-actions{display:flex;gap:10px;align-items:center}
 .ws-draft-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--ws-border)}
 .ws-draft-row:first-of-type{border-top:0}
 .ws-draft-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}

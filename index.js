@@ -32,6 +32,7 @@ const KNOWN_ACTIONS = new Set([
   'uploadCover',
   'createDraft',
   'listDrafts',
+  'getDraft',
   'deleteDraft',
   'publish',
   'publishStatus',

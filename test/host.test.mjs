@@ -631,6 +631,34 @@ test('listDrafts：读取草稿箱并映射标题与时间', async () => {
   assert.equal(body.no_content, 0)
 })
 
+test('getDraft：读取草稿正文并映射评论开关', async () => {
+  const { service, calls } = makeService({
+    routes: [
+      ['/cgi-bin/token', () => jsonResponse({ access_token: 'TOKEN-1', expires_in: 7200 })],
+      ['/cgi-bin/draft/get', () => jsonResponse({
+        news_item: [{
+          title: '已发布草稿',
+          author: '作者',
+          digest: '摘要',
+          content: '<p>正文内容</p>',
+          content_source_url: 'https://example.com/a',
+          thumb_media_id: 'COVER-1',
+          need_open_comment: 1,
+          only_fans_can_comment: 1,
+        }],
+      })],
+    ],
+  })
+  const result = await service.getDraft({ mediaId: 'DRAFT-1' })
+  assert.equal(result.items.length, 1)
+  assert.equal(result.items[0].content, '<p>正文内容</p>')
+  assert.equal(result.items[0].needOpenComment, true)
+  assert.equal(result.items[0].onlyFansCanComment, true)
+  const request = calls.find(call => call.url.includes('/cgi-bin/draft/get'))
+  assert.deepEqual(JSON.parse(request.init.body), { media_id: 'DRAFT-1' })
+  await assert.rejects(() => service.getDraft({}), (error) => error.code === 'media-required')
+})
+
 test('deleteDraft：调用 draft/delete 并校验 mediaId', async () => {
   const { service, calls } = makeService({
     routes: [

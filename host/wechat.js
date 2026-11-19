@@ -383,6 +383,39 @@ export function createWechatClient({ fetchImpl = fetch, timeoutMs = DEFAULT_TIME
     },
 
     /**
+     * 读取一篇公众号草稿的完整内容（含正文 HTML）。
+     * @param {{ accessToken: string, mediaId: string }} input 草稿 media_id。
+     * @returns {Promise<{ items: Array<object> }>} news_item 数组。
+     */
+    async getDraft({ accessToken, mediaId } = {}) {
+      const endpoint = 'cgi-bin/draft/get'
+      requireToken(accessToken, endpoint)
+      if (typeof mediaId !== 'string' || mediaId === '') {
+        throw new WechatApiError({ errcode: null, errmsg: '缺少草稿 media_id', endpoint, kind: 'response' })
+      }
+      const data = await call({
+        url: withAccessToken(`${WECHAT_API_BASE}/${endpoint}`, accessToken),
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ media_id: mediaId }),
+        endpoint,
+      })
+      const news = Array.isArray(data?.news_item) ? data.news_item : []
+      return {
+        items: news.map(item => ({
+          title: typeof item?.title === 'string' ? item.title : '',
+          author: typeof item?.author === 'string' ? item.author : '',
+          digest: typeof item?.digest === 'string' ? item.digest : '',
+          content: typeof item?.content === 'string' ? item.content : '',
+          contentSourceUrl: typeof item?.content_source_url === 'string' ? item.content_source_url : '',
+          thumbMediaId: typeof item?.thumb_media_id === 'string' ? item.thumb_media_id : '',
+          needOpenComment: item?.need_open_comment === 1,
+          onlyFansCanComment: item?.only_fans_can_comment === 1,
+        })),
+      }
+    },
+
+    /**
      * 删除一篇草稿。
      * @param {{ accessToken: string, mediaId: string }} input 草稿 media_id。
      * @returns {Promise<{ deleted: true }>} 删除结果。

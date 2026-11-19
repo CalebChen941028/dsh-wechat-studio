@@ -359,6 +359,12 @@ const UI_EN = {
   '中文': 'Chinese',
   'English': 'English',
 
+  '导入': 'Import',
+  '导入中…': 'Importing…',
+  '已导入 {count} 篇草稿': 'Imported {count} article(s)',
+  '草稿导入失败': 'Draft import failed',
+  '这篇草稿里没有可导入的正文': 'This draft has no body text to import',
+
 }
 
 

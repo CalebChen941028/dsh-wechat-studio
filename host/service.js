@@ -643,6 +643,20 @@ export function createStudioService({ ctx, fetchImpl = fetch } = {}) {
       })
     },
 
+    /** 读取公众号草稿的完整内容，用于导回工作台继续编辑。 */
+    async getDraft(payload = {}) {
+      const account = await readAccount({ required: true })
+      const mediaId = typeof payload?.mediaId === 'string' ? payload.mediaId.trim() : ''
+      if (mediaId === '') throw new StudioError('media-required', '缺少草稿 mediaId，无法读取')
+      return wechatCall(async () => {
+        const result = await withToken(account, (token) => client.getDraft({ accessToken: token, mediaId }))
+        if (!Array.isArray(result.items) || result.items.length === 0) {
+          throw new StudioError('draft-empty', '这篇草稿里没有可读取的文章')
+        }
+        return { items: result.items }
+      })
+    },
+
     /** 删除一篇公众号草稿。 */
     async deleteDraft(payload = {}) {
       const account = await readAccount({ required: true })

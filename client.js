@@ -370,6 +370,12 @@ const UI_EN = {
   '中文': 'Chinese',
   'English': 'English',
 
+  '导入': 'Import',
+  '导入中…': 'Importing…',
+  '已导入 {count} 篇草稿': 'Imported {count} article(s)',
+  '草稿导入失败': 'Draft import failed',
+  '这篇草稿里没有可导入的正文': 'This draft has no body text to import',
+
 }
 
 
@@ -4876,6 +4882,7 @@ function PublishSection(props) {
   const [draftBox, setDraftBox] = React.useState({ phase: 'idle', items: [], error: '' })
   const [draftBusy, setDraftBusy] = React.useState(false)
   const [deleteArm, setDeleteArm] = React.useState('')
+  const [importingDraft, setImportingDraft] = React.useState('')
   const deleteArmTimer = React.useRef(undefined)
   React.useEffect(() => () => clearTimeout(deleteArmTimer.current), [])
   const coverInputRef = React.useRef(null)
@@ -4990,6 +4997,36 @@ function PublishSection(props) {
       toast(t('草稿已删除'))
     } catch (failure) {
       toast(failure.message || t('删除失败'), 'error')
+    }
+  }
+
+  const importDraft = async (item) => {
+    setImportingDraft(item.mediaId)
+    try {
+      const value = await callHost('getDraft', { mediaId: item.mediaId }, { timeoutMs: 60000 })
+      const articles = Array.isArray(value.items) ? value.items : []
+      let imported = 0
+      for (const article of articles) {
+        const markdown = htmlToMarkdown(article.content ?? '').trim()
+        if (markdown.length < 20) continue
+        const parsedImport = parseArticle(markdown)
+        const designImport = autoCompose(parsedImport.blocks, markdown, 0).design
+        store.addDoc(markdown, designImport, {
+          title: article.title || parsedImport.title || '',
+          author: article.author || '',
+          digest: article.digest || '',
+          sourceUrl: article.contentSourceUrl || '',
+          needOpenComment: article.needOpenComment === true,
+          onlyFansCanComment: article.onlyFansCanComment === true,
+        })
+        imported += 1
+      }
+      if (imported === 0) throw Object.assign(new Error(t('这篇草稿里没有可导入的正文')), { code: 'draft-empty' })
+      toast(t('已导入 {count} 篇草稿', { count: imported }), 'success')
+    } catch (failure) {
+      toast(localizeError(failure.code, failure.message || t('草稿导入失败')), 'error')
+    } finally {
+      setImportingDraft('')
     }
   }
 
@@ -5238,7 +5275,10 @@ function PublishSection(props) {
           h('span', { className: 'ws-draft-title' }, item.title === '' ? t('（无标题）') : item.title),
           h('span', { className: 'ws-draft-meta' }, item.updateTime > 0 ? new Date(item.updateTime * 1000).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : t('时间未知')),
         ),
-        h('button', { type: 'button', className: 'ws-link danger', onClick: () => removeDraft(item.mediaId) }, deleteArm === item.mediaId ? t('确认删除') : t('删除')),
+        h('div', { className: 'ws-draft-actions' },
+          h('button', { type: 'button', className: 'ws-link', disabled: importingDraft === item.mediaId, onClick: () => importDraft(item) }, importingDraft === item.mediaId ? t('导入中…') : t('导入')),
+          h('button', { type: 'button', className: 'ws-link danger', onClick: () => removeDraft(item.mediaId) }, deleteArm === item.mediaId ? t('确认删除') : t('删除')),
+        ),
       )),
       h('p', { className: 'ws-hint' }, t('删除会直接移除公众号后台的草稿，不影响已发布的文章。')),
     ),
@@ -5670,6 +5710,7 @@ const STUDIO_CSS = `
 .ws-bundle-check{width:16px;height:16px;border:1px solid var(--ws-border2);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;flex:none}
 .ws-bundle-row.on .ws-bundle-check{border-color:var(--ws-accent);color:var(--ws-accent)}
 .ws-bundle-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-draft-actions{display:flex;gap:10px;align-items:center}
 .ws-draft-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--ws-border)}
 .ws-draft-row:first-of-type{border-top:0}
 .ws-draft-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
