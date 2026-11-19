@@ -405,6 +405,8 @@ const UI_EN = {
   '微信接口已能正常调用，当前出口已在白名单。': 'The WeChat API works and this egress IP is whitelisted.',
   '检测微信出口失败': 'WeChat egress probe failed',
 
+  '微信走的出口和普通流量不同：微信是 {wechat}，普通流量是 {general}。IP 白名单必须填微信那个。': 'WeChat exits through a different IP than normal traffic: WeChat {wechat}, general {general}. The allowlist must use the WeChat one.',
+
 }
 
 

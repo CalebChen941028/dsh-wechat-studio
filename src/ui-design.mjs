@@ -945,6 +945,9 @@ function PublishSection(props) {
       wechatProbe !== null && wechatProbe.changing === true
         ? h('p', { className: 'ws-hint danger' }, t('微信出口 IP 在变化，白名单会一直失效。先把代理固定到一个出口，或在 Shadowrocket 里给微信域名指定固定节点。'))
         : null,
+      wechatProbe !== null && egress !== null && Array.isArray(wechatProbe.ips) && wechatProbe.ips.length > 0 && wechatProbe.ips[0] !== egress.ip
+        ? h('p', { className: 'ws-hint danger' }, t('微信走的出口和普通流量不同：微信是 {wechat}，普通流量是 {general}。IP 白名单必须填微信那个。', { wechat: wechatProbe.ips[0], general: egress.ip }))
+        : null,
       wechatProbe !== null && wechatProbe.whitelisted === true
         ? h('p', { className: 'ws-hint' }, t('微信接口已能正常调用，当前出口已在白名单。'))
         : null,
