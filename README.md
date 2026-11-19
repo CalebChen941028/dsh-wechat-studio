@@ -61,11 +61,13 @@ Host 半部注册一条同源路由 `POST /wechat-studio/api`，供页面调用�
 ## 开发
 
 ```
-node build.mjs            # src/*.mjs -> client.js
-node --test test/*.test.mjs   # 解析、编排、渲染、Host 服务与 AI 编辑测试
+npm run build             # src/*.mjs -> client.js
+npm test                  # 解析、编排、渲染、Host 服务、AI 与图片注册表测试
 ```
 
-`client.js` 是构建产物，不要手改。
+打 `v*` tag 会触发 `.github/workflows/release.yml`：跑测试、打源码包、创建 GitHub Release。
+
+`client.js` 是构建产物，不要手改。浏览器侧源码按块拆在 `src/ui-shell.mjs`、`ui-editor.mjs`、`ui-design.mjs`、`ui-misc.mjs`，`build.mjs` 按顺序拼接；改完跑 `npm test` 和 `npm run build`。
 
 ## 已知限制
 
