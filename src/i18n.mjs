@@ -494,8 +494,7 @@ export function uiLanguage() {
  * @returns {string} localized text.
  */
 export function t(text, params) {
-  if (uiLanguage() !== 'en') return text
-  const template = UI_EN[text] ?? text
+  const template = uiLanguage() === 'en' ? (UI_EN[text] ?? text) : text
   if (params === undefined || params === null) return template
   return String(template).replace(/\{(\w+)\}/g, (match, key) => (key in params ? String(params[key]) : match))
 }

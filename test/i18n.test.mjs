@@ -12,6 +12,11 @@ test('t：中文模式原样返回，英文模式查词典', () => {
   assert.equal(t('主题'), 'Theme')
 })
 
+test('t：中文模式也会替换占位参数', () => {
+  setUiLanguage('zh')
+  assert.equal(t('{chars} 字 · 约 {minutes} 分钟', { chars: 120, minutes: 2 }), '120 字 · 约 2 分钟')
+})
+
 test('t：未知文案回退中文，占位参数可替换', () => {
   setUiLanguage('en')
   assert.equal(t('没有翻译的文案'), '没有翻译的文案')
