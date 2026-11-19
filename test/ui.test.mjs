@@ -112,7 +112,13 @@ test('工作台可以切换排版、装饰 tab 与外观皮肤', async () => {
     assert.ok(typeTab)
     typeTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await new Promise(resolve => setTimeout(resolve, 120))
-    assert.equal(container.querySelectorAll('.ws-preset-row .ws-chip').length, 4)
+    const presets = [...container.querySelectorAll('.ws-preset-row .ws-chip')]
+    assert.equal(presets.length, 4)
+    const relaxed = presets.find(button => button.textContent.trim() === '舒展')
+    assert.ok(relaxed)
+    relaxed.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 160))
+    assert.ok([...container.querySelectorAll('.ws-preset-row .ws-chip')].some(button => button.textContent.trim() === '舒展' && button.className.includes(' on')))
 
     const palette = container.querySelector('[title="外观与主题"]')
     assert.ok(palette)
