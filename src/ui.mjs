@@ -9,6 +9,7 @@ const PANEL_ID = 'wechat-studio'
 const STORAGE_KEY = 'dsh.wechat-studio.docs.v1'
 const APPEARANCE_KEY = 'dsh.wechat-studio.appearance.v1'
 const LONG_TEXT_CHUNK_THRESHOLD = 7000
+const DEVICE_KEY = 'dsh.wechat-studio.device.v1'
 const SKINS = [
   { id: 'auto', name: '跟随应用', hint: '自动适配深浅' },
   { id: 'light', name: '浅色玻璃', hint: '明亮通透' },
@@ -363,6 +364,12 @@ function StudioPanel(props) {
     return () => clearTimeout(timer)
   }, [store.docs, imageReady])
   const [appearance, setAppearance] = React.useState(loadAppearance)
+  const [device, setDevice] = React.useState(() => {
+    try { return localStorage.getItem(DEVICE_KEY) === 'android' ? 'android' : 'iphone' } catch { return 'iphone' }
+  })
+  React.useEffect(() => {
+    try { localStorage.setItem(DEVICE_KEY, device) } catch { /* private mode */ }
+  }, [device])
   const hostDark = useHostDark()
   React.useEffect(() => {
     try {
@@ -631,7 +638,7 @@ function StudioPanel(props) {
         onOpenAi: () => openDesign('ai'),
       }),
       h(PreviewStage, {
-        article, design, doc, parsed, features, selectedBlock, setSelectedBlock, store, toast, narrow, date, onImagesChanged: bumpImages,
+        article, design, doc, parsed, features, selectedBlock, setSelectedBlock, store, toast, narrow, date, onImagesChanged: bumpImages, device, setDevice,
       }),
       compact && !narrow && rightOpen ? h('div', { className: 'ws-scrim', onClick: () => setRightOpen(false) }) : null,
       h(DesignPanel, {
@@ -1105,19 +1112,22 @@ function WechatActionGlyph({ kind }) {
 
 /** The native-looking WeChat article chrome around the rendered body. */
 function WechatPhoneChrome(props) {
-  const { children, brand, source, empty } = props
+  const { children, brand, source, empty, device = 'iphone' } = props
+  const android = device === 'android'
   const clock = useClockText()
-  return h('div', { className: 'ws-phone' },
-    h('span', { className: 'ws-side-btn ws-side-btn-mute' }),
-    h('span', { className: 'ws-side-btn ws-side-btn-volup' }),
-    h('span', { className: 'ws-side-btn ws-side-btn-voldown' }),
-    h('span', { className: 'ws-side-btn ws-side-btn-power' }),
+  return h('div', { className: 'ws-phone' + (android ? ' ws-phone-android' : '') },
+    android ? null : h('span', { className: 'ws-side-btn ws-side-btn-mute' }),
+    android ? null : h('span', { className: 'ws-side-btn ws-side-btn-volup' }),
+    android ? null : h('span', { className: 'ws-side-btn ws-side-btn-voldown' }),
+    android ? null : h('span', { className: 'ws-side-btn ws-side-btn-power' }),
     h('div', { className: 'ws-screen' },
       h('div', { className: 'ws-statusbar' },
         h('span', { className: 'ws-status-time' }, clock),
         h(PhoneStatusGlyphs, null),
       ),
-      h('div', { className: 'ws-island', 'aria-hidden': 'true' }),
+      android
+        ? h('div', { className: 'ws-punch', 'aria-hidden': 'true' })
+        : h('div', { className: 'ws-island', 'aria-hidden': 'true' }),
       h('div', { className: 'ws-wechat-nav' },
         h('span', { className: 'ws-nav-back' }, h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M15 4.5L7.5 12 15 19.5' }))),
         h('span', { className: 'ws-nav-brand' }, brand),
@@ -1141,7 +1151,7 @@ function WechatPhoneChrome(props) {
 }
 
 function PreviewStage(props) {
-  const { article, design, doc, parsed, features, selectedBlock, setSelectedBlock, store, toast, narrow, date, onImagesChanged } = props
+  const { article, design, doc, parsed, features, selectedBlock, setSelectedBlock, store, toast, narrow, date, onImagesChanged, device, setDevice } = props
   const previewImageRef = React.useRef(null)
   const pendingReplaceRef = React.useRef(null)
   const replaceImage = (blockIndex) => {
@@ -1245,7 +1255,7 @@ function PreviewStage(props) {
 
   return h('section', { className: 'ws-mid' },
     h('div', { className: 'ws-stage' },
-      h(WechatPhoneChrome, { brand, source, empty: doc.text.trim() === '' },
+      h(WechatPhoneChrome, { brand, source, empty: doc.text.trim() === '', device },
         h(ArticleBody, {
           root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel,
         }),
@@ -1267,6 +1277,10 @@ function PreviewStage(props) {
       }),
       h('div', { className: 'ws-stage-bar' },
         h('button', { type: 'button', className: 'ws-mini-btn', onClick: () => previewImageRef.current?.click() }, '插入图片'),
+        h('div', { className: 'ws-device-switch' },
+          h('button', { type: 'button', className: 'ws-device-btn' + (device !== 'android' ? ' on' : ''), onClick: () => setDevice('iphone') }, 'iPhone'),
+          h('button', { type: 'button', className: 'ws-device-btn' + (device === 'android' ? ' on' : ''), onClick: () => setDevice('android') }, 'Android'),
+        ),
         h('span', { className: 'ws-stage-chip' }, h('i', { style: { background: design.colors.accent } }), design.colors.accent),
         h('span', { className: 'ws-stage-chip' }, `正文 ${design.type.bodySize}px / 行高 ${design.type.lineHeight}`),
         h('span', { className: 'ws-stage-chip' }, `边距 ${design.layout.paddingX}px`),
@@ -2517,6 +2531,17 @@ const STUDIO_CSS = `
 .ws-stage{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;gap:14px;padding:20px 18px 26px}
 .ws-phone{position:relative;width:410px;max-width:100%;flex:none;display:flex;flex-direction:column;max-height:calc(100% - 40px);padding:4px;border-radius:62px;background:linear-gradient(150deg,#55565b 0%,#26272b 26%,#1a1b1e 52%,#2f3035 74%,#5c5d63 100%);box-shadow:0 34px 78px rgba(0,0,0,.30),0 3px 10px rgba(0,0,0,.22),inset 0 0 0 1px rgba(255,255,255,.18)}
 .ws-screen{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;background:#fff;border-radius:58px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
+.ws-device-switch{display:flex;gap:2px;border:1px solid var(--ws-border);border-radius:8px;padding:2px;background:var(--ws-surface2)}
+.ws-device-btn{border:0;background:transparent;color:var(--ws-muted);font:inherit;font-size:11px;line-height:1.4;padding:2px 8px;border-radius:6px;cursor:pointer}
+.ws-device-btn.on{background:var(--ws-glass-strong);color:var(--ws-text);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.ws-phone-android{padding:3px;border-radius:44px;background:linear-gradient(160deg,#2c2d31,#141519 55%,#34353b);box-shadow:0 24px 60px rgba(0,0,0,.28),0 2px 8px rgba(0,0,0,.2),inset 0 0 0 1px rgba(255,255,255,.14)}
+.ws-phone-android .ws-screen{border-radius:41px}
+.ws-phone-android .ws-side-btn{display:none}
+.ws-phone-android .ws-statusbar{height:48px;padding:13px 22px 0}
+.ws-phone-android .ws-status-time{font-size:14px}
+.ws-punch{position:absolute;top:13px;left:50%;transform:translateX(-50%);width:12px;height:12px;border-radius:50%;background:#000;z-index:3;box-shadow:inset 0 0 0 1px rgba(90,120,150,.4)}
+.ws-phone-android .ws-island{display:none}
+.ws-phone-android .ws-home-indicator i{width:108px;height:4px;background:#222}
 .ws-side-btn{position:absolute;display:block;width:3px;border-radius:2px;background:linear-gradient(180deg,#3b3c40,#202125)}
 .ws-side-btn-mute{left:-2px;top:150px;height:26px}
 .ws-side-btn-volup{left:-2px;top:196px;height:52px}
