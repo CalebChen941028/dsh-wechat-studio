@@ -551,6 +551,40 @@ export function createStudioService({ ctx, fetchImpl = fetch, importUndici } = {
       return { mode: settings.mode, proxyUrl: redactProxyUrl(settings.proxyUrl), configured: settings.mode === 'proxy' }
     },
 
+    /**
+     * 连续探测微信接口实际看到的出口 IP。
+     * 微信在 40164 的 errmsg 里带 IP；如果 token 能取到，说明当前出口已白名单。
+     */
+    async probeWechatEgress(payload = {}) {
+      const account = await readAccount({ required: true })
+      const raw = Number(payload?.samples)
+      const samples = Number.isFinite(raw) ? Math.min(3, Math.max(1, Math.trunc(raw))) : 3
+      const results = []
+      for (let index = 0; index < samples; index += 1) {
+        try {
+          await client.getAccessToken({ appId: account.appId, appSecret: account.appSecret })
+          results.push({ ok: true, ip: '', code: 'ok' })
+        } catch (error) {
+          const mapped = error instanceof WechatApiError ? mapWechatError(error) : { code: 'wechat-failed', message: String(error), detail: {} }
+          results.push({
+            ok: false,
+            ip: typeof mapped.detail?.ip === 'string' ? mapped.detail.ip : '',
+            code: mapped.code,
+            message: mapped.message,
+          })
+          if (mapped.code !== 'ip-not-allowed') break
+        }
+        if (index < samples - 1) await new Promise(resolve => setTimeout(resolve, 400))
+      }
+      const ips = [...new Set(results.map(result => result.ip).filter(ip => ip !== ''))]
+      return {
+        samples: results,
+        ips,
+        whitelisted: results.every(result => result.ok),
+        changing: ips.length > 1,
+      }
+    },
+
     /** 用当前（或临时填写的）网络设置请求一次 IP 检测服务。 */
     async probeNetwork(payload = {}) {
       const current = await readNetworkSettings()

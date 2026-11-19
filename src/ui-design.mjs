@@ -524,6 +524,8 @@ function PublishSection(props) {
   const [networkBusy, setNetworkBusy] = React.useState(false)
   const [egress, setEgress] = React.useState(null)
   const [networkAdvanced, setNetworkAdvanced] = React.useState(false)
+  const [wechatProbe, setWechatProbe] = React.useState(null)
+  const [wechatBusy, setWechatBusy] = React.useState(false)
   React.useEffect(() => {
     let cancelled = false
     callHost('networkStatus')
@@ -630,8 +632,34 @@ function PublishSection(props) {
     }
   }
 
+  const probeWechatEgress = async () => {
+    setWechatBusy(true)
+    try {
+      const value = await callHost('probeWechatEgress', { samples: 3 }, { timeoutMs: 60000 })
+      setWechatProbe(value)
+      if (value?.changing === true) toast(t('微信出口 IP 在变化，白名单会一直失效'), 'error')
+      else if (value?.whitelisted === true) toast(t('微信接口连接正常，当前出口已在白名单'), 'success')
+      else if (Array.isArray(value?.ips) && value.ips.length > 0) toast(t('微信看到的出口 IP：{ips}', { ips: value.ips.join(' / ') }), 'success')
+    } catch (failure) {
+      toast(localizeError(failure.code, failure.message || t('检测微信出口失败')), 'error')
+    } finally {
+      setWechatBusy(false)
+    }
+  }
+
   const copyEgressIp = async () => {
     const ip = egress?.ip
+    if (typeof ip !== 'string' || ip === '') return
+    try {
+      await navigator.clipboard.writeText(ip)
+      toast(t('已复制出口 IP'), 'success')
+    } catch {
+      toast(t('复制失败，请手动选中 IP'), 'error')
+    }
+  }
+
+  const copyWechatIp = async () => {
+    const ip = Array.isArray(wechatProbe?.ips) ? wechatProbe.ips[0] : ''
     if (typeof ip !== 'string' || ip === '') return
     try {
       await navigator.clipboard.writeText(ip)
@@ -907,6 +935,19 @@ function PublishSection(props) {
         egress !== null ? h(Button, { disabled: configBusy, onClick: testConnection }, configBusy ? t('测试中…') : t('测试微信连接')) : null,
       ),
       h('p', { className: 'ws-hint' }, t('把出口 IP 加到公众号后台 → 设置与开发 → 基本配置 → IP白名单，然后点「测试微信连接」。')),
+      h('div', { className: 'ws-row' },
+        h(Button, { disabled: wechatBusy || !hostStatus.configured, onClick: probeWechatEgress }, wechatBusy ? t('检测中…') : t('检测微信出口')),
+        wechatProbe !== null && Array.isArray(wechatProbe.ips) && wechatProbe.ips.length === 1 ? h(Button, { onClick: copyWechatIp }, t('复制微信 IP')) : null,
+      ),
+      wechatProbe !== null && Array.isArray(wechatProbe.ips) && wechatProbe.ips.length > 0
+        ? h('p', { className: 'ws-hint' }, `${t('微信看到的出口 IP')}：${wechatProbe.ips.join(' / ')}`)
+        : null,
+      wechatProbe !== null && wechatProbe.changing === true
+        ? h('p', { className: 'ws-hint danger' }, t('微信出口 IP 在变化，白名单会一直失效。先把代理固定到一个出口，或在 Shadowrocket 里给微信域名指定固定节点。'))
+        : null,
+      wechatProbe !== null && wechatProbe.whitelisted === true
+        ? h('p', { className: 'ws-hint' }, t('微信接口已能正常调用，当前出口已在白名单。'))
+        : null,
       h('button', {
         type: 'button',
         className: 'ws-link',

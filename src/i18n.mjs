@@ -395,6 +395,16 @@ const UI_EN = {
   '复制失败，请手动选中 IP': 'Copy failed; select the IP manually',
   '代理只作用于微信接口请求，地址存在本机凭据库，密码不会回传页面。': 'The proxy is used for WeChat API calls only. Its URL lives in the local credential store; passwords never reach the page.',
 
+  '检测微信出口': 'Probe WeChat egress',
+  '微信看到的出口 IP': 'WeChat-reported egress IP',
+  '复制微信 IP': 'Copy WeChat IP',
+  '微信接口连接正常，当前出口已在白名单': 'WeChat API works; this egress IP is already whitelisted',
+  '微信看到的出口 IP：{ips}': 'WeChat sees egress IP: {ips}',
+  '微信出口 IP 在变化，白名单会一直失效': 'The WeChat egress IP keeps changing; the allowlist will keep breaking',
+  '微信出口 IP 在变化，白名单会一直失效。先把代理固定到一个出口，或在 Shadowrocket 里给微信域名指定固定节点。': 'The WeChat egress IP keeps changing, so the allowlist will keep failing. Pin the proxy to one egress, or give the WeChat domain a fixed node in Shadowrocket.',
+  '微信接口已能正常调用，当前出口已在白名单。': 'The WeChat API works and this egress IP is whitelisted.',
+  '检测微信出口失败': 'WeChat egress probe failed',
+
 }
 
 

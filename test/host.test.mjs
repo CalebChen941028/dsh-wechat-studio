@@ -1118,3 +1118,36 @@ test('probeNetwork：通过注入的 undici 检测出口 IP', async () => {
   assert.equal(result.mode, 'proxy')
   assert.equal(typeof result.ms, 'number')
 })
+
+
+test('probeWechatEgress：从 40164 提取微信看到的出口 IP 并识别变化', async () => {
+  const ips = ['1.1.1.1', '2.2.2.2', '3.3.3.3']
+  let index = 0
+  let current = ips[0]
+  const { service } = makeService({
+    routes: [
+      ['/cgi-bin/stable_token', () => {
+        current = ips[Math.min(index, ips.length - 1)]
+        index += 1
+        return jsonResponse({ errcode: 40164, errmsg: `invalid ip ${current}, not in whitelist` })
+      }],
+      ['/cgi-bin/token', () => jsonResponse({ errcode: 40164, errmsg: `invalid ip ${current}, not in whitelist` })],
+    ],
+  })
+  const result = await service.probeWechatEgress({ samples: 3 })
+  assert.equal(result.changing, true)
+  assert.deepEqual(result.ips, ['1.1.1.1', '2.2.2.2', '3.3.3.3'])
+  assert.equal(result.whitelisted, false)
+  assert.equal(result.samples.length, 3)
+})
+
+test('probeWechatEgress：token 获取成功时视为已白名单', async () => {
+  const { service } = makeService({
+    routes: [
+      ['/cgi-bin/stable_token', () => jsonResponse({ access_token: 'TOKEN-1', expires_in: 7200 })],
+    ],
+  })
+  const result = await service.probeWechatEgress({ samples: 2 })
+  assert.equal(result.whitelisted, true)
+  assert.deepEqual(result.ips, [])
+})
