@@ -5726,7 +5726,7 @@ function Icon({ name, size = 16 }) {
  * Sidebar icon and stylesheet
  * ------------------------------------------------------------------ */
 
-function StudioSidebarIcon({ size, active }) {
+function StudioSidebarIcon({ size = 24, active }) {
   return h('svg', {
     width: size,
     height: size,
@@ -5734,11 +5734,19 @@ function StudioSidebarIcon({ size, active }) {
     fill: 'none',
     'aria-hidden': 'true',
   },
-  h('rect', { x: 2.2, y: 2.2, width: 19.6, height: 19.6, rx: 6.2, fill: 'currentColor', opacity: active ? 0.2 : 0.1 }),
-  h('rect', { x: 3.2, y: 3.2, width: 17.6, height: 17.6, rx: 5.2, stroke: 'currentColor', strokeOpacity: active ? 0.5 : 0.28, strokeWidth: 1 }),
-  h('path', { d: 'M8.4 7.6h5.8l2 2v7H8.4z', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round' }),
-  h('path', { d: 'M10.6 10.8h4 M10.6 13.2h2.8', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round', strokeOpacity: 0.7 }),
-  h('path', { d: 'M10.6 15.8h4.4', stroke: 'currentColor', strokeWidth: 2.4, strokeLinecap: 'round' }),
+  h('path', {
+    d: 'M7 3h10a3.7 3.7 0 0 1 3.7 3.7v9.4a3.7 3.7 0 0 1-3.7 3.7h-6.1l-5 3.1c-.6.4-1.1-.1-.8-.7l1.4-2.4H7a3.7 3.7 0 0 1-3.7-3.7V6.7A3.7 3.7 0 0 1 7 3z',
+    fill: 'currentColor',
+    fillOpacity: active ? 0.16 : 0.07,
+    stroke: 'currentColor',
+    strokeWidth: 1.5,
+    strokeOpacity: 0.9,
+    strokeLinejoin: 'round',
+  }),
+  h('rect', { x: 6.7, y: 6.4, width: 3.6, height: 1.3, rx: 0.65, fill: 'currentColor' }),
+  h('rect', { x: 6.7, y: 9.0, width: 9.4, height: 1.6, rx: 0.8, fill: 'currentColor', fillOpacity: 0.8 }),
+  h('rect', { x: 6.7, y: 12.0, width: 6.6, height: 1.6, rx: 0.8, fill: 'currentColor', fillOpacity: 0.4 }),
+  h('rect', { x: 6.7, y: 15.0, width: 8.8, height: 1.8, rx: 0.9, fill: 'currentColor' }),
   )
 }
 
