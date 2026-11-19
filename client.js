@@ -2543,7 +2543,7 @@ function base64Bytes(dataUrl) {
   return Math.floor((payload.length * 3) / 4 - (payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0))
 }
 
-/* ===== src/ui.mjs ===== */
+/* ===== src/ui-shell.mjs ===== */
 /**
  * The studio UI: three panes (copy, live WeChat preview, design controls),
  * local drafts, and the publish flow. Written against the slot framework's
@@ -3209,6 +3209,7 @@ function StudioPanel(props) {
  * Top bar
  * ------------------------------------------------------------------ */
 
+/* ===== src/ui-editor.mjs ===== */
 function TopBar(props) {
   const { store, design, features, narrow, compact, narrowView, setNarrowView, rightOpen, setRightOpen, onCompose, onReshuffle, onCopy, onOpenDesign, onImportDocument, refining, toast, appearance, setAppearance } = props
   const [menuOpen, setMenuOpen] = React.useState(false)
@@ -3881,6 +3882,7 @@ const TABS = [
   { id: 'publish', label: '发布' },
 ]
 
+/* ===== src/ui-design.mjs ===== */
 function DesignPanel(props) {
   const { store, design, doc, analysis, features, hostStatus, setHostStatus, tab, setTab, toast, parsed, article, showClose, onClose, autoRefine, setAutoRefine, refining, onRefineNow } = props
   return h('aside', { className: 'ws-right' },
@@ -4941,6 +4943,7 @@ function IconButton({ icon, title, disabled, onClick }) {
   )
 }
 
+/* ===== src/ui-misc.mjs ===== */
 function Toggle({ label, checked, onChange }) {
   return h('button', {
     type: 'button',

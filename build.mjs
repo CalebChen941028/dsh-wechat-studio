@@ -22,7 +22,7 @@ function stripModuleSyntax(source) {
     .replace(/^export\s+/gm, '')
 }
 
-const sources = ['themes', 'engine', 'render', 'docparse', 'images', 'bridge', 'ui']
+const sources = ['themes', 'engine', 'render', 'docparse', 'images', 'bridge', 'ui-shell', 'ui-editor', 'ui-design', 'ui-misc']
   .map(name => {
     const code = stripModuleSyntax(readFileSync(join(root, 'src', `${name}.mjs`), 'utf8'))
     return `/* ===== src/${name}.mjs ===== */\n${code.trim()}\n`

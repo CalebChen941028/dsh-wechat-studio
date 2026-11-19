@@ -40,5 +40,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/CalebChen941028/dsh-wechat-studio.git"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.mjs"
   }
 }
