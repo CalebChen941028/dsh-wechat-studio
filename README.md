@@ -61,8 +61,9 @@ Host 半部注册一条同源路由 `POST /wechat-studio/api`，供页面调用�
 ## 开发
 
 ```
+npm ci                    # 安装测试用 jsdom
 npm run build             # src/*.mjs -> client.js
-npm test                  # 解析、编排、渲染、Host 服务、AI 与图片注册表测试
+npm test                  # 解析、编排、渲染、Host 服务、AI、图片注册表、docx 解析测试
 ```
 
 打 `v*` tag 会触发 `.github/workflows/release.yml`：跑测试、打源码包、创建 GitHub Release。
