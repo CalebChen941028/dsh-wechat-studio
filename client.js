@@ -760,6 +760,41 @@ function rankThemes(topic, features) {
 }
 
 /**
+ * Split a long Markdown article into chunks for per-section AI rewrites.
+ * Headings stay with their own section, and fenced code blocks are never cut.
+ * @param {string} text Markdown text.
+ * @param {number} maxChars soft upper bound per chunk.
+ * @returns {string[]} chunks in document order.
+ */
+function splitMarkdownChunks(text, maxChars = 3200) {
+  const source = String(text ?? '').trim()
+  if (source === '') return []
+  if (source.length <= maxChars) return [source]
+  const lines = source.split('\n')
+  const chunks = []
+  let current = []
+  let size = 0
+  let inFence = false
+  const flush = () => {
+    if (current.length === 0) return
+    const chunk = current.join('\n').trim()
+    if (chunk !== '') chunks.push(chunk)
+    current = []
+    size = 0
+  }
+  for (const line of lines) {
+    const fence = /^\s*```/.test(line)
+    const lineSize = line.length + 1
+    if (!inFence && current.length > 0 && size + lineSize > maxChars) flush()
+    current.push(line)
+    size += lineSize
+    if (fence) inFence = !inFence
+  }
+  flush()
+  return chunks
+}
+
+/**
  * Pick the variant whose decoration vocabulary matches the article structure.
  * @param {any} theme chosen theme.
  * @param {object} features measured structure.
@@ -2311,6 +2346,85 @@ async function callHost(action, payload = {}, options = {}) {
   return envelope.value
 }
 
+/**
+ * Call a Host action that answers with Server-Sent Events. The Host sends
+ * `progress` events while the model writes, then one `done` or `error` event.
+ * Falls back to a normal JSON call when streaming is unavailable.
+ * @param {string} action action name.
+ * @param {object} payload action payload.
+ * @param {{ timeoutMs?: number, onProgress?: (chars: number) => void }} options callbacks.
+ * @returns {Promise<any>} final value.
+ */
+async function callHostStream(action, payload = {}, options = {}) {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const controller = typeof AbortController === 'function' ? new AbortController() : undefined
+  const timer = controller === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs)
+  let response
+  try {
+    response = await fetch(new URL(API_PATH, location.origin).toString(), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-wechat-studio': '1', accept: 'text/event-stream' },
+      body: JSON.stringify({ action, ...payload }),
+      signal: controller?.signal,
+    })
+  } catch (error) {
+    if (timer !== undefined) clearTimeout(timer)
+    if (error && error.name === 'AbortError') throw bridgeError('host-timeout', '模型响应超时，重试或把文章拆短一点')
+    throw bridgeError('host-unreachable', '连不上公众号排版服务，确认插件已启用后刷新页面再试')
+  }
+
+  if (!response.ok) {
+    if (timer !== undefined) clearTimeout(timer)
+    throw bridgeError('host-http', `排版服务返回 HTTP ${response.status}`)
+  }
+  const stream = response.body
+  if (stream === null || stream === undefined || typeof stream.getReader !== 'function') {
+    if (timer !== undefined) clearTimeout(timer)
+    return callHost(action, payload, options)
+  }
+
+  const reader = stream.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let value
+  let failure
+  try {
+    for (;;) {
+      const { done, value: chunk } = await reader.read()
+      if (done === true) break
+      buffer += decoder.decode(chunk, { stream: true })
+      let boundary = buffer.indexOf('\n\n')
+      while (boundary !== -1) {
+        const block = buffer.slice(0, boundary)
+        buffer = buffer.slice(boundary + 2)
+        const line = block.split('\n').find(entry => entry.startsWith('data:'))
+        if (line !== undefined) {
+          let event
+          try {
+            event = JSON.parse(line.slice(5).trim())
+          } catch {
+            event = null
+          }
+          if (event !== null && typeof event === 'object') {
+            if (event.type === 'progress' && typeof event.chars === 'number') options.onProgress?.(event.chars)
+            else if (event.type === 'done') value = event.value
+            else if (event.type === 'error') failure = bridgeError(event.code ?? 'ai-failed', event.message ?? 'AI 修改失败')
+          }
+        }
+        boundary = buffer.indexOf('\n\n')
+      }
+    }
+  } catch (error) {
+    if (error && error.name === 'AbortError') throw bridgeError('host-timeout', '模型响应超时，重试或把文章拆短一点')
+    throw error
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+  if (failure !== undefined) throw failure
+  if (value === undefined) throw bridgeError('host-format', 'AI 流式响应提前结束，请重试')
+  return value
+}
+
 function bridgeError(code, message) {
   const error = new Error(message)
   error.code = code
@@ -2440,6 +2554,7 @@ function base64Bytes(dataUrl) {
 const PANEL_ID = 'wechat-studio'
 const STORAGE_KEY = 'dsh.wechat-studio.docs.v1'
 const APPEARANCE_KEY = 'dsh.wechat-studio.appearance.v1'
+const LONG_TEXT_CHUNK_THRESHOLD = 7000
 const SKINS = [
   { id: 'auto', name: '跟随应用', hint: '自动适配深浅' },
   { id: 'light', name: '浅色玻璃', hint: '明亮通透' },
@@ -3786,6 +3901,9 @@ function AiSection(props) {
   const [messages, setMessages] = React.useState([])
   const [input, setInput] = React.useState('')
   const [busy, setBusy] = React.useState(false)
+  const [progress, setProgress] = React.useState(0)
+  const [phase, setPhase] = React.useState('')
+  const [chunked, setChunked] = React.useState(false)
   const listRef = React.useRef(null)
   const inputRef = React.useRef(null)
 
@@ -3805,15 +3923,43 @@ function AiSection(props) {
     const sentText = doc.text
     setMessages(list => [...list, { role: 'user', content: instruction }])
     setBusy(true)
+    setProgress(0)
+    setPhase('')
     try {
-      const value = await callHost('aiEdit', {
-        instruction,
-        text: doc.text,
-        title: doc.meta.title,
-        design: doc.design,
-        meta: { author: doc.meta.author, digest: doc.meta.digest },
-        history: messages.slice(-6).map(message => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
-      }, { timeoutMs: 150000 })
+      let value
+      const useChunks = chunked && doc.text.length > LONG_TEXT_CHUNK_THRESHOLD
+      if (useChunks) {
+        const chunks = splitMarkdownChunks(doc.text, 3200)
+        if (chunks.length === 0) throw Object.assign(new Error('文章为空，无法分段'), { code: 'text-required' })
+        if (chunks.length > 8) throw Object.assign(new Error(`文章会拆成 ${chunks.length} 段，超过 8 段上限；先手动拆成几篇再改`), { code: 'too-many-chunks' })
+        const rewritten = []
+        for (let index = 0; index < chunks.length; index += 1) {
+          setPhase(`第 ${index + 1}/${chunks.length} 段改写中`)
+          const part = await callHost('aiEdit', {
+            instruction: `${instruction}\n\n（这是全文第 ${index + 1}/${chunks.length} 段。只改写这一段，保持 Markdown 结构；不要输出 design；不要添加原文没有的事实。）`,
+            text: chunks[index],
+            title: doc.meta.title,
+            design: doc.design,
+            meta: { author: doc.meta.author, digest: doc.meta.digest },
+            history: [],
+          }, { timeoutMs: 150000 })
+          if (typeof part.text !== 'string' || part.text.trim() === '') {
+            throw Object.assign(new Error(`第 ${index + 1} 段没有返回改写结果，已取消，正文未改。`), { code: 'chunk-missing' })
+          }
+          rewritten.push(part.text.trim())
+        }
+        value = { reply: `分段改写完成（${chunks.length} 段），版式未改。`, text: rewritten.join('\n\n') }
+      } else {
+        setPhase('模型生成中')
+        value = await callHostStream('aiEditStream', {
+          instruction,
+          text: doc.text,
+          title: doc.meta.title,
+          design: doc.design,
+          meta: { author: doc.meta.author, digest: doc.meta.digest },
+          history: messages.slice(-6).map(message => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
+        }, { timeoutMs: 150000, onProgress: chars => setProgress(chars) })
+      }
 
       const applied = []
       const current = store.doc
@@ -3863,6 +4009,7 @@ function AiSection(props) {
       setMessages(list => [...list, { role: 'error', content: error.message || '修改失败', code: error.code }])
     } finally {
       setBusy(false)
+      setPhase('')
       requestAnimationFrame(() => inputRef.current?.focus())
     }
   }
@@ -3908,9 +4055,19 @@ function AiSection(props) {
         )),
         busy ? h('div', { className: 'ws-msg assistant typing' },
           h('span', { className: 'ws-typing-dot' }), h('span', { className: 'ws-typing-dot' }), h('span', { className: 'ws-typing-dot' }),
-          h('span', { className: 'ws-msg-body' }, '正在按你的要求修改…'),
+          h('span', { className: 'ws-msg-body' }, progress > 0 ? `模型已生成 ${progress} 字…` : (phase === '' ? '正在按你的要求修改…' : phase)),
         ) : null,
       ),
+    doc.text.length > LONG_TEXT_CHUNK_THRESHOLD
+      ? h('div', { className: 'ws-chat-compose-option' },
+        h(Toggle, {
+          label: `长文分段改写（约 ${splitMarkdownChunks(doc.text, 3200).length} 段，只改正文）`,
+          checked: chunked,
+          onChange: setChunked,
+        }),
+        chunked ? h('p', { className: 'ws-hint' }, '会按小节拆成多段分别调用模型，耗时和费用更高；版式不会变。') : null,
+      )
+      : null,
     h('div', { className: 'ws-chat-compose' },
       h('textarea', {
         ref: inputRef,
@@ -5009,6 +5166,7 @@ const STUDIO_CSS = `
 .ws-typing-dot{width:5px;height:5px;border-radius:50%;background:var(--ws-brand);animation:ws-pulse 1s ease-in-out infinite}
 .ws-typing-dot:nth-child(2){animation-delay:.15s}
 .ws-typing-dot:nth-child(3){animation-delay:.3s}
+.ws-chat-compose-option{padding:8px 0 0;display:flex;flex-direction:column;gap:4px}
 .ws-chat-compose{display:flex;flex-direction:column;gap:6px}
 .ws-refining{position:absolute;left:16px;bottom:16px;z-index:55;display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:99px;border:1px solid var(--ws-border);background:var(--dsw-alias-bg-overlay);color:var(--ws-muted);font-size:11.5px;box-shadow:0 8px 22px rgba(0,0,0,.14)}
 .ws-toasts{position:absolute;right:16px;top:64px;z-index:60;display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:min(420px,80%)}

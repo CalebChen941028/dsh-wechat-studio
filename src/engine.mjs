@@ -508,6 +508,41 @@ export function rankThemes(topic, features) {
 }
 
 /**
+ * Split a long Markdown article into chunks for per-section AI rewrites.
+ * Headings stay with their own section, and fenced code blocks are never cut.
+ * @param {string} text Markdown text.
+ * @param {number} maxChars soft upper bound per chunk.
+ * @returns {string[]} chunks in document order.
+ */
+export function splitMarkdownChunks(text, maxChars = 3200) {
+  const source = String(text ?? '').trim()
+  if (source === '') return []
+  if (source.length <= maxChars) return [source]
+  const lines = source.split('\n')
+  const chunks = []
+  let current = []
+  let size = 0
+  let inFence = false
+  const flush = () => {
+    if (current.length === 0) return
+    const chunk = current.join('\n').trim()
+    if (chunk !== '') chunks.push(chunk)
+    current = []
+    size = 0
+  }
+  for (const line of lines) {
+    const fence = /^\s*```/.test(line)
+    const lineSize = line.length + 1
+    if (!inFence && current.length > 0 && size + lineSize > maxChars) flush()
+    current.push(line)
+    size += lineSize
+    if (fence) inFence = !inFence
+  }
+  flush()
+  return chunks
+}
+
+/**
  * Pick the variant whose decoration vocabulary matches the article structure.
  * @param {any} theme chosen theme.
  * @param {object} features measured structure.

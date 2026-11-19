@@ -54,6 +54,85 @@ export async function callHost(action, payload = {}, options = {}) {
   return envelope.value
 }
 
+/**
+ * Call a Host action that answers with Server-Sent Events. The Host sends
+ * `progress` events while the model writes, then one `done` or `error` event.
+ * Falls back to a normal JSON call when streaming is unavailable.
+ * @param {string} action action name.
+ * @param {object} payload action payload.
+ * @param {{ timeoutMs?: number, onProgress?: (chars: number) => void }} options callbacks.
+ * @returns {Promise<any>} final value.
+ */
+export async function callHostStream(action, payload = {}, options = {}) {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const controller = typeof AbortController === 'function' ? new AbortController() : undefined
+  const timer = controller === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs)
+  let response
+  try {
+    response = await fetch(new URL(API_PATH, location.origin).toString(), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-wechat-studio': '1', accept: 'text/event-stream' },
+      body: JSON.stringify({ action, ...payload }),
+      signal: controller?.signal,
+    })
+  } catch (error) {
+    if (timer !== undefined) clearTimeout(timer)
+    if (error && error.name === 'AbortError') throw bridgeError('host-timeout', '模型响应超时，重试或把文章拆短一点')
+    throw bridgeError('host-unreachable', '连不上公众号排版服务，确认插件已启用后刷新页面再试')
+  }
+
+  if (!response.ok) {
+    if (timer !== undefined) clearTimeout(timer)
+    throw bridgeError('host-http', `排版服务返回 HTTP ${response.status}`)
+  }
+  const stream = response.body
+  if (stream === null || stream === undefined || typeof stream.getReader !== 'function') {
+    if (timer !== undefined) clearTimeout(timer)
+    return callHost(action, payload, options)
+  }
+
+  const reader = stream.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let value
+  let failure
+  try {
+    for (;;) {
+      const { done, value: chunk } = await reader.read()
+      if (done === true) break
+      buffer += decoder.decode(chunk, { stream: true })
+      let boundary = buffer.indexOf('\n\n')
+      while (boundary !== -1) {
+        const block = buffer.slice(0, boundary)
+        buffer = buffer.slice(boundary + 2)
+        const line = block.split('\n').find(entry => entry.startsWith('data:'))
+        if (line !== undefined) {
+          let event
+          try {
+            event = JSON.parse(line.slice(5).trim())
+          } catch {
+            event = null
+          }
+          if (event !== null && typeof event === 'object') {
+            if (event.type === 'progress' && typeof event.chars === 'number') options.onProgress?.(event.chars)
+            else if (event.type === 'done') value = event.value
+            else if (event.type === 'error') failure = bridgeError(event.code ?? 'ai-failed', event.message ?? 'AI 修改失败')
+          }
+        }
+        boundary = buffer.indexOf('\n\n')
+      }
+    }
+  } catch (error) {
+    if (error && error.name === 'AbortError') throw bridgeError('host-timeout', '模型响应超时，重试或把文章拆短一点')
+    throw error
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+  if (failure !== undefined) throw failure
+  if (value === undefined) throw bridgeError('host-format', 'AI 流式响应提前结束，请重试')
+  return value
+}
+
 function bridgeError(code, message) {
   const error = new Error(message)
   error.code = code

@@ -36,6 +36,7 @@ const KNOWN_ACTIONS = new Set([
   'publish',
   'publishStatus',
   'aiEdit',
+  'aiEditStream',
 ])
 
 /** 读单个请求头。 */
@@ -78,6 +79,47 @@ function parseEnvelope(body) {
 export function apply(ctx, config) {
   void config
   const studio = createStudioService({ ctx })
+  const ai = createAiEditor({ ctx })
+
+  /**
+   * AI 流式进度：先把响应切到 SSE，再按生成字数推事件，最后给最终结果。
+   * 只用于面板的对话/精排；工具调用仍走普通 aiEdit。
+   */
+  const handleAiStream = async (res, payload) => {
+    res.statusCode = 200
+    res.setHeader('content-type', 'text/event-stream; charset=utf-8')
+    res.setHeader('cache-control', 'no-cache')
+    res.setHeader('connection', 'keep-alive')
+    res.setHeader('x-accel-buffering', 'no')
+    if (typeof res.flushHeaders === 'function') res.flushHeaders()
+    const send = (event) => {
+      try {
+        res.write(`data: ${JSON.stringify(event)}\n\n`)
+      } catch {
+        // The page went away; nothing else to do.
+      }
+    }
+    let lastReported = 0
+    try {
+      const value = await ai.edit(payload, {
+        onDelta: (chars) => {
+          if (chars - lastReported >= 240) {
+            lastReported = chars
+            send({ type: 'progress', chars })
+          }
+        },
+      })
+      send({ type: 'done', value })
+    } catch (error) {
+      send({
+        type: 'error',
+        code: error !== null && typeof error === 'object' && typeof error.code === 'string' ? error.code : 'ai-failed',
+        message: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      res.end()
+    }
+  }
 
   /** 执行一个动作并把结果写成统一响应。 */
   const handleAction = async (req, res) => {
@@ -99,6 +141,11 @@ export function apply(ctx, config) {
     } catch (error) {
       const response = toErrorResponse(error)
       sendJson(res, response.status, response.body)
+      return
+    }
+
+    if (action === 'aiEditStream') {
+      await handleAiStream(res, payload)
       return
     }
 
@@ -148,7 +195,6 @@ export function apply(ctx, config) {
   // edit an article without switching to the panel.
   const tools = ctx.get('tools')
   if (tools !== undefined && tools !== null && typeof tools.register === 'function') {
-    const ai = createAiEditor({ ctx })
     const definition = {
       name: 'wechat_studio_ai_edit',
       description: 'Edit a WeChat article draft from a natural-language instruction: rewrite copy, pick a theme, or tune the layout. Returns the full revised Markdown plus any theme change; nothing is published.',

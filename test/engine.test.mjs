@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   parseArticle, parseInline, plainText, detectTopic, measure, composeDesign,
-  autoCompose, rankThemes, nextVariant, mixHex, readableOn,
+  autoCompose, rankThemes, nextVariant, mixHex, readableOn, splitMarkdownChunks,
 } from '../src/engine.mjs'
 import { THEMES } from '../src/themes.mjs'
 import {
@@ -328,4 +328,16 @@ test('paragraph reorder helpers used by the preview operate on line ranges', () 
     ...lines.slice(second.end + 1),
   ].join('\n')
   assert.equal(moved, 'c\nd\n\na\nb\n\ne')
+})
+
+
+test('splitMarkdownChunks 按小节切分长文且不切断代码块', () => {
+  const section = '## 小节\n\n' + '正文内容。'.repeat(80) + '\n\n'
+  const text = '# 标题\n\n' + section.repeat(4) + '```\n' + 'const a = 1;\n'.repeat(40) + '```\n'
+  const chunks = splitMarkdownChunks(text, 1200)
+  assert.ok(chunks.length > 1)
+  assert.ok(chunks[0].length <= 1300, 'normal chunks stay near the cap')
+  assert.ok(chunks.slice(1, -1).every(chunk => chunk.length <= 1300), 'chunks without a fence stay near the cap')
+  assert.ok(chunks.join('\n\n').includes('## 小节'))
+  assert.ok(chunks.some(chunk => chunk.includes('```')))
 })

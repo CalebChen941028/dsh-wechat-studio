@@ -276,7 +276,7 @@ export function createAiEditor({ ctx }) {
      * @param {{ instruction: string, text: string, design?: object, meta?: object, history?: object[] }} payload
      * @returns {Promise<{ reply: string, text?: string, design?: object, meta?: object, model: object, parseError?: true }>}
      */
-    async edit(payload) {
+    async edit(payload, hooks = {}) {
       const llm = ctx.get('llm')
       if (llm === undefined || llm === null || typeof llm.stream !== 'function') {
         throw new AiError('no-llm', '当前运行环境没有可用的模型服务，没法进行对话修改。')
@@ -310,7 +310,10 @@ export function createAiEditor({ ctx }) {
           maxTokens,
           signal: controller.signal,
         })) {
-          if (chunk?.type === 'text-delta' && typeof chunk.text === 'string') output += chunk.text
+          if (chunk?.type === 'text-delta' && typeof chunk.text === 'string') {
+            output += chunk.text
+            if (typeof hooks.onDelta === 'function') hooks.onDelta(output.length)
+          }
           else if (chunk?.type === 'finish' && chunk.reason?.kind === 'error') {
             throw new AiError('model-failed', `模型返回失败：${chunk.reason.failure?.message ?? '未知原因'}`)
           } else if (chunk?.type === 'finish' && chunk.reason?.kind === 'aborted') {

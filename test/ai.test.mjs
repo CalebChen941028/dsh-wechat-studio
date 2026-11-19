@@ -224,3 +224,12 @@ test('aiEdit 接受图片宽度与对齐覆盖', async () => {
   assert.equal(result.design.overrides.imageWidth, 70)
   assert.equal(result.design.overrides.imageAlign, 'left')
 })
+
+
+test('aiEdit 通过 onDelta 汇报生成进度', async () => {
+  const { ctx } = fakeContext({ chunks: jsonReply({ reply: '好', design: { themeId: 'column' } }) })
+  const sizes = []
+  await createAiEditor({ ctx }).edit({ instruction: '改版式', text: ARTICLE }, { onDelta: chars => sizes.push(chars) })
+  assert.ok(sizes.length >= 1)
+  assert.equal(sizes.at(-1), JSON.stringify({ reply: '好', design: { themeId: 'column' } }).length)
+})

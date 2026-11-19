@@ -126,6 +126,17 @@ function mockResponse() {
       this.headers = headers ?? {}
       return this
     },
+    setHeader(name, value) {
+      this.headers[name] = value
+    },
+    write(chunk) {
+      this.headersSent = true
+      this.bodyText += String(chunk)
+      return true
+    },
+    flushHeaders() {
+      this.headersSent = true
+    },
     end(chunk) {
       if (chunk !== undefined && chunk !== null) this.bodyText += chunk.toString()
       this.headersSent = true
@@ -878,11 +889,12 @@ test('sendJson：写入 JSON、no-store 和 content-length', () => {
 // ---------------------------------------------------------------------------
 
 /** 挂载插件，返回注册的路由。 */
-function mountPlugin(credentials) {
+function mountPlugin(credentials, services = {}) {
   let route
   const ctx = {
     get(name) {
-      return name === 'credentials' ? credentials : undefined
+      if (name === 'credentials') return credentials
+      return services[name]
     },
     effect(run) {
       return run()
@@ -981,4 +993,33 @@ test('index.js：未知 action 返回业务错误', async () => {
   assert.equal(response.status, 200)
   assert.equal(response.body.ok, false)
   assert.equal(response.body.code, 'unknown-action')
+})
+
+
+test('index.js：aiEditStream 用 SSE 推送进度与最终结果', async () => {
+  const llm = {
+    async listProviders() { return [{ id: 'deepseek-official' }] },
+    async listModels() { return [{ id: 'deepseek-v4-flash' }] },
+    async *stream() {
+      yield { type: 'text-delta', text: '{"reply":"' }
+      yield { type: 'text-delta', text: '已改好","design":{"themeId":"column"}}' }
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    },
+  }
+  const route = mountPlugin(fakeCredentials(), {
+    llm,
+    agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-v4-flash' }) },
+  })
+  const res = mockResponse()
+  await route.handler(mockRequest({
+    headers: SAME_ORIGIN_HEADERS,
+    body: { action: 'aiEditStream', instruction: '改标题', text: '# 标题\n\n正文' },
+  }), res)
+  assert.match(String(res.headers['content-type']), /text\/event-stream/)
+  assert.ok(res.bodyText.includes('data: '))
+  const events = res.bodyText.trim().split('\n\n').map(block => JSON.parse(block.replace(/^data:\s*/, '')))
+  const done = events.find(event => event.type === 'done')
+  assert.ok(done)
+  assert.equal(done.value.reply, '已改好')
+  assert.equal(done.value.design.themeId, 'column')
 })

@@ -8,6 +8,7 @@
 const PANEL_ID = 'wechat-studio'
 const STORAGE_KEY = 'dsh.wechat-studio.docs.v1'
 const APPEARANCE_KEY = 'dsh.wechat-studio.appearance.v1'
+const LONG_TEXT_CHUNK_THRESHOLD = 7000
 const SKINS = [
   { id: 'auto', name: '跟随应用', hint: '自动适配深浅' },
   { id: 'light', name: '浅色玻璃', hint: '明亮通透' },
@@ -1354,6 +1355,9 @@ function AiSection(props) {
   const [messages, setMessages] = React.useState([])
   const [input, setInput] = React.useState('')
   const [busy, setBusy] = React.useState(false)
+  const [progress, setProgress] = React.useState(0)
+  const [phase, setPhase] = React.useState('')
+  const [chunked, setChunked] = React.useState(false)
   const listRef = React.useRef(null)
   const inputRef = React.useRef(null)
 
@@ -1373,15 +1377,43 @@ function AiSection(props) {
     const sentText = doc.text
     setMessages(list => [...list, { role: 'user', content: instruction }])
     setBusy(true)
+    setProgress(0)
+    setPhase('')
     try {
-      const value = await callHost('aiEdit', {
-        instruction,
-        text: doc.text,
-        title: doc.meta.title,
-        design: doc.design,
-        meta: { author: doc.meta.author, digest: doc.meta.digest },
-        history: messages.slice(-6).map(message => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
-      }, { timeoutMs: 150000 })
+      let value
+      const useChunks = chunked && doc.text.length > LONG_TEXT_CHUNK_THRESHOLD
+      if (useChunks) {
+        const chunks = splitMarkdownChunks(doc.text, 3200)
+        if (chunks.length === 0) throw Object.assign(new Error('文章为空，无法分段'), { code: 'text-required' })
+        if (chunks.length > 8) throw Object.assign(new Error(`文章会拆成 ${chunks.length} 段，超过 8 段上限；先手动拆成几篇再改`), { code: 'too-many-chunks' })
+        const rewritten = []
+        for (let index = 0; index < chunks.length; index += 1) {
+          setPhase(`第 ${index + 1}/${chunks.length} 段改写中`)
+          const part = await callHost('aiEdit', {
+            instruction: `${instruction}\n\n（这是全文第 ${index + 1}/${chunks.length} 段。只改写这一段，保持 Markdown 结构；不要输出 design；不要添加原文没有的事实。）`,
+            text: chunks[index],
+            title: doc.meta.title,
+            design: doc.design,
+            meta: { author: doc.meta.author, digest: doc.meta.digest },
+            history: [],
+          }, { timeoutMs: 150000 })
+          if (typeof part.text !== 'string' || part.text.trim() === '') {
+            throw Object.assign(new Error(`第 ${index + 1} 段没有返回改写结果，已取消，正文未改。`), { code: 'chunk-missing' })
+          }
+          rewritten.push(part.text.trim())
+        }
+        value = { reply: `分段改写完成（${chunks.length} 段），版式未改。`, text: rewritten.join('\n\n') }
+      } else {
+        setPhase('模型生成中')
+        value = await callHostStream('aiEditStream', {
+          instruction,
+          text: doc.text,
+          title: doc.meta.title,
+          design: doc.design,
+          meta: { author: doc.meta.author, digest: doc.meta.digest },
+          history: messages.slice(-6).map(message => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
+        }, { timeoutMs: 150000, onProgress: chars => setProgress(chars) })
+      }
 
       const applied = []
       const current = store.doc
@@ -1431,6 +1463,7 @@ function AiSection(props) {
       setMessages(list => [...list, { role: 'error', content: error.message || '修改失败', code: error.code }])
     } finally {
       setBusy(false)
+      setPhase('')
       requestAnimationFrame(() => inputRef.current?.focus())
     }
   }
@@ -1476,9 +1509,19 @@ function AiSection(props) {
         )),
         busy ? h('div', { className: 'ws-msg assistant typing' },
           h('span', { className: 'ws-typing-dot' }), h('span', { className: 'ws-typing-dot' }), h('span', { className: 'ws-typing-dot' }),
-          h('span', { className: 'ws-msg-body' }, '正在按你的要求修改…'),
+          h('span', { className: 'ws-msg-body' }, progress > 0 ? `模型已生成 ${progress} 字…` : (phase === '' ? '正在按你的要求修改…' : phase)),
         ) : null,
       ),
+    doc.text.length > LONG_TEXT_CHUNK_THRESHOLD
+      ? h('div', { className: 'ws-chat-compose-option' },
+        h(Toggle, {
+          label: `长文分段改写（约 ${splitMarkdownChunks(doc.text, 3200).length} 段，只改正文）`,
+          checked: chunked,
+          onChange: setChunked,
+        }),
+        chunked ? h('p', { className: 'ws-hint' }, '会按小节拆成多段分别调用模型，耗时和费用更高；版式不会变。') : null,
+      )
+      : null,
     h('div', { className: 'ws-chat-compose' },
       h('textarea', {
         ref: inputRef,
@@ -2577,6 +2620,7 @@ const STUDIO_CSS = `
 .ws-typing-dot{width:5px;height:5px;border-radius:50%;background:var(--ws-brand);animation:ws-pulse 1s ease-in-out infinite}
 .ws-typing-dot:nth-child(2){animation-delay:.15s}
 .ws-typing-dot:nth-child(3){animation-delay:.3s}
+.ws-chat-compose-option{padding:8px 0 0;display:flex;flex-direction:column;gap:4px}
 .ws-chat-compose{display:flex;flex-direction:column;gap:6px}
 .ws-refining{position:absolute;left:16px;bottom:16px;z-index:55;display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:99px;border:1px solid var(--ws-border);background:var(--dsw-alias-bg-overlay);color:var(--ws-muted);font-size:11.5px;box-shadow:0 8px 22px rgba(0,0,0,.14)}
 .ws-toasts{position:absolute;right:16px;top:64px;z-index:60;display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:min(420px,80%)}
