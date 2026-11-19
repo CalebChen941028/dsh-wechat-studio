@@ -11,7 +11,7 @@ const { createRoot } = ReactDOMClient
 const h = React.createElement
 
 /** Mount the generated client bundle in jsdom and return the container. */
-async function mountPanel({ width = 1280, language = '' } = {}) {
+async function mountPanel({ width = 1280, language = '', fetchImpl = null } = {}) {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
     url: 'http://127.0.0.1:52889/',
     pretendToBeVisual: true,
@@ -31,6 +31,7 @@ async function mountPanel({ width = 1280, language = '' } = {}) {
     document: window.document,
     localStorage: window.localStorage,
     navigator: window.navigator,
+    location: window.location,
     console,
     setTimeout,
     clearTimeout,
@@ -46,10 +47,11 @@ async function mountPanel({ width = 1280, language = '' } = {}) {
     MutationObserver: window.MutationObserver,
     ResizeObserver: class { observe() {} disconnect() {} },
     getComputedStyle: window.getComputedStyle,
+    DOMParser: window.DOMParser,
     requestAnimationFrame: callback => setTimeout(callback, 0),
-    fetch: async () => {
+    fetch: fetchImpl ?? (async () => {
       throw new Error('host calls are not available in the UI test')
-    },
+    }),
   }
   let registration = null
   window.__ModuleLoader__ = { load(config) { registration = config } }
@@ -148,6 +150,60 @@ test('英文语言包翻译核心导航与页签', async () => {
     const text = container.textContent
     assert.match(text, /Auto layout/)
     assert.match(text, /AI edit|AI chat/)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+
+test('发布面板：读取草稿箱并导入为本地草稿', async () => {
+  const calls = []
+  const fetchImpl = async (url, init) => {
+    const body = init === undefined ? {} : JSON.parse(init.body)
+    calls.push(body.action)
+    let value = null
+    if (body.action === 'status') {
+      value = { configured: true, phase: 'ready', appIdPreview: 'wx123', message: '' }
+    } else if (body.action === 'listDrafts') {
+      value = { totalCount: 1, items: [{ mediaId: 'DRAFT-1', title: '联调草稿', digest: '摘要', updateTime: 1700000000 }] }
+    } else if (body.action === 'getDraft') {
+      value = { items: [{
+        title: '联调草稿',
+        author: '作者',
+        digest: '摘要',
+        content: '<h1>导入标题</h1><p>这是一段足够长的导入正文内容，应该超过二十个字符，用来验证导入流程。</p>',
+        contentSourceUrl: '',
+        thumbMediaId: '',
+        needOpenComment: false,
+        onlyFansCanComment: false,
+      }] }
+    }
+    return { ok: true, status: 200, async json() { return { ok: true, value } } }
+  }
+
+  const { dom, window, container, root } = await mountPanel({ fetchImpl })
+  try {
+    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.includes('发布'))
+    assert.ok(publishTab)
+    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 150))
+
+    const loadButton = [...container.querySelectorAll('button')].find(button => button.textContent.includes('读取最近'))
+    assert.ok(loadButton, 'draft box load button renders')
+    loadButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 200))
+    assert.ok(container.querySelector('.ws-draft-row'), 'draft row renders after loading')
+
+    const importButton = [...container.querySelectorAll('.ws-draft-row button')].find(button => button.textContent.trim() === '导入')
+    assert.ok(importButton, 'import button renders')
+    importButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 350))
+
+    assert.ok(calls.includes('getDraft'))
+    const editor = container.querySelector('.ws-editor')
+    assert.match(editor.value, /导入标题/)
+    assert.match(editor.value, /导入正文内容/)
   } finally {
     root.unmount()
     dom.window.close()
