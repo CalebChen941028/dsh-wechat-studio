@@ -8,6 +8,7 @@
 
 import { createWechatClient, mapWechatError, WechatApiError, isTokenInvalidError } from './wechat.js'
 import { createAiEditor } from './ai.js'
+import { createNetworkFetch, normalizeNetworkSettings, probeEgress, redactProxyUrl } from './network.js'
 
 /** 业务动作失败。 */
 export class StudioError extends Error {
@@ -26,6 +27,9 @@ export class StudioError extends Error {
 
 /** 公众号凭据在 credentials 记录里的 key。 */
 const CREDENTIALS_KEY = 'wechat-studio/account'
+
+/** 出站网络设置在 credentials 记录里的 key。 */
+const NETWORK_KEY = 'wechat-studio/network'
 
 /** 正文图片单张上限：微信 media/uploadimg 只收 1MB 以内的图。 */
 const CONTENT_IMAGE_MAX_BYTES = 1024 * 1024
@@ -277,15 +281,16 @@ function normalizeDraftArticle(raw, position, total) {
   return { article, warnings }
 }
 
-export function createStudioService({ ctx, fetchImpl = fetch } = {}) {
+export function createStudioService({ ctx, fetchImpl = fetch, importUndici } = {}) {
   if (ctx === undefined || ctx === null) throw new TypeError('createStudioService 需要 Cordis 上下文')
   const ai = createAiEditor({ ctx })
-  const client = createWechatClient({ fetchImpl })
 
   /** appId → { token, expiresAt, expiresIn } */
   const tokenCache = new Map()
   /** appId → 正在进行的取 token Promise，合并并发请求 */
   const tokenPending = new Map()
+  /** 网络设置 key → fetch 实现 */
+  const networkFetchCache = new Map()
 
   /** 取 credentials 服务；环境里没有时给出明确说明。 */
   function credentials() {
@@ -317,6 +322,44 @@ export function createStudioService({ ctx, fetchImpl = fetch } = {}) {
     }
     return account
   }
+
+  /** 读取网络设置；读不到时按跟随系统处理。 */
+  async function readNetworkSettings() {
+    const service = typeof ctx.get === 'function' ? ctx.get('credentials') : undefined
+    if (service === undefined || service === null || typeof service.readRecord !== 'function') {
+      return { mode: 'system', proxyUrl: '' }
+    }
+    let record
+    try {
+      record = await service.readRecord(NETWORK_KEY)
+    } catch {
+      return { mode: 'system', proxyUrl: '' }
+    }
+    if (record === undefined || record === null || typeof record.key !== 'string') return { mode: 'system', proxyUrl: '' }
+    try {
+      const parsed = JSON.parse(record.key)
+      return normalizeNetworkSettings(
+        { mode: parsed?.mode, proxyUrl: typeof parsed?.proxyUrl === 'string' ? parsed.proxyUrl : '' },
+        { mode: 'system', proxyUrl: '' },
+      )
+    } catch {
+      return { mode: 'system', proxyUrl: '' }
+    }
+  }
+
+  /** 微信 API 使用的 fetch：按当前设置走系统或固定代理。 */
+  async function networkFetch(input, init = {}) {
+    const settings = await readNetworkSettings()
+    const key = `${settings.mode}|${settings.proxyUrl}`
+    let impl = networkFetchCache.get(key)
+    if (impl === undefined) {
+      impl = await createNetworkFetch(settings, { fetchImpl, importUndici })
+      networkFetchCache.set(key, impl)
+    }
+    return impl(input, init)
+  }
+
+  const client = createWechatClient({ fetchImpl: networkFetch })
 
   /** 取缓存里仍有效的 token。 */
   function cachedToken(appId) {
@@ -476,6 +519,58 @@ export function createStudioService({ ctx, fetchImpl = fetch } = {}) {
         configured: true,
         appIdPreview: previewAppId(account.appId),
         tokenCached: cachedToken(account.appId) !== undefined,
+      }
+    },
+
+    /** 读取出站网络设置（代理密码不回传明文）。 */
+    async networkStatus() {
+      const settings = await readNetworkSettings()
+      return {
+        mode: settings.mode,
+        proxyUrl: redactProxyUrl(settings.proxyUrl),
+        configured: settings.mode === 'proxy',
+      }
+    },
+
+    /** 保存出站网络设置；只写本机凭据库，不写浏览器存储。 */
+    async saveNetwork(payload = {}) {
+      const current = await readNetworkSettings()
+      let settings
+      try {
+        settings = normalizeNetworkSettings(payload, current)
+      } catch (error) {
+        throw new StudioError('proxy-invalid', error instanceof Error ? error.message : String(error))
+      }
+      const service = credentials()
+      try {
+        await service.modifyRecord(NETWORK_KEY, async () => ({ kind: 'api-key', key: JSON.stringify(settings) }))
+      } catch (error) {
+        throw new StudioError('credentials-unavailable', `保存代理设置失败：${error instanceof Error ? error.message : String(error)}`)
+      }
+      networkFetchCache.clear()
+      return { mode: settings.mode, proxyUrl: redactProxyUrl(settings.proxyUrl), configured: settings.mode === 'proxy' }
+    },
+
+    /** 用当前（或临时填写的）网络设置请求一次 IP 检测服务。 */
+    async probeNetwork(payload = {}) {
+      const current = await readNetworkSettings()
+      let settings
+      try {
+        settings = normalizeNetworkSettings(payload, current)
+      } catch (error) {
+        throw new StudioError('proxy-invalid', error instanceof Error ? error.message : String(error))
+      }
+      let probeFetch
+      try {
+        probeFetch = await createNetworkFetch(settings, { fetchImpl, importUndici })
+      } catch (error) {
+        throw new StudioError('proxy-invalid', error instanceof Error ? error.message : String(error))
+      }
+      try {
+        const result = await probeEgress(probeFetch)
+        return { ...result, mode: settings.mode, proxyUrl: redactProxyUrl(settings.proxyUrl) }
+      } catch (error) {
+        throw new StudioError('proxy-failed', `出口检测失败：${error instanceof Error ? error.message : String(error)}`)
       }
     },
 

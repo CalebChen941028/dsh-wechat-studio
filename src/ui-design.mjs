@@ -518,6 +518,27 @@ function PublishSection(props) {
   const [draftBusy, setDraftBusy] = React.useState(false)
   const [deleteArm, setDeleteArm] = React.useState('')
   const [importingDraft, setImportingDraft] = React.useState('')
+  const [networkState, setNetworkState] = React.useState({ phase: 'loading', mode: 'system', proxyUrl: '', error: '' })
+  const [networkMode, setNetworkMode] = React.useState('system')
+  const [networkProxy, setNetworkProxy] = React.useState('')
+  const [networkBusy, setNetworkBusy] = React.useState(false)
+  const [egress, setEgress] = React.useState(null)
+  const [networkAdvanced, setNetworkAdvanced] = React.useState(false)
+  React.useEffect(() => {
+    let cancelled = false
+    callHost('networkStatus')
+      .then((value) => {
+        if (cancelled) return
+        const mode = value?.mode === 'proxy' ? 'proxy' : 'system'
+        setNetworkState({ phase: 'ready', mode, proxyUrl: typeof value?.proxyUrl === 'string' ? value.proxyUrl : '', error: '' })
+        setNetworkMode(mode)
+      })
+      .catch((failure) => {
+        if (cancelled) return
+        setNetworkState({ phase: 'error', mode: 'system', proxyUrl: '', error: failure.message || '' })
+      })
+    return () => { cancelled = true }
+  }, [])
   const deleteArmTimer = React.useRef(undefined)
   React.useEffect(() => () => clearTimeout(deleteArmTimer.current), [])
   const coverInputRef = React.useRef(null)
@@ -586,9 +607,50 @@ function PublishSection(props) {
       const value = await callHost('testConnection')
       toast(`连接成功，access_token 有效 ${Math.round((value.expiresIn ?? 7200) / 60)} 分钟`, 'success')
     } catch (failure) {
-      toast(failure.message || t('连接失败'), 'error')
+      if (failure?.detail?.ip) setEgress({ ip: failure.detail.ip, ms: 0 })
+      toast(localizeError(failure.code, failure.message || t('连接失败')), 'error')
     } finally {
       setConfigBusy(false)
+    }
+  }
+
+  const saveNetworkSettings = async () => {
+    setNetworkBusy(true)
+    try {
+      const value = await callHost('saveNetwork', { mode: networkMode, proxyUrl: networkProxy })
+      const mode = value?.mode === 'proxy' ? 'proxy' : 'system'
+      setNetworkState({ phase: 'ready', mode, proxyUrl: typeof value?.proxyUrl === 'string' ? value.proxyUrl : '', error: '' })
+      setNetworkMode(mode)
+      setNetworkProxy('')
+      toast(t('代理设置已保存'), 'success')
+    } catch (failure) {
+      toast(localizeError(failure.code, failure.message || t('代理设置保存失败')), 'error')
+    } finally {
+      setNetworkBusy(false)
+    }
+  }
+
+  const copyEgressIp = async () => {
+    const ip = egress?.ip
+    if (typeof ip !== 'string' || ip === '') return
+    try {
+      await navigator.clipboard.writeText(ip)
+      toast(t('已复制出口 IP'), 'success')
+    } catch {
+      toast(t('复制失败，请手动选中 IP'), 'error')
+    }
+  }
+
+  const probeNetworkEgress = async () => {
+    setNetworkBusy(true)
+    setEgress(null)
+    try {
+      const value = await callHost('probeNetwork', { mode: networkMode, proxyUrl: networkProxy })
+      setEgress(value)
+    } catch (failure) {
+      toast(localizeError(failure.code, failure.message || t('出口检测失败')), 'error')
+    } finally {
+      setNetworkBusy(false)
     }
   }
 
@@ -828,6 +890,59 @@ function PublishSection(props) {
           hostStatus.configured ? h(Button, { onClick: testConnection, disabled: configBusy }, configBusy ? t('测试中…') : t('测试连接')) : null,
           hostStatus.configured ? h(Button, { onClick: clearConfig, disabled: configBusy, variant: 'ghost' }, t('清除')) : null,
         ),
+    ),
+    h('div', { className: 'ws-card' },
+      h('div', { className: 'ws-card-head' },
+        h(Icon, { name: 'send', size: 14 }),
+        h('span', null, t('网络与出口')),
+        h('span', { className: 'ws-badge ' + (networkState.mode === 'proxy' ? 'ok' : '') }, networkState.mode === 'proxy' ? t('固定代理') : t('跟随系统')),
+      ),
+      h('p', { className: 'ws-hint' }, t('先获取出口 IP，加到公众号白名单，再测试连接。')),
+      networkState.phase === 'error' ? h('p', { className: 'ws-hint danger' }, networkState.error) : null,
+      h('div', { className: 'ws-egress-row' },
+        h('span', { className: 'ws-egress-label' }, t('出口 IP')),
+        h('strong', { className: 'ws-egress-ip' }, egress?.ip ?? t('未检测')),
+        h(Button, { disabled: networkBusy, onClick: probeNetworkEgress }, networkBusy ? t('检测中…') : (egress === null ? t('获取出口 IP') : t('重新检测'))),
+        egress !== null ? h(Button, { onClick: copyEgressIp }, t('复制 IP')) : null,
+        egress !== null ? h(Button, { disabled: configBusy, onClick: testConnection }, configBusy ? t('测试中…') : t('测试微信连接')) : null,
+      ),
+      h('p', { className: 'ws-hint' }, t('把出口 IP 加到公众号后台 → 设置与开发 → 基本配置 → IP白名单，然后点「测试微信连接」。')),
+      h('button', {
+        type: 'button',
+        className: 'ws-link',
+        onClick: () => setNetworkAdvanced(value => !value),
+      }, networkAdvanced ? t('收起高级设置') : t('网络高级设置（自定义代理）')),
+      networkAdvanced
+        ? h('div', { className: 'ws-advanced' },
+          h('div', { className: 'ws-device-switch' },
+            [['system', t('跟随系统')], ['proxy', t('自定义代理')]].map(([value, label]) => h('button', {
+              key: value,
+              type: 'button',
+              className: 'ws-device-btn' + (networkMode === value ? ' on' : ''),
+              onClick: () => setNetworkMode(value),
+            }, label)),
+          ),
+          networkMode === 'proxy'
+            ? h('label', { className: 'ws-field' },
+              h('span', { className: 'ws-field-label' }, t('代理地址')),
+              h('input', {
+                className: 'ws-input',
+                value: networkProxy,
+                placeholder: networkState.proxyUrl || 'http://127.0.0.1:7890',
+                onChange: event => setNetworkProxy(event.target.value),
+                spellCheck: false,
+              }),
+            )
+            : null,
+          h('div', { className: 'ws-row' },
+            h(Button, { variant: 'primary', disabled: networkBusy, onClick: saveNetworkSettings }, networkBusy ? t('保存中…') : t('保存代理设置')),
+          ),
+          networkState.mode === 'proxy' && networkState.proxyUrl !== ''
+            ? h('p', { className: 'ws-hint' }, `${t('当前代理')}：${networkState.proxyUrl}`)
+            : null,
+          h('p', { className: 'ws-hint' }, t('代理只作用于微信接口请求，地址存在本机凭据库，密码不会回传页面。')),
+        )
+        : null,
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('文章信息')), h('span', { className: 'ws-group-note' }, `标题 ${title.length}/64 · 摘要 ${digest.length}/120`)),

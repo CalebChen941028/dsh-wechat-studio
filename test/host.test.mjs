@@ -82,10 +82,10 @@ function fakeCtx({ credentials, connection } = {}) {
 }
 
 /** 构造带凭据的服务。 */
-function makeService({ routes, record = ACCOUNT_RECORD, credentials } = {}) {
+function makeService({ routes, record = ACCOUNT_RECORD, credentials, importUndici } = {}) {
   const credentialsService = credentials ?? fakeCredentials(record)
   const { fetchImpl, calls } = routeFetch(routes)
-  const service = createStudioService({ ctx: fakeCtx({ credentials: credentialsService }), fetchImpl })
+  const service = createStudioService({ ctx: fakeCtx({ credentials: credentialsService }), fetchImpl, importUndici })
   return { service, credentials: credentialsService, calls }
 }
 
@@ -1082,4 +1082,39 @@ test('createDraft：超过 8 篇或某篇缺字段时拒绝', async () => {
     () => service.createDraft({ articles: [draftPayload(), { ...draftPayload(), title: '   ' }] }),
     error => error.code === 'title-required' && /第 2 篇/.test(error.message),
   )
+})
+
+
+// ---------------------------------------------------------------------------
+// 网络与代理
+// ---------------------------------------------------------------------------
+
+test('networkStatus：默认跟随系统，saveNetwork 写入凭据并隐藏密码', async () => {
+  const { service, credentials } = makeService({ routes: [] })
+  assert.deepEqual(await service.networkStatus(), { mode: 'system', proxyUrl: '', configured: false })
+  const saved = await service.saveNetwork({ mode: 'proxy', proxyUrl: 'http://user:pass@127.0.0.1:7890' })
+  assert.equal(saved.mode, 'proxy')
+  assert.equal(saved.proxyUrl, 'http://***:***@127.0.0.1:7890/')
+  const record = credentials.store.get('wechat-studio/network')
+  assert.equal(typeof record.key, 'string')
+  assert.match(record.key, /"mode":"proxy"/)
+  assert.deepEqual(await service.networkStatus(), { mode: 'proxy', proxyUrl: 'http://***:***@127.0.0.1:7890/', configured: true })
+})
+
+test('saveNetwork：拒绝 SOCKS/空地址', async () => {
+  const { service } = makeService({ routes: [] })
+  await assert.rejects(() => service.saveNetwork({ mode: 'proxy', proxyUrl: 'socks5://127.0.0.1:1080' }), (error) => error.code === 'proxy-invalid')
+  await assert.rejects(() => service.saveNetwork({ mode: 'proxy', proxyUrl: '' }), (error) => error.code === 'proxy-invalid')
+})
+
+test('probeNetwork：通过注入的 undici 检测出口 IP', async () => {
+  const fakeUndici = {
+    ProxyAgent: class { constructor(url) { this.url = url } },
+    fetch: async () => ({ ok: true, text: async () => '{"ip":"198.51.100.7"}' }),
+  }
+  const { service } = makeService({ routes: [], importUndici: async () => fakeUndici })
+  const result = await service.probeNetwork({ mode: 'proxy', proxyUrl: 'http://127.0.0.1:7890' })
+  assert.equal(result.ip, '198.51.100.7')
+  assert.equal(result.mode, 'proxy')
+  assert.equal(typeof result.ms, 'number')
 })
