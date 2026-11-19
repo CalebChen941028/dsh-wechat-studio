@@ -49,16 +49,16 @@ function TopBar(props) {
       store.addDoc(importedText, parsed.design, parsed.meta)
       toast(`已导入「${parsed.meta?.title || '未命名草稿'}」`, 'success')
     } catch (error) {
-      toast(error.message || '导入失败', 'error')
+      toast(error.message || t('导入失败'), 'error')
     }
   }
 
   return h('header', { className: 'ws-top' },
     h('div', { className: 'ws-brand' },
       h(Icon, { name: 'pen', size: 17 }),
-      h('span', null, '公众号排版'),
+      h('span', null, t('公众号排版')),
       compact ? null : h('span', { className: 'ws-badge' }, design.themeName + ' · ' + design.variantName),
-      refining ? h('span', { className: 'ws-badge busy' }, 'AI 精排中…') : null,
+      refining ? h('span', { className: 'ws-badge busy' }, t('AI 精排中…')) : null,
     ),
     narrow
       ? h('div', { className: 'ws-seg' },
@@ -70,29 +70,29 @@ function TopBar(props) {
     h('div', { className: 'ws-top-spacer' }),
     !narrow
       ? h('div', { className: 'ws-top-group' },
-        h(IconButton, { icon: 'undo', title: '撤销', disabled: !store.canUndo, onClick: store.undo }),
-        h(IconButton, { icon: 'redo', title: '重做', disabled: !store.canRedo, onClick: store.redo }),
+        h(IconButton, { icon: 'undo', title: t('撤销'), disabled: !store.canUndo, onClick: store.undo }),
+        h(IconButton, { icon: 'redo', title: t('重做'), disabled: !store.canRedo, onClick: store.redo }),
       )
       : null,
     compact
-      ? h(IconButton, { icon: 'chat', title: 'AI 对话修改', onClick: () => onOpenDesign('ai') })
-      : h(Button, { icon: 'chat', onClick: () => onOpenDesign('ai'), title: '用对话让 AI 改文案或版式' }, 'AI 修改'),
-    h(Button, { icon: 'sparkles', variant: 'primary', onClick: onCompose, title: '按内容自动选择主题与版式' }, '自动编排'),
+      ? h(IconButton, { icon: 'chat', title: t('AI 对话修改'), onClick: () => onOpenDesign('ai') })
+      : h(Button, { icon: 'chat', onClick: () => onOpenDesign('ai'), title: t('用对话让 AI 改文案或版式') }, t('AI 修改')),
+    h(Button, { icon: 'sparkles', variant: 'primary', onClick: onCompose, title: t('按内容自动选择主题与版式') }, t('自动编排')),
     compact
-      ? h(IconButton, { icon: 'shuffle', title: '换一版', onClick: onReshuffle })
-      : h(Button, { icon: 'shuffle', onClick: onReshuffle, title: '在当前主题里换一个版式' }, '换一版'),
+      ? h(IconButton, { icon: 'shuffle', title: t('换一版'), onClick: onReshuffle })
+      : h(Button, { icon: 'shuffle', onClick: onReshuffle, title: t('在当前主题里换一个版式') }, t('换一版')),
     compact
-      ? h(IconButton, { icon: 'copy', title: '复制带样式的正文', onClick: onCopy })
-      : h(Button, { icon: 'copy', onClick: onCopy }, '复制 HTML'),
-    h(Button, { icon: 'send', variant: 'solid', onClick: () => onOpenDesign('publish') }, '发布'),
+      ? h(IconButton, { icon: 'copy', title: t('复制带样式的正文'), onClick: onCopy })
+      : h(Button, { icon: 'copy', onClick: onCopy }, t('复制 HTML')),
+    h(Button, { icon: 'send', variant: 'solid', onClick: () => onOpenDesign('publish') }, t('发布')),
     narrow
       ? null
-      : h(IconButton, { icon: 'panel', title: rightOpen ? '收起设计面板' : '展开设计面板', onClick: () => setRightOpen(value => !value) }),
+      : h(IconButton, { icon: 'panel', title: rightOpen ? t('收起设计面板') : t('展开设计面板'), onClick: () => setRightOpen(value => !value) }),
     h('div', { className: 'ws-menu-anchor' },
-      h(IconButton, { icon: 'palette', title: '外观与主题', onClick: () => { setAppearanceOpen(value => !value); setMenuOpen(false) } }),
+      h(IconButton, { icon: 'palette', title: t('外观与主题'), onClick: () => { setAppearanceOpen(value => !value); setMenuOpen(false) } }),
       appearanceOpen
         ? h('div', { className: 'ws-appearance' },
-          h('div', { className: 'ws-appearance-head' }, h(Icon, { name: 'palette', size: 14 }), h('span', null, '外观')),
+          h('div', { className: 'ws-appearance-head' }, h(Icon, { name: 'palette', size: 14 }), h('span', null, t('外观'))),
           h('div', { className: 'ws-skins' },
             SKINS.map(skin => h('button', {
               key: skin.id,
@@ -107,7 +107,7 @@ function TopBar(props) {
             ),
             )),
           ),
-          h('div', { className: 'ws-appearance-sub' }, '强调色'),
+          h('div', { className: 'ws-appearance-sub' }, t('强调色')),
           h('div', { className: 'ws-swatches' },
             UI_ACCENTS.map(color => h('button', {
               key: color,
@@ -122,15 +122,15 @@ function TopBar(props) {
         : null,
     ),
     h('div', { className: 'ws-menu-anchor' },
-      h(IconButton, { icon: 'more', title: '更多', onClick: () => { setMenuOpen(value => !value); setAppearanceOpen(false) } }),
+      h(IconButton, { icon: 'more', title: t('更多'), onClick: () => { setMenuOpen(value => !value); setAppearanceOpen(false) } }),
       menuOpen
         ? h('div', { className: 'ws-menu', onMouseLeave: () => setMenuOpen(false) },
-          h('button', { type: 'button', onClick: exportHtml }, h(Icon, { name: 'download', size: 14 }), '导出 HTML'),
-          h('button', { type: 'button', onClick: exportMarkdown }, h(Icon, { name: 'download', size: 14 }), '导出 Markdown'),
-          h('button', { type: 'button', onClick: exportJson }, h(Icon, { name: 'download', size: 14 }), '导出草稿 JSON'),
-          h('button', { type: 'button', onClick: () => fileRef.current?.click() }, h(Icon, { name: 'upload', size: 14 }), '导入 .md / .txt / .json'),
+          h('button', { type: 'button', onClick: exportHtml }, h(Icon, { name: 'download', size: 14 }), t('导出 HTML')),
+          h('button', { type: 'button', onClick: exportMarkdown }, h(Icon, { name: 'download', size: 14 }), t('导出 Markdown')),
+          h('button', { type: 'button', onClick: exportJson }, h(Icon, { name: 'download', size: 14 }), t('导出草稿 JSON')),
+          h('button', { type: 'button', onClick: () => fileRef.current?.click() }, h(Icon, { name: 'upload', size: 14 }), t('导入 .md / .txt / .json')),
           h('div', { className: 'ws-menu-sep' }),
-          h('button', { type: 'button', className: 'danger', onClick: () => { setMenuOpen(false); store.removeDoc(store.doc.id); toast('草稿已删除') } }, h(Icon, { name: 'trash', size: 14 }), '删除当前草稿'),
+          h('button', { type: 'button', className: 'danger', onClick: () => { setMenuOpen(false); store.removeDoc(store.doc.id); toast(t('草稿已删除')) } }, h(Icon, { name: 'trash', size: 14 }), t('删除当前草稿')),
         )
         : null,
     ),
@@ -195,7 +195,7 @@ function DocRail(props) {
     try {
       const raw = await readFileAsDataUrl(file)
       const compressed = await compressImage(raw, 720)
-      const alt = String(file.name ?? '配图').replace(/\.[^.]+$/, '') || '配图'
+      const alt = String(file.name ?? t('配图')).replace(/\.[^.]+$/, '') || t('配图')
       const ref = await materializeImage(compressed.dataUrl, { kind: 'content' })
       insertText(`\n\n![${alt}](${ref})\n\n`)
       if (typeof onImagesChanged === 'function') onImagesChanged()
@@ -225,15 +225,15 @@ function DocRail(props) {
 
   const words = features.chars
   const toolbar = [
-    { label: 'H2', title: '小节标题', run: () => insertBlock('## 小节标题') },
-    { label: 'H3', title: '小标题', run: () => insertBlock('### 小标题') },
-    { label: '“', title: '引用', run: () => insertBlock('> 写一句值得被记住的话') },
-    { label: '•', title: '无序列表', run: () => insertBlock('- 第一点\n- 第二点\n- 第三点') },
-    { label: '1.', title: '有序列表', run: () => insertBlock('1. 第一步\n2. 第二步\n3. 第三步') },
-    { label: '—', title: '分割线', run: () => insertBlock('---') },
-    { label: '图', title: '插入本地图片', run: () => imageRef.current?.click() },
-    { label: 'B', title: '加粗', run: () => insert('**', '**', '加粗文字') },
-    { label: '高', title: '高亮', run: () => insert('==', '==', '高亮文字') },
+    { label: 'H2', title: t('小节标题'), run: () => insertBlock('## 小节标题') },
+    { label: 'H3', title: t('小标题'), run: () => insertBlock('### 小标题') },
+    { label: '“', title: t('引用'), run: () => insertBlock('> 写一句值得被记住的话') },
+    { label: '•', title: t('无序列表'), run: () => insertBlock('- 第一点\n- 第二点\n- 第三点') },
+    { label: '1.', title: t('有序列表'), run: () => insertBlock('1. 第一步\n2. 第二步\n3. 第三步') },
+    { label: '—', title: t('分割线'), run: () => insertBlock('---') },
+    { label: t('图'), title: t('插入本地图片'), run: () => imageRef.current?.click() },
+    { label: 'B', title: t('加粗'), run: () => insert('**', '**', t('加粗文字')) },
+    { label: t('高'), title: t('高亮'), run: () => insert('==', '==', t('高亮文字')) },
     { label: '码', title: '行内代码', run: () => insert('`', '`', 'code') },
   ]
 
@@ -254,7 +254,7 @@ function DocRail(props) {
       h('div', { className: 'ws-doc-switch' },
         h('button', { type: 'button', className: 'ws-doc-current', onClick: () => setDocMenu(value => !value) },
           h(Icon, { name: 'doc', size: 14 }),
-          h('span', null, doc.meta.title.trim() || parsed.title || '未命名草稿'),
+          h('span', null, doc.meta.title.trim() || parsed.title || t('未命名草稿')),
           h(Icon, { name: 'chevron', size: 12 }),
         ),
         docMenu
@@ -265,17 +265,17 @@ function DocRail(props) {
               className: entry.id === doc.id ? 'on' : '',
               onClick: () => { store.selectDoc(entry.id); setDocMenu(false); setSelectedBlock(null) },
             },
-            h('span', { className: 'ws-doc-name' }, entry.meta.title.trim() || parseArticle(entry.text).title || '未命名草稿'),
+            h('span', { className: 'ws-doc-name' }, entry.meta.title.trim() || parseArticle(entry.text).title || t('未命名草稿')),
             h('span', { className: 'ws-doc-date' }, formatDate(entry.updatedAt)),
             )),
           )
           : null,
       ),
       h('div', { className: 'ws-left-actions' },
-        h(IconButton, { icon: 'chat', title: 'AI 对话修改', onClick: onOpenAi }),
-        h(IconButton, { icon: 'upload', title: '上传文档（.md / .txt / .docx / .html）', onClick: () => uploadRef.current?.click() }),
-        h(IconButton, { icon: 'plus', title: '新建草稿', onClick: () => { store.addDoc(''); setSelectedBlock(null); toast('已新建草稿') } }),
-        h(IconButton, { icon: 'trash', title: '删除当前草稿', onClick: () => { store.removeDoc(doc.id); setSelectedBlock(null); toast('草稿已删除') } }),
+        h(IconButton, { icon: 'chat', title: t('AI 对话修改'), onClick: onOpenAi }),
+        h(IconButton, { icon: 'upload', title: t('上传文档（.md / .txt / .docx / .html）'), onClick: () => uploadRef.current?.click() }),
+        h(IconButton, { icon: 'plus', title: t('新建草稿'), onClick: () => { store.addDoc(''); setSelectedBlock(null); toast(t('已新建草稿')) } }),
+        h(IconButton, { icon: 'trash', title: t('删除当前草稿'), onClick: () => { store.removeDoc(doc.id); setSelectedBlock(null); toast(t('草稿已删除')) } }),
         h('input', {
           ref: uploadRef,
           type: 'file',
@@ -471,14 +471,14 @@ function WechatPhoneChrome(props) {
       h('div', { className: 'ws-phone-scroll' },
         empty ? h('div', { className: 'ws-empty' }, '把文案粘到左侧，或上传 .md / .docx 文档，这里会实时出现公众号版式。也可以点下方「插入图片」放一张插图。') : children,
         !empty && source !== ''
-          ? h('div', { className: 'ws-read-original' }, '阅读原文', h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M9 5l7 7-7 7' })))
+          ? h('div', { className: 'ws-read-original' }, t('阅读原文'), h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M9 5l7 7-7 7' })))
           : null,
       ),
       h('div', { className: 'ws-wechat-actions' },
-        h('span', { className: 'ws-comment-pill' }, '写留言'),
-        h('span', { className: 'ws-action-icon', title: '分享' }, h(WechatActionGlyph, { kind: 'share' })),
-        h('span', { className: 'ws-action-icon', title: '在看' }, h(WechatActionGlyph, { kind: 'wow' })),
-        h('span', { className: 'ws-action-icon', title: '赞' }, h(WechatActionGlyph, { kind: 'like' })),
+        h('span', { className: 'ws-comment-pill' }, t('写留言')),
+        h('span', { className: 'ws-action-icon', title: t('分享') }, h(WechatActionGlyph, { kind: 'share' })),
+        h('span', { className: 'ws-action-icon', title: t('在看') }, h(WechatActionGlyph, { kind: 'wow' })),
+        h('span', { className: 'ws-action-icon', title: t('赞') }, h(WechatActionGlyph, { kind: 'like' })),
       ),
       h('div', { className: 'ws-home-indicator' }, h('i')),
     ),
@@ -499,7 +499,7 @@ function PreviewStage(props) {
     try {
       const raw = await readFileAsDataUrl(file)
       const compressed = await compressImage(raw, 1200)
-      const alt = String(file.name ?? '配图').replace(/\.[^.]+$/, '') || '配图'
+      const alt = String(file.name ?? t('配图')).replace(/\.[^.]+$/, '') || t('配图')
       const ref = await materializeImage(compressed.dataUrl, { kind: 'content' })
       const lines = doc.text.split('\n')
       const next = [
@@ -519,7 +519,7 @@ function PreviewStage(props) {
     try {
       const raw = await readFileAsDataUrl(file)
       const compressed = await compressImage(raw, 1200)
-      const alt = String(file.name ?? '配图').replace(/\.[^.]+$/, '') || '配图'
+      const alt = String(file.name ?? t('配图')).replace(/\.[^.]+$/, '') || t('配图')
       const ref = await materializeImage(compressed.dataUrl, { kind: 'content' })
       store.updateDoc(current => ({
         ...current,
@@ -582,7 +582,7 @@ function PreviewStage(props) {
     if (block.type === 'image') return '图片'
     if (block.type === 'code') return '代码'
     if (block.type === 'divider') return '分割线'
-    return '段落'
+    return t('段落')
   }
 
   const brand = (doc.meta.brand ?? '').trim() || '公众号'
@@ -611,7 +611,7 @@ function PreviewStage(props) {
         },
       }),
       h('div', { className: 'ws-stage-bar' },
-        h('button', { type: 'button', className: 'ws-mini-btn', onClick: () => previewImageRef.current?.click() }, '插入图片'),
+        h('button', { type: 'button', className: 'ws-mini-btn', onClick: () => previewImageRef.current?.click() }, t('插入图片')),
         h('div', { className: 'ws-device-switch' },
           h('button', { type: 'button', className: 'ws-device-btn' + (device !== 'android' ? ' on' : ''), onClick: () => setDevice('iphone') }, 'iPhone'),
           h('button', { type: 'button', className: 'ws-device-btn' + (device === 'android' ? ' on' : ''), onClick: () => setDevice('android') }, 'Android'),
@@ -619,7 +619,7 @@ function PreviewStage(props) {
         h('span', { className: 'ws-stage-chip' }, h('i', { style: { background: design.colors.accent } }), design.colors.accent),
         h('span', { className: 'ws-stage-chip' }, `正文 ${design.type.bodySize}px / 行高 ${design.type.lineHeight}`),
         h('span', { className: 'ws-stage-chip' }, `边距 ${design.layout.paddingX}px`),
-        h('span', { className: 'ws-stage-note' }, '悬停段落可上移、下移或删除'),
+        h('span', { className: 'ws-stage-note' }, t('悬停段落可上移、下移或删除')),
       ),
     ),
   )
@@ -650,9 +650,9 @@ function ArticleBody(props) {
     content,
     h('div', { className: 'ws-block-tools' },
       block.type === 'image' ? h('button', { type: 'button', title: '替换图片', onClick: event => { event.stopPropagation(); replaceImage(blockIndex) } }, h(Icon, { name: 'image', size: 12 })) : null,
-      h('button', { type: 'button', title: '上移', onClick: event => { event.stopPropagation(); moveBlock(blockIndex, -1) } }, h(Icon, { name: 'arrowUp', size: 12 })),
-      h('button', { type: 'button', title: '下移', onClick: event => { event.stopPropagation(); moveBlock(blockIndex, 1) } }, h(Icon, { name: 'arrowDown', size: 12 })),
-      h('button', { type: 'button', title: '删除这一段', onClick: event => { event.stopPropagation(); removeBlock(blockIndex) } }, h(Icon, { name: 'trash', size: 12 })),
+      h('button', { type: 'button', title: t('上移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, -1) } }, h(Icon, { name: 'arrowUp', size: 12 })),
+      h('button', { type: 'button', title: t('下移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, 1) } }, h(Icon, { name: 'arrowDown', size: 12 })),
+      h('button', { type: 'button', title: t('删除这一段'), onClick: event => { event.stopPropagation(); removeBlock(blockIndex) } }, h(Icon, { name: 'trash', size: 12 })),
     ),
     )
   }))
@@ -663,10 +663,10 @@ function ArticleBody(props) {
  * ------------------------------------------------------------------ */
 
 const TABS = [
-  { id: 'ai', label: 'AI' },
-  { id: 'theme', label: '主题' },
-  { id: 'type', label: '排版' },
-  { id: 'decor', label: '装饰' },
-  { id: 'publish', label: '发布' },
+  { id: 'ai', label: t('AI') },
+  { id: 'theme', label: t('主题') },
+  { id: 'type', label: t('排版') },
+  { id: 'decor', label: t('装饰') },
+  { id: 'publish', label: t('发布') },
 ]
 

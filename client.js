@@ -8,6 +8,341 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const h = React.createElement
 
+/* ===== src/i18n.mjs ===== */
+/**
+ * Minimal gettext-style i18n for the panel chrome.
+ *
+ * Source strings stay Chinese; `t('中文')` looks them up in the English catalog
+ * and falls back to the original text when a translation is missing. Language
+ * resolution order: explicit test override, localStorage preference, DSH locale.
+ */
+
+const UI_LANG_KEY = 'dsh.wechat-studio.uiLang'
+
+const UI_EN = {
+  '跟随应用': 'Follow app',
+  '自动适配深浅': 'Matches light / dark',
+  '浅色玻璃': 'Light glass',
+  '明亮通透': 'Bright and airy',
+  '深色玻璃': 'Dark glass',
+  '低光环境': 'Low light',
+  '暖砂': 'Warm sand',
+  '米色柔光': 'Soft beige',
+  '跟随主题': 'Theme default',
+  '纸白': 'Paper white',
+  '米色': 'Beige',
+  '冷灰': 'Cool grey',
+  '墨黑': 'Ink black',
+  '无底纹': 'No pattern',
+  '纸纹': 'Paper',
+  '网格': 'Grid',
+  '点阵': 'Dots',
+  '竖线': 'Rules',
+  '淡彩': 'Wash',
+  '不加角标': 'No mark',
+  '边角线': 'Corner',
+  '栏线': 'Column',
+  '印记': 'Seal',
+  '叶形': 'Leaf',
+  '公众号排版': 'WeChat studio',
+  '编辑': 'Edit',
+  '预览': 'Preview',
+  '设计': 'Design',
+  '撤销': 'Undo',
+  '重做': 'Redo',
+  'AI 对话修改': 'AI chat',
+  'AI 修改': 'AI edit',
+  '用对话让 AI 改文案或版式': 'Ask AI to rewrite copy or layout',
+  '按内容自动选择主题与版式': 'Pick a theme from the content',
+  '自动编排': 'Auto layout',
+  '换一版': 'Shuffle',
+  '在当前主题里换一个版式': 'Switch to another variant',
+  '复制带样式的正文': 'Copy styled HTML',
+  '复制 HTML': 'Copy HTML',
+  '发布': 'Publish',
+  '收起设计面板': 'Hide design panel',
+  '展开设计面板': 'Show design panel',
+  '外观与主题': 'Appearance',
+  '外观': 'Appearance',
+  '强调色': 'Accent',
+  '更多': 'More',
+  '导出 HTML': 'Export HTML',
+  '导出 Markdown': 'Export Markdown',
+  '导出草稿 JSON': 'Export draft JSON',
+  '导入 .md / .txt / .json': 'Import .md / .txt / .json',
+  '删除当前草稿': 'Delete this draft',
+  '草稿已删除': 'Draft deleted',
+  '未命名草稿': 'Untitled draft',
+  'AI 精排中…': 'AI refining…',
+  '插入图片': 'Insert image',
+  '悬停段落可上移、下移或删除': 'Hover a block to move or delete it',
+  '替换图片': 'Replace image',
+  '上移': 'Move up',
+  '下移': 'Move down',
+  '删除这一段': 'Delete block',
+  '主题': 'Theme',
+  '排版': 'Type',
+  '装饰': 'Design',
+  'AI': 'AI',
+  '发送': 'Send',
+  '修改中…': 'Editing…',
+  '修改中': 'Editing',
+  '走当前默认模型': 'Default model',
+  '内容分析': 'Content analysis',
+  '主题库': 'Theme library',
+  '版式变体': 'Variants',
+  '主色': 'Accent',
+  '标题字号': 'Title size',
+  '正文字号': 'Body size',
+  '正文行高': 'Line height',
+  '字间距': 'Letter spacing',
+  '段间距': 'Paragraph gap',
+  '左右留白': 'Side padding',
+  '字号与节奏': 'Type scale',
+  '阅读体验': 'Reading',
+  '恢复默认': 'Reset',
+  '形状与装饰': 'Shape & decor',
+  '背景与图形': 'Background & art',
+  '底纹': 'Texture',
+  '矢量角标': 'Vector mark',
+  '显示项': 'Display',
+  '文末签名': 'Footer',
+  '标题下方显示作者与日期': 'Show author and date',
+  '首段作为导语放大': 'Larger lead paragraph',
+  '显示文末引导': 'Show closing note',
+  '宽度': 'Width',
+  '对齐': 'Alignment',
+  '通栏': 'Full',
+  '大图': 'Large',
+  '中等': 'Medium',
+  '小图': 'Small',
+  '居中': 'Center',
+  '左对齐': 'Left',
+  '右对齐': 'Right',
+  '公众号配置': 'Account',
+  '已连接': 'Connected',
+  '未配置': 'Not configured',
+  '服务未响应': 'Host unreachable',
+  '测试连接': 'Test connection',
+  '保存': 'Save',
+  '取消': 'Cancel',
+  '清除': 'Clear',
+  '保存中…': 'Saving…',
+  '测试中…': 'Testing…',
+  '文章信息': 'Article',
+  '标题': 'Title',
+  '公众号名称': 'Account name',
+  '作者': 'Author',
+  '摘要': 'Summary',
+  '原文链接': 'Source link',
+  '发布选项': 'Publish options',
+  '允许读者评论': 'Allow comments',
+  '仅关注者可评论': 'Followers only',
+  '合集（可选）': 'Bundle (optional)',
+  '封面（2.35:1）': 'Cover (2.35:1)',
+  '按主题重绘': 'Regenerate',
+  '上传图片': 'Upload image',
+  '保存到草稿箱': 'Save draft',
+  '直接发布': 'Publish now',
+  '确认发布': 'Confirm publish',
+  '再想想': 'Cancel',
+  '公众号草稿箱': 'Draft box',
+  '读取最近 10 篇': 'Load recent 10',
+  '读取中…': 'Loading…',
+  '删除': 'Delete',
+  '确认删除': 'Confirm delete',
+  '已提交发布': 'Submitted',
+  '已进入草稿箱': 'Saved as draft',
+  '打开公众号后台': 'Open WeChat backend',
+  '插入本地图片': 'Insert local image',
+  '上传文档（.md / .txt / .docx / .html）': 'Upload document',
+  '新建草稿': 'New draft',
+  '已新建草稿': 'New draft created',
+  '阅读原文': 'Read original',
+  '写留言': 'Comment',
+  '分享': 'Share',
+  '在看': 'Wow',
+  '赞': 'Like',
+  '小节': 'Section',
+  '列表': 'List',
+  '图片': 'Image',
+  '代码': 'Code',
+  '段落': 'Paragraph',
+  '引用': 'Quote',
+
+  '插入本地图片': 'Insert local image',
+  '加粗': 'Bold',
+  '加粗文字': 'Bold text',
+  '高亮': 'Highlight',
+  '高亮文字': 'Highlighted text',
+  '行内代码': 'Inline code',
+  '上传文档（.md / .txt / .docx / .html）': 'Upload .md / .txt / .docx / .html',
+  '新建草稿': 'New draft',
+  '已新建草稿': 'New draft created',
+  '配图': 'Image',
+  '小节标题': 'Section title',
+  '小标题': 'Subhead',
+  '无序列表': 'Bullet list',
+  '有序列表': 'Numbered list',
+  '分割线': 'Divider',
+  '图': 'Image',
+  '码': 'Code',
+  '高': 'H',
+  '导入失败': 'Import failed',
+  '复制失败': 'Copy failed',
+  '已复制带样式的正文，粘到公众号编辑器即可': 'Styled HTML copied. Paste it into the WeChat editor.',
+  '已复制，样式可能不完整': 'Copied, but styling may be incomplete',
+  '图片已替换': 'Image replaced',
+  '插图已加到正文末尾': 'Image appended to the article',
+  '已删除这一段': 'Block deleted',
+  '已撤销这次修改': 'Change undone',
+  '修改失败': 'Edit failed',
+  '已修改': 'Updated',
+  '模型生成中': 'Model is writing',
+  '正在按你的要求修改…': 'Editing as requested…',
+  '按内容重新精排': 'Re-layout from content',
+  '标题更有冲击力': 'Stronger title',
+  '第二段压缩到两行': 'Trim paragraph 2 to two lines',
+  '换成杂志版式': 'Use the magazine layout',
+  '加一个小节标题': 'Add a section heading',
+  '行距调到 1.9': 'Set line height to 1.9',
+  '自定义颜色': 'Custom color',
+  '话题标签': 'Topic tag',
+  '例如：科技 / 生活 / 深度': 'e.g. Tech / Life / Essay',
+  '字号超过 17px 后，列表和图片建议同步放大': 'Above 17px, scale lists and images too',
+  '通栏细线': 'Full-width rule',
+  '色块标题': 'Block title',
+  '标签 + 标题': 'Tag + title',
+  '边框卡片': 'Bordered card',
+  '左侧竖线': 'Left rule',
+  '下划短线': 'Short underline',
+  '居中 + 短线': 'Centered + rule',
+  '眉标 + 大标题': 'Kicker + title',
+  '左侧色条': 'Left bar',
+  '色块标签': 'Block tag',
+  '章节编号': 'Section number',
+  '居中细线': 'Centered rule',
+  '圆点': 'Dot',
+  '大号数字': 'Big number',
+  '卡片': 'Card',
+  '居中引号': 'Centered quote',
+  '浅色底': 'Tinted band',
+  '描边摘录': 'Outlined excerpt',
+  '三点': 'Three dots',
+  '菱形': 'Diamond',
+  '花饰': 'Ornament',
+  '细线': 'Thin line',
+  '虚线': 'Dashed line',
+  '留白': 'Whitespace',
+  '序号': 'Number',
+  '方块': 'Square',
+  '箭头': 'Arrow',
+  '直角': 'Sharp',
+  '圆角': 'Rounded',
+  '投影': 'Shadow',
+  '细框': 'Thin frame',
+  '拍立得': 'Polaroid',
+  '通栏出血': 'Full bleed',
+  '标题样式': 'Title style',
+  '章节样式': 'Section style',
+  '引用样式': 'Quote style',
+  '列表符号': 'List marker',
+  '图片样式': 'Image style',
+  '显示项': 'Display',
+  '文末签名': 'Footer',
+  '写给读者的结束语': 'Closing note',
+  '已按新主题重绘封面': 'Cover regenerated',
+  '封面生成失败': 'Cover generation failed',
+  '已换成你上传的封面': 'Custom cover applied',
+  '封面处理失败': 'Cover upload failed',
+  '公众号密钥已保存到本机凭据库': 'Credentials saved',
+  '保存失败': 'Save failed',
+  '连接失败': 'Connection failed',
+  '已清除本机保存的公众号密钥': 'Credentials cleared',
+  '清除失败': 'Clear failed',
+  '读取草稿箱失败': 'Could not load drafts',
+  '删除失败': 'Delete failed',
+  '先填文章标题': 'Add a title first',
+  '还没有配置公众号 AppID / AppSecret': 'AppID / AppSecret are not configured',
+  '检查公众号配置': 'Check account config',
+  '提交发布': 'Submit for publishing',
+  '发布结果': 'Publish result',
+  '状态未知': 'Unknown status',
+  '已保存到公众号草稿箱': 'Saved to the WeChat draft box',
+  '发布失败': 'Publish failed',
+  '文章标题': 'Article title',
+  '公众号名称': 'Account name',
+  '预览顶栏显示；留空显示“公众号”': 'Shown in the preview bar; leave empty for “Account”',
+  '留空则用公众号主体名': 'Empty means the account name',
+  '留空自动取首段': 'Empty uses the first paragraph',
+  '可选，https://': 'Optional, https://',
+  '评论设置会写进草稿；公众号后台仍可再改。': 'Comment settings are saved in the draft and can be changed in WeChat later.',
+  '当前是自定义封面': 'Custom cover',
+  '自动按主题生成': 'Auto from theme',
+  '封面预览': 'Cover preview',
+  '封面生成中…': 'Generating cover…',
+  '处理中…': 'Working…',
+  '直接发布会占用当天发布次数，确认？': 'Publishing now uses today’s publish quota. Continue?',
+  '草稿箱是空的。': 'The draft box is empty.',
+  '（无标题）': '(Untitled)',
+  '时间未知': 'Unknown time',
+  '删除会直接移除公众号后台的草稿，不影响已发布的文章。': 'This removes the draft in WeChat; published articles are unaffected.',
+  '先在上方填写 AppID 和 AppSecret。': 'Fill in AppID and AppSecret above first.',
+  '更新密钥': 'Update credentials',
+  '填写密钥': 'Add credentials',
+  '保存中…': 'Saving…',
+}
+
+let forcedLanguage = ''
+
+/** Let tests force a language without touching localStorage. */
+function setUiLanguage(language) {
+  forcedLanguage = language === 'en' || language === 'zh' ? language : ''
+}
+
+let localeProvider = null
+
+/** Bind a function that returns the active DSH locale id. */
+function bindUiLocale(provider) {
+  localeProvider = typeof provider === 'function' ? provider : null
+}
+
+/** Resolve the active UI language. */
+function uiLanguage() {
+  if (forcedLanguage !== '') return forcedLanguage
+  try {
+    const saved = typeof localStorage === 'undefined' ? '' : localStorage.getItem(UI_LANG_KEY)
+    if (saved === 'en' || saved === 'zh') return saved
+  } catch {
+    // Private mode.
+  }
+  try {
+    const active = localeProvider === null ? '' : localeProvider()
+    if (active !== undefined && active !== null && active !== '') return /^en/i.test(String(active)) ? 'en' : 'zh'
+  } catch {
+    // Fall through to the document language.
+  }
+  try {
+    const documentLang = typeof document === 'undefined' ? '' : (document.documentElement?.lang ?? '')
+    return /^en/i.test(documentLang) ? 'en' : 'zh'
+  } catch {
+    return 'zh'
+  }
+}
+
+/**
+ * Translate one UI string. Unknown strings fall back to the Chinese source.
+ * @param {string} text Chinese source string.
+ * @param {Record<string, string|number>} [params] optional `{name}` replacements.
+ * @returns {string} localized text.
+ */
+function t(text, params) {
+  if (uiLanguage() !== 'en') return text
+  const template = UI_EN[text] ?? text
+  if (params === undefined || params === null) return template
+  return String(template).replace(/\{(\w+)\}/g, (match, key) => (key in params ? String(params[key]) : match))
+}
+
 /* ===== src/themes.mjs ===== */
 /**
  * Theme library for the WeChat article studio.
@@ -2557,15 +2892,15 @@ const APPEARANCE_KEY = 'dsh.wechat-studio.appearance.v1'
 const LONG_TEXT_CHUNK_THRESHOLD = 7000
 const DEVICE_KEY = 'dsh.wechat-studio.device.v1'
 const SKINS = [
-  { id: 'auto', name: '跟随应用', hint: '自动适配深浅' },
-  { id: 'light', name: '浅色玻璃', hint: '明亮通透' },
-  { id: 'dark', name: '深色玻璃', hint: '低光环境' },
-  { id: 'sand', name: '暖砂', hint: '米色柔光' },
+  { id: 'auto', name: t('跟随应用'), hint: t('自动适配深浅') },
+  { id: 'light', name: t('浅色玻璃'), hint: t('明亮通透') },
+  { id: 'dark', name: t('深色玻璃'), hint: t('低光环境') },
+  { id: 'sand', name: t('暖砂'), hint: t('米色柔光') },
 ]
 const UI_ACCENTS = ['#0A84FF', '#3A3A3C', '#0E7C86', '#A2653B', '#B23A3A', '#6E6E73']
-const BG_CHOICES = [['', '跟随主题'], ['#FFFFFF', '纸白'], ['#F7F4EE', '米色'], ['#F3F4F6', '冷灰'], ['#161616', '墨黑']]
-const BG_PATTERNS = [['none', '无底纹'], ['paper', '纸纹'], ['grid', '网格'], ['dots', '点阵'], ['lines', '竖线'], ['wash', '淡彩']]
-const ORNAMENTS = [['none', '不加角标'], ['corner', '边角线'], ['column', '栏线'], ['seal', '印记'], ['leaf', '叶形']]
+const BG_CHOICES = [['', t('跟随主题')], ['#FFFFFF', t('纸白')], ['#F7F4EE', t('米色')], ['#F3F4F6', t('冷灰')], ['#161616', t('墨黑')]]
+const BG_PATTERNS = [['none', t('无底纹')], ['paper', t('纸纹')], ['grid', t('网格')], ['dots', t('点阵')], ['lines', t('竖线')], ['wash', t('淡彩')]]
+const ORNAMENTS = [['none', t('不加角标')], ['corner', t('边角线')], ['column', t('栏线')], ['seal', t('印记')], ['leaf', t('叶形')]]
 
 /** Parse a CSS color and report whether it is dark. */
 function cssColorIsDark(value) {
@@ -3033,7 +3368,7 @@ function StudioPanel(props) {
       const mode = await copyRichHtml(html)
       toast(mode === 'rich' ? '已复制带样式的正文，粘到公众号编辑器即可' : '已复制，样式可能不完整', 'success')
     } catch (error) {
-      toast(error.message || '复制失败', 'error')
+      toast(error.message || t('复制失败'), 'error')
     }
   }
 
@@ -3141,7 +3476,7 @@ function StudioPanel(props) {
         refineTimerRef.current = setTimeout(() => { refineWithAi() }, 900)
       }
     } catch (error) {
-      toast(error.message || '导入失败', 'error')
+      toast(error.message || t('导入失败'), 'error')
     }
   }, [store, autoRefine, narrow, refineWithAi, toast, bumpImages])
 
@@ -3261,16 +3596,16 @@ function TopBar(props) {
       store.addDoc(importedText, parsed.design, parsed.meta)
       toast(`已导入「${parsed.meta?.title || '未命名草稿'}」`, 'success')
     } catch (error) {
-      toast(error.message || '导入失败', 'error')
+      toast(error.message || t('导入失败'), 'error')
     }
   }
 
   return h('header', { className: 'ws-top' },
     h('div', { className: 'ws-brand' },
       h(Icon, { name: 'pen', size: 17 }),
-      h('span', null, '公众号排版'),
+      h('span', null, t('公众号排版')),
       compact ? null : h('span', { className: 'ws-badge' }, design.themeName + ' · ' + design.variantName),
-      refining ? h('span', { className: 'ws-badge busy' }, 'AI 精排中…') : null,
+      refining ? h('span', { className: 'ws-badge busy' }, t('AI 精排中…')) : null,
     ),
     narrow
       ? h('div', { className: 'ws-seg' },
@@ -3282,29 +3617,29 @@ function TopBar(props) {
     h('div', { className: 'ws-top-spacer' }),
     !narrow
       ? h('div', { className: 'ws-top-group' },
-        h(IconButton, { icon: 'undo', title: '撤销', disabled: !store.canUndo, onClick: store.undo }),
-        h(IconButton, { icon: 'redo', title: '重做', disabled: !store.canRedo, onClick: store.redo }),
+        h(IconButton, { icon: 'undo', title: t('撤销'), disabled: !store.canUndo, onClick: store.undo }),
+        h(IconButton, { icon: 'redo', title: t('重做'), disabled: !store.canRedo, onClick: store.redo }),
       )
       : null,
     compact
-      ? h(IconButton, { icon: 'chat', title: 'AI 对话修改', onClick: () => onOpenDesign('ai') })
-      : h(Button, { icon: 'chat', onClick: () => onOpenDesign('ai'), title: '用对话让 AI 改文案或版式' }, 'AI 修改'),
-    h(Button, { icon: 'sparkles', variant: 'primary', onClick: onCompose, title: '按内容自动选择主题与版式' }, '自动编排'),
+      ? h(IconButton, { icon: 'chat', title: t('AI 对话修改'), onClick: () => onOpenDesign('ai') })
+      : h(Button, { icon: 'chat', onClick: () => onOpenDesign('ai'), title: t('用对话让 AI 改文案或版式') }, t('AI 修改')),
+    h(Button, { icon: 'sparkles', variant: 'primary', onClick: onCompose, title: t('按内容自动选择主题与版式') }, t('自动编排')),
     compact
-      ? h(IconButton, { icon: 'shuffle', title: '换一版', onClick: onReshuffle })
-      : h(Button, { icon: 'shuffle', onClick: onReshuffle, title: '在当前主题里换一个版式' }, '换一版'),
+      ? h(IconButton, { icon: 'shuffle', title: t('换一版'), onClick: onReshuffle })
+      : h(Button, { icon: 'shuffle', onClick: onReshuffle, title: t('在当前主题里换一个版式') }, t('换一版')),
     compact
-      ? h(IconButton, { icon: 'copy', title: '复制带样式的正文', onClick: onCopy })
-      : h(Button, { icon: 'copy', onClick: onCopy }, '复制 HTML'),
-    h(Button, { icon: 'send', variant: 'solid', onClick: () => onOpenDesign('publish') }, '发布'),
+      ? h(IconButton, { icon: 'copy', title: t('复制带样式的正文'), onClick: onCopy })
+      : h(Button, { icon: 'copy', onClick: onCopy }, t('复制 HTML')),
+    h(Button, { icon: 'send', variant: 'solid', onClick: () => onOpenDesign('publish') }, t('发布')),
     narrow
       ? null
-      : h(IconButton, { icon: 'panel', title: rightOpen ? '收起设计面板' : '展开设计面板', onClick: () => setRightOpen(value => !value) }),
+      : h(IconButton, { icon: 'panel', title: rightOpen ? t('收起设计面板') : t('展开设计面板'), onClick: () => setRightOpen(value => !value) }),
     h('div', { className: 'ws-menu-anchor' },
-      h(IconButton, { icon: 'palette', title: '外观与主题', onClick: () => { setAppearanceOpen(value => !value); setMenuOpen(false) } }),
+      h(IconButton, { icon: 'palette', title: t('外观与主题'), onClick: () => { setAppearanceOpen(value => !value); setMenuOpen(false) } }),
       appearanceOpen
         ? h('div', { className: 'ws-appearance' },
-          h('div', { className: 'ws-appearance-head' }, h(Icon, { name: 'palette', size: 14 }), h('span', null, '外观')),
+          h('div', { className: 'ws-appearance-head' }, h(Icon, { name: 'palette', size: 14 }), h('span', null, t('外观'))),
           h('div', { className: 'ws-skins' },
             SKINS.map(skin => h('button', {
               key: skin.id,
@@ -3319,7 +3654,7 @@ function TopBar(props) {
             ),
             )),
           ),
-          h('div', { className: 'ws-appearance-sub' }, '强调色'),
+          h('div', { className: 'ws-appearance-sub' }, t('强调色')),
           h('div', { className: 'ws-swatches' },
             UI_ACCENTS.map(color => h('button', {
               key: color,
@@ -3334,15 +3669,15 @@ function TopBar(props) {
         : null,
     ),
     h('div', { className: 'ws-menu-anchor' },
-      h(IconButton, { icon: 'more', title: '更多', onClick: () => { setMenuOpen(value => !value); setAppearanceOpen(false) } }),
+      h(IconButton, { icon: 'more', title: t('更多'), onClick: () => { setMenuOpen(value => !value); setAppearanceOpen(false) } }),
       menuOpen
         ? h('div', { className: 'ws-menu', onMouseLeave: () => setMenuOpen(false) },
-          h('button', { type: 'button', onClick: exportHtml }, h(Icon, { name: 'download', size: 14 }), '导出 HTML'),
-          h('button', { type: 'button', onClick: exportMarkdown }, h(Icon, { name: 'download', size: 14 }), '导出 Markdown'),
-          h('button', { type: 'button', onClick: exportJson }, h(Icon, { name: 'download', size: 14 }), '导出草稿 JSON'),
-          h('button', { type: 'button', onClick: () => fileRef.current?.click() }, h(Icon, { name: 'upload', size: 14 }), '导入 .md / .txt / .json'),
+          h('button', { type: 'button', onClick: exportHtml }, h(Icon, { name: 'download', size: 14 }), t('导出 HTML')),
+          h('button', { type: 'button', onClick: exportMarkdown }, h(Icon, { name: 'download', size: 14 }), t('导出 Markdown')),
+          h('button', { type: 'button', onClick: exportJson }, h(Icon, { name: 'download', size: 14 }), t('导出草稿 JSON')),
+          h('button', { type: 'button', onClick: () => fileRef.current?.click() }, h(Icon, { name: 'upload', size: 14 }), t('导入 .md / .txt / .json')),
           h('div', { className: 'ws-menu-sep' }),
-          h('button', { type: 'button', className: 'danger', onClick: () => { setMenuOpen(false); store.removeDoc(store.doc.id); toast('草稿已删除') } }, h(Icon, { name: 'trash', size: 14 }), '删除当前草稿'),
+          h('button', { type: 'button', className: 'danger', onClick: () => { setMenuOpen(false); store.removeDoc(store.doc.id); toast(t('草稿已删除')) } }, h(Icon, { name: 'trash', size: 14 }), t('删除当前草稿')),
         )
         : null,
     ),
@@ -3407,7 +3742,7 @@ function DocRail(props) {
     try {
       const raw = await readFileAsDataUrl(file)
       const compressed = await compressImage(raw, 720)
-      const alt = String(file.name ?? '配图').replace(/\.[^.]+$/, '') || '配图'
+      const alt = String(file.name ?? t('配图')).replace(/\.[^.]+$/, '') || t('配图')
       const ref = await materializeImage(compressed.dataUrl, { kind: 'content' })
       insertText(`\n\n![${alt}](${ref})\n\n`)
       if (typeof onImagesChanged === 'function') onImagesChanged()
@@ -3437,15 +3772,15 @@ function DocRail(props) {
 
   const words = features.chars
   const toolbar = [
-    { label: 'H2', title: '小节标题', run: () => insertBlock('## 小节标题') },
-    { label: 'H3', title: '小标题', run: () => insertBlock('### 小标题') },
-    { label: '“', title: '引用', run: () => insertBlock('> 写一句值得被记住的话') },
-    { label: '•', title: '无序列表', run: () => insertBlock('- 第一点\n- 第二点\n- 第三点') },
-    { label: '1.', title: '有序列表', run: () => insertBlock('1. 第一步\n2. 第二步\n3. 第三步') },
-    { label: '—', title: '分割线', run: () => insertBlock('---') },
-    { label: '图', title: '插入本地图片', run: () => imageRef.current?.click() },
-    { label: 'B', title: '加粗', run: () => insert('**', '**', '加粗文字') },
-    { label: '高', title: '高亮', run: () => insert('==', '==', '高亮文字') },
+    { label: 'H2', title: t('小节标题'), run: () => insertBlock('## 小节标题') },
+    { label: 'H3', title: t('小标题'), run: () => insertBlock('### 小标题') },
+    { label: '“', title: t('引用'), run: () => insertBlock('> 写一句值得被记住的话') },
+    { label: '•', title: t('无序列表'), run: () => insertBlock('- 第一点\n- 第二点\n- 第三点') },
+    { label: '1.', title: t('有序列表'), run: () => insertBlock('1. 第一步\n2. 第二步\n3. 第三步') },
+    { label: '—', title: t('分割线'), run: () => insertBlock('---') },
+    { label: t('图'), title: t('插入本地图片'), run: () => imageRef.current?.click() },
+    { label: 'B', title: t('加粗'), run: () => insert('**', '**', t('加粗文字')) },
+    { label: t('高'), title: t('高亮'), run: () => insert('==', '==', t('高亮文字')) },
     { label: '码', title: '行内代码', run: () => insert('`', '`', 'code') },
   ]
 
@@ -3466,7 +3801,7 @@ function DocRail(props) {
       h('div', { className: 'ws-doc-switch' },
         h('button', { type: 'button', className: 'ws-doc-current', onClick: () => setDocMenu(value => !value) },
           h(Icon, { name: 'doc', size: 14 }),
-          h('span', null, doc.meta.title.trim() || parsed.title || '未命名草稿'),
+          h('span', null, doc.meta.title.trim() || parsed.title || t('未命名草稿')),
           h(Icon, { name: 'chevron', size: 12 }),
         ),
         docMenu
@@ -3477,17 +3812,17 @@ function DocRail(props) {
               className: entry.id === doc.id ? 'on' : '',
               onClick: () => { store.selectDoc(entry.id); setDocMenu(false); setSelectedBlock(null) },
             },
-            h('span', { className: 'ws-doc-name' }, entry.meta.title.trim() || parseArticle(entry.text).title || '未命名草稿'),
+            h('span', { className: 'ws-doc-name' }, entry.meta.title.trim() || parseArticle(entry.text).title || t('未命名草稿')),
             h('span', { className: 'ws-doc-date' }, formatDate(entry.updatedAt)),
             )),
           )
           : null,
       ),
       h('div', { className: 'ws-left-actions' },
-        h(IconButton, { icon: 'chat', title: 'AI 对话修改', onClick: onOpenAi }),
-        h(IconButton, { icon: 'upload', title: '上传文档（.md / .txt / .docx / .html）', onClick: () => uploadRef.current?.click() }),
-        h(IconButton, { icon: 'plus', title: '新建草稿', onClick: () => { store.addDoc(''); setSelectedBlock(null); toast('已新建草稿') } }),
-        h(IconButton, { icon: 'trash', title: '删除当前草稿', onClick: () => { store.removeDoc(doc.id); setSelectedBlock(null); toast('草稿已删除') } }),
+        h(IconButton, { icon: 'chat', title: t('AI 对话修改'), onClick: onOpenAi }),
+        h(IconButton, { icon: 'upload', title: t('上传文档（.md / .txt / .docx / .html）'), onClick: () => uploadRef.current?.click() }),
+        h(IconButton, { icon: 'plus', title: t('新建草稿'), onClick: () => { store.addDoc(''); setSelectedBlock(null); toast(t('已新建草稿')) } }),
+        h(IconButton, { icon: 'trash', title: t('删除当前草稿'), onClick: () => { store.removeDoc(doc.id); setSelectedBlock(null); toast(t('草稿已删除')) } }),
         h('input', {
           ref: uploadRef,
           type: 'file',
@@ -3683,14 +4018,14 @@ function WechatPhoneChrome(props) {
       h('div', { className: 'ws-phone-scroll' },
         empty ? h('div', { className: 'ws-empty' }, '把文案粘到左侧，或上传 .md / .docx 文档，这里会实时出现公众号版式。也可以点下方「插入图片」放一张插图。') : children,
         !empty && source !== ''
-          ? h('div', { className: 'ws-read-original' }, '阅读原文', h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M9 5l7 7-7 7' })))
+          ? h('div', { className: 'ws-read-original' }, t('阅读原文'), h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M9 5l7 7-7 7' })))
           : null,
       ),
       h('div', { className: 'ws-wechat-actions' },
-        h('span', { className: 'ws-comment-pill' }, '写留言'),
-        h('span', { className: 'ws-action-icon', title: '分享' }, h(WechatActionGlyph, { kind: 'share' })),
-        h('span', { className: 'ws-action-icon', title: '在看' }, h(WechatActionGlyph, { kind: 'wow' })),
-        h('span', { className: 'ws-action-icon', title: '赞' }, h(WechatActionGlyph, { kind: 'like' })),
+        h('span', { className: 'ws-comment-pill' }, t('写留言')),
+        h('span', { className: 'ws-action-icon', title: t('分享') }, h(WechatActionGlyph, { kind: 'share' })),
+        h('span', { className: 'ws-action-icon', title: t('在看') }, h(WechatActionGlyph, { kind: 'wow' })),
+        h('span', { className: 'ws-action-icon', title: t('赞') }, h(WechatActionGlyph, { kind: 'like' })),
       ),
       h('div', { className: 'ws-home-indicator' }, h('i')),
     ),
@@ -3711,7 +4046,7 @@ function PreviewStage(props) {
     try {
       const raw = await readFileAsDataUrl(file)
       const compressed = await compressImage(raw, 1200)
-      const alt = String(file.name ?? '配图').replace(/\.[^.]+$/, '') || '配图'
+      const alt = String(file.name ?? t('配图')).replace(/\.[^.]+$/, '') || t('配图')
       const ref = await materializeImage(compressed.dataUrl, { kind: 'content' })
       const lines = doc.text.split('\n')
       const next = [
@@ -3731,7 +4066,7 @@ function PreviewStage(props) {
     try {
       const raw = await readFileAsDataUrl(file)
       const compressed = await compressImage(raw, 1200)
-      const alt = String(file.name ?? '配图').replace(/\.[^.]+$/, '') || '配图'
+      const alt = String(file.name ?? t('配图')).replace(/\.[^.]+$/, '') || t('配图')
       const ref = await materializeImage(compressed.dataUrl, { kind: 'content' })
       store.updateDoc(current => ({
         ...current,
@@ -3794,7 +4129,7 @@ function PreviewStage(props) {
     if (block.type === 'image') return '图片'
     if (block.type === 'code') return '代码'
     if (block.type === 'divider') return '分割线'
-    return '段落'
+    return t('段落')
   }
 
   const brand = (doc.meta.brand ?? '').trim() || '公众号'
@@ -3823,7 +4158,7 @@ function PreviewStage(props) {
         },
       }),
       h('div', { className: 'ws-stage-bar' },
-        h('button', { type: 'button', className: 'ws-mini-btn', onClick: () => previewImageRef.current?.click() }, '插入图片'),
+        h('button', { type: 'button', className: 'ws-mini-btn', onClick: () => previewImageRef.current?.click() }, t('插入图片')),
         h('div', { className: 'ws-device-switch' },
           h('button', { type: 'button', className: 'ws-device-btn' + (device !== 'android' ? ' on' : ''), onClick: () => setDevice('iphone') }, 'iPhone'),
           h('button', { type: 'button', className: 'ws-device-btn' + (device === 'android' ? ' on' : ''), onClick: () => setDevice('android') }, 'Android'),
@@ -3831,7 +4166,7 @@ function PreviewStage(props) {
         h('span', { className: 'ws-stage-chip' }, h('i', { style: { background: design.colors.accent } }), design.colors.accent),
         h('span', { className: 'ws-stage-chip' }, `正文 ${design.type.bodySize}px / 行高 ${design.type.lineHeight}`),
         h('span', { className: 'ws-stage-chip' }, `边距 ${design.layout.paddingX}px`),
-        h('span', { className: 'ws-stage-note' }, '悬停段落可上移、下移或删除'),
+        h('span', { className: 'ws-stage-note' }, t('悬停段落可上移、下移或删除')),
       ),
     ),
   )
@@ -3862,9 +4197,9 @@ function ArticleBody(props) {
     content,
     h('div', { className: 'ws-block-tools' },
       block.type === 'image' ? h('button', { type: 'button', title: '替换图片', onClick: event => { event.stopPropagation(); replaceImage(blockIndex) } }, h(Icon, { name: 'image', size: 12 })) : null,
-      h('button', { type: 'button', title: '上移', onClick: event => { event.stopPropagation(); moveBlock(blockIndex, -1) } }, h(Icon, { name: 'arrowUp', size: 12 })),
-      h('button', { type: 'button', title: '下移', onClick: event => { event.stopPropagation(); moveBlock(blockIndex, 1) } }, h(Icon, { name: 'arrowDown', size: 12 })),
-      h('button', { type: 'button', title: '删除这一段', onClick: event => { event.stopPropagation(); removeBlock(blockIndex) } }, h(Icon, { name: 'trash', size: 12 })),
+      h('button', { type: 'button', title: t('上移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, -1) } }, h(Icon, { name: 'arrowUp', size: 12 })),
+      h('button', { type: 'button', title: t('下移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, 1) } }, h(Icon, { name: 'arrowDown', size: 12 })),
+      h('button', { type: 'button', title: t('删除这一段'), onClick: event => { event.stopPropagation(); removeBlock(blockIndex) } }, h(Icon, { name: 'trash', size: 12 })),
     ),
     )
   }))
@@ -3875,11 +4210,11 @@ function ArticleBody(props) {
  * ------------------------------------------------------------------ */
 
 const TABS = [
-  { id: 'ai', label: 'AI' },
-  { id: 'theme', label: '主题' },
-  { id: 'type', label: '排版' },
-  { id: 'decor', label: '装饰' },
-  { id: 'publish', label: '发布' },
+  { id: 'ai', label: t('AI') },
+  { id: 'theme', label: t('主题') },
+  { id: 'type', label: t('排版') },
+  { id: 'decor', label: t('装饰') },
+  { id: 'publish', label: t('发布') },
 ]
 
 /* ===== src/ui-design.mjs ===== */
@@ -3893,7 +4228,7 @@ function DesignPanel(props) {
         className: 'ws-tab' + (tab === entry.id ? ' on' : ''),
         onClick: () => setTab(entry.id),
       }, entry.label)),
-      showClose ? h('button', { type: 'button', className: 'ws-tab-close', title: '收起设计面板', onClick: onClose }, h(Icon, { name: 'close', size: 14 })) : null,
+      showClose ? h('button', { type: 'button', className: 'ws-tab-close', title: t('收起设计面板'), onClick: onClose }, h(Icon, { name: 'close', size: 14 })) : null,
     ),
     h('div', { className: 'ws-panel' },
       h('div', { className: 'ws-pane' + (tab === 'ai' ? '' : ' ws-pane-hidden') },
@@ -3966,7 +4301,7 @@ function AiSection(props) {
         }
         value = { reply: `分段改写完成（${chunks.length} 段），版式未改。`, text: rewritten.join('\n\n') }
       } else {
-        setPhase('模型生成中')
+        setPhase(t('模型生成中'))
         value = await callHostStream('aiEditStream', {
           instruction,
           text: doc.text,
@@ -4014,7 +4349,7 @@ function AiSection(props) {
       if (typedMeanwhile) applied.push('正文有改动，未覆盖')
       setMessages(list => [...list, {
         role: 'assistant',
-        content: value.reply || '已修改',
+        content: value.reply || t('已修改'),
         applied,
         canUndo: applied.length > 0,
         model: value.model?.model ?? '',
@@ -4022,7 +4357,7 @@ function AiSection(props) {
       }])
       if (applied.length > 0) toast(`AI 已修改：${applied.join('、')}`, 'success')
     } catch (error) {
-      setMessages(list => [...list, { role: 'error', content: error.message || '修改失败', code: error.code }])
+      setMessages(list => [...list, { role: 'error', content: error.message || t('修改失败'), code: error.code }])
     } finally {
       setBusy(false)
       setPhase('')
@@ -4030,13 +4365,13 @@ function AiSection(props) {
     }
   }
 
-  const suggestions = ['按内容重新精排', '标题更有冲击力', '第二段压缩到两行', '换成杂志版式', '加一个小节标题', '行距调到 1.9']
+  const suggestions = [t('按内容重新精排'), t('标题更有冲击力'), t('第二段压缩到两行'), t('换成杂志版式'), t('加一个小节标题'), t('行距调到 1.9')]
 
   return h('div', { className: 'ws-chat' },
     h('div', { className: 'ws-card-head' },
       h(Icon, { name: 'chat', size: 14 }),
-      h('span', null, 'AI 对话修改'),
-      h('span', { className: 'ws-badge' }, busy ? '修改中' : '走当前默认模型'),
+      h('span', null, t('AI 对话修改')),
+      h('span', { className: 'ws-badge' }, busy ? t('修改中') : t('走当前默认模型')),
     ),
     messages.length === 0
       ? h('div', { className: 'ws-chat-empty' },
@@ -4063,7 +4398,7 @@ function AiSection(props) {
                 type: 'button',
                 className: 'ws-link',
                 onClick: () => { store.undo(); toast('已撤销这次修改') },
-              }, '撤销'),
+              }, t('撤销')),
             )
             : null,
           message.model ? h('div', { className: 'ws-msg-model' }, message.model) : null,
@@ -4142,7 +4477,7 @@ function ThemeSection(props) {
     h('div', { className: 'ws-card ws-analyze' },
       h('div', { className: 'ws-card-head' },
         h(Icon, { name: 'sparkles', size: 14 }),
-        h('span', null, '内容分析'),
+        h('span', null, t('内容分析')),
         h('span', { className: 'ws-badge' }, analysis.label),
       ),
       h('ul', { className: 'ws-reasons' },
@@ -4152,7 +4487,7 @@ function ThemeSection(props) {
       h('p', { className: 'ws-hint' }, '这份分析只看标题、结构、关键词与篇幅，不联网，也不改动你的正文。'),
     ),
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, '自动编排')),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('自动编排'))),
       h('p', { className: 'ws-hint' }, '粘贴或上传文档后，先本地按内容套一版（不联网、立即出效果），随后可让 AI 再精排一次。'),
       h(Toggle, { label: '粘贴 / 上传后让 AI 精排', checked: autoRefine, onChange: setAutoRefine }),
       h(Button, { onClick: onRefineNow, disabled: refining }, refining ? 'AI 正在精排…' : '现在就 AI 精排'),
@@ -4180,7 +4515,7 @@ function ThemeSection(props) {
       ),
     ),
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, '版式变体')),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('版式变体'))),
       h('div', { className: 'ws-chips' },
         activeTheme.variants.map(variant => h('button', {
           key: variant.id,
@@ -4192,7 +4527,7 @@ function ThemeSection(props) {
       h('p', { className: 'ws-hint' }, activeTheme.tagline),
     ),
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, '主色')),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('主色'))),
       h('div', { className: 'ws-swatches' },
         ACCENT_SWATCHES.map(color => h('button', {
           key: color,
@@ -4202,18 +4537,18 @@ function ThemeSection(props) {
           title: color,
           onClick: () => setAccent(color),
         })),
-        h('label', { className: 'ws-swatch ws-swatch-custom', title: '自定义颜色' },
+        h('label', { className: 'ws-swatch ws-swatch-custom', title: t('自定义颜色') },
           h('input', { type: 'color', value: design.colors.accent, onChange: event => setAccent(event.target.value) }),
           h(Icon, { name: 'plus', size: 12 }),
         ),
       ),
     ),
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, '话题标签')),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('话题标签'))),
       h('input', {
         className: 'ws-input',
         value: doc.design?.overrides?.eyebrow ?? '',
-        placeholder: '例如：科技 / 生活 / 深度',
+        placeholder: t('例如：科技 / 生活 / 深度'),
         onChange: event => store.updateDesign(current => ({
           ...current,
           overrides: { ...(current.overrides ?? {}), eyebrow: event.target.value },
@@ -4233,12 +4568,12 @@ function TypeSection(props) {
   const { store, design, toast } = props
   const set = (patch) => store.updateDesign(current => ({ ...current, overrides: { ...(current.overrides ?? {}), ...patch } }))
   const rows = [
-    { key: 'titleSize', label: '标题字号', value: design.type.titleSize, min: 20, max: 40, step: 1, unit: 'px' },
-    { key: 'bodySize', label: '正文字号', value: design.type.bodySize, min: 13, max: 20, step: 0.5, unit: 'px' },
-    { key: 'lineHeight', label: '正文行高', value: design.type.lineHeight, min: 1.5, max: 2.4, step: 0.05, unit: '' },
-    { key: 'letterSpacing', label: '字间距', value: design.type.letterSpacing, min: 0, max: 0.06, step: 0.005, unit: 'em' },
-    { key: 'paraGap', label: '段间距', value: design.type.paraGap, min: 10, max: 40, step: 1, unit: 'px' },
-    { key: 'paddingX', label: '左右留白', value: design.layout.paddingX, min: 8, max: 28, step: 1, unit: 'px' },
+    { key: 'titleSize', label: t('标题字号'), value: design.type.titleSize, min: 20, max: 40, step: 1, unit: 'px' },
+    { key: 'bodySize', label: t('正文字号'), value: design.type.bodySize, min: 13, max: 20, step: 0.5, unit: 'px' },
+    { key: 'lineHeight', label: t('正文行高'), value: design.type.lineHeight, min: 1.5, max: 2.4, step: 0.05, unit: '' },
+    { key: 'letterSpacing', label: t('字间距'), value: design.type.letterSpacing, min: 0, max: 0.06, step: 0.005, unit: 'em' },
+    { key: 'paraGap', label: t('段间距'), value: design.type.paraGap, min: 10, max: 40, step: 1, unit: 'px' },
+    { key: 'paddingX', label: t('左右留白'), value: design.layout.paddingX, min: 8, max: 28, step: 1, unit: 'px' },
   ]
   const reset = () => {
     store.updateDesign(current => ({ themeId: current.themeId, variantId: current.variantId, overrides: {} }))
@@ -4246,7 +4581,7 @@ function TypeSection(props) {
   }
   return h('div', { className: 'ws-sections' },
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, '字号与节奏'), h('button', { type: 'button', className: 'ws-link', onClick: reset }, '恢复默认')),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('字号与节奏')), h('button', { type: 'button', className: 'ws-link', onClick: reset }, t('恢复默认'))),
       rows.map(row => h('div', { key: row.key, className: 'ws-slider-row' },
         h('span', { className: 'ws-slider-label' }, row.label),
         h('input', {
@@ -4262,11 +4597,11 @@ function TypeSection(props) {
       )),
     ),
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, '阅读体验')),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('阅读体验'))),
       h('ul', { className: 'ws-checklist' },
         h('li', null, `正文 ${design.type.bodySize}px，在手机上大约每行 ${Math.round(300 / design.type.bodySize)} 个字`),
         h('li', null, `行高 ${design.type.lineHeight}，段间距 ${design.type.paraGap}px`),
-        h('li', null, '字号超过 17px 后，列表和图片建议同步放大'),
+        h('li', null, t('字号超过 17px 后，列表和图片建议同步放大')),
       ),
     ),
   )
@@ -4274,23 +4609,23 @@ function TypeSection(props) {
 
 const DECOR_OPTIONS = {
   titleStyle: [
-    ['rule', '通栏细线'], ['ribbon', '色块标题'], ['tag', '标签 + 标题'], ['boxed', '边框卡片'],
-    ['vertical', '左侧竖线'], ['underline', '下划短线'], ['centered', '居中 + 短线'], ['eyebrow', '眉标 + 大标题'],
+    ['rule', t('通栏细线')], ['ribbon', t('色块标题')], ['tag', t('标签 + 标题')], ['boxed', t('边框卡片')],
+    ['vertical', t('左侧竖线')], ['underline', t('下划短线')], ['centered', t('居中 + 短线')], ['eyebrow', t('眉标 + 大标题')],
   ],
   sectionStyle: [
-    ['bar', '左侧色条'], ['tag', '色块标签'], ['numbered', '章节编号'], ['line', '居中细线'], ['dot', '圆点'], ['ghost', '大号数字'],
+    ['bar', t('左侧色条')], ['tag', t('色块标签')], ['numbered', t('章节编号')], ['line', t('居中细线')], ['dot', t('圆点')], ['ghost', t('大号数字')],
   ],
   quoteStyle: [
-    ['bar', '左侧竖线'], ['card', '卡片'], ['center', '居中引号'], ['tint', '浅色底'], ['stamp', '描边摘录'],
+    ['bar', t('左侧竖线')], ['card', t('卡片')], ['center', t('居中引号')], ['tint', t('浅色底')], ['stamp', t('描边摘录')],
   ],
   dividerStyle: [
-    ['dots', '三点'], ['diamond', '菱形'], ['ornament', '花饰'], ['line', '细线'], ['dash', '虚线'], ['none', '留白'],
+    ['dots', t('三点')], ['diamond', t('菱形')], ['ornament', t('花饰')], ['line', t('细线')], ['dash', t('虚线')], ['none', t('留白')],
   ],
   listStyle: [
-    ['dot', '圆点'], ['num', '序号'], ['square', '方块'], ['arrow', '箭头'],
+    ['dot', t('圆点')], ['num', t('序号')], ['square', t('方块')], ['arrow', t('箭头')],
   ],
   imageStyle: [
-    ['plain', '直角'], ['rounded', '圆角'], ['shadow', '投影'], ['frame', '细框'], ['polaroid', '拍立得'], ['full', '通栏出血'],
+    ['plain', t('直角')], ['rounded', t('圆角')], ['shadow', t('投影')], ['frame', t('细框')], ['polaroid', t('拍立得')], ['full', t('通栏出血')],
   ],
 }
 
@@ -4305,7 +4640,7 @@ function DecorSection(props) {
   const bgValue = surface.bg === design.themeBg ? '' : surface.bg
   return h('div', { className: 'ws-sections' },
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, '背景与图形')),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('背景与图形'))),
       h('div', { className: 'ws-bg-row' },
         BG_CHOICES.map(([value, label]) => h('button', {
           key: label,
@@ -4317,23 +4652,23 @@ function DecorSection(props) {
         })),
       ),
       h('label', { className: 'ws-field' },
-        h('span', { className: 'ws-field-label' }, '底纹'),
+        h('span', { className: 'ws-field-label' }, t('底纹')),
         h('select', { className: 'ws-input', value: surface.pattern, onChange: event => set({ bgStyle: event.target.value }) },
           BG_PATTERNS.map(([value, label]) => h('option', { key: value, value }, label))),
       ),
       h('label', { className: 'ws-field' },
-        h('span', { className: 'ws-field-label' }, '矢量角标'),
+        h('span', { className: 'ws-field-label' }, t('矢量角标')),
         h('select', { className: 'ws-input', value: surface.ornament, onChange: event => set({ ornament: event.target.value }) },
           ORNAMENTS.map(([value, label]) => h('option', { key: value, value }, label))),
       ),
       h('div', { className: 'ws-hint' }, '底纹与角标都会写进复制/发布的 HTML；深色背景会自动换成浅色文字。'),
     ),
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, '形状与装饰'), h('button', { type: 'button', className: 'ws-link', onClick: resetDecor }, '恢复默认')),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('形状与装饰')), h('button', { type: 'button', className: 'ws-link', onClick: resetDecor }, t('恢复默认'))),
       Object.entries(DECOR_OPTIONS).map(([key, options]) => h('label', { key, className: 'ws-field' },
         h('span', { className: 'ws-field-label' }, ({
-          titleStyle: '标题样式', sectionStyle: '章节样式', quoteStyle: '引用样式',
-          dividerStyle: '分割线', listStyle: '列表符号', imageStyle: '图片样式',
+          titleStyle: t('标题样式'), sectionStyle: t('章节样式'), quoteStyle: t('引用样式'),
+          dividerStyle: t('分割线'), listStyle: t('列表符号'), imageStyle: t('图片样式'),
         })[key]),
         h('select', {
           className: 'ws-input',
@@ -4343,34 +4678,34 @@ function DecorSection(props) {
       )),
     ),
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, '图片')),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('图片'))),
       h('label', { className: 'ws-field' },
-        h('span', { className: 'ws-field-label' }, '宽度'),
+        h('span', { className: 'ws-field-label' }, t('宽度')),
         h('select', { className: 'ws-input', value: String(design.decor.imageWidth), onChange: event => set({ imageWidth: Number(event.target.value) }) },
-          [['100', '通栏'], ['85', '大图'], ['70', '中等'], ['50', '小图']].map(([value, label]) => h('option', { key: value, value }, label))),
+          [['100', t('通栏')], ['85', t('大图')], ['70', t('中等')], ['50', t('小图')]].map(([value, label]) => h('option', { key: value, value }, label))),
       ),
       h('label', { className: 'ws-field' },
-        h('span', { className: 'ws-field-label' }, '对齐'),
+        h('span', { className: 'ws-field-label' }, t('对齐')),
         h('select', { className: 'ws-input', value: design.decor.imageAlign, onChange: event => set({ imageAlign: event.target.value }) },
-          [['center', '居中'], ['left', '左对齐'], ['right', '右对齐']].map(([value, label]) => h('option', { key: value, value }, label))),
+          [['center', t('居中')], ['left', t('左对齐')], ['right', t('右对齐')]].map(([value, label]) => h('option', { key: value, value }, label))),
       ),
       h('p', { className: 'ws-hint' }, '图片样式选「通栏」时会忽略宽度。悬停图片可以点工具条里的图标换图。'),
     ),
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, '显示项')),
-      h(Toggle, { label: '标题下方显示作者与日期', checked: design.decor.showMeta, onChange: value => set({ showMeta: value }) }),
-      h(Toggle, { label: '话题标签', checked: design.decor.showEyebrow, onChange: value => set({ showEyebrow: value }) }),
-      h(Toggle, { label: '首段作为导语放大', checked: design.decor.lead, onChange: value => set({ lead: value }) }),
-      h(Toggle, { label: '显示文末引导', checked: design.decor.showFooter, onChange: value => set({ showFooter: value }) }),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('显示项'))),
+      h(Toggle, { label: t('标题下方显示作者与日期'), checked: design.decor.showMeta, onChange: value => set({ showMeta: value }) }),
+      h(Toggle, { label: t('话题标签'), checked: design.decor.showEyebrow, onChange: value => set({ showEyebrow: value }) }),
+      h(Toggle, { label: t('首段作为导语放大'), checked: design.decor.lead, onChange: value => set({ lead: value }) }),
+      h(Toggle, { label: t('显示文末引导'), checked: design.decor.showFooter, onChange: value => set({ showFooter: value }) }),
     ),
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, '文末签名')),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('文末签名'))),
       h('textarea', {
         className: 'ws-input ws-textarea',
         rows: 2,
         value: design.decor.footerText,
         onChange: event => set({ footerText: event.target.value }),
-        placeholder: '写给读者的结束语',
+        placeholder: t('写给读者的结束语'),
       }),
       h('input', {
         className: 'ws-input',
@@ -4427,7 +4762,7 @@ function PublishSection(props) {
       store.updateMeta({ coverDataUrl: renderCover({ title, design }), coverCustom: false })
       toast('已按新主题重绘封面')
     } catch (failure) {
-      toast(failure.message || '封面生成失败', 'error')
+      toast(failure.message || t('封面生成失败'), 'error')
     }
   }
 
@@ -4440,9 +4775,9 @@ function PublishSection(props) {
       const dataUrl = await readFileAsDataUrl(file)
       const cropped = await cropToCover(dataUrl)
       store.updateMeta({ coverDataUrl: cropped, coverCustom: true })
-      toast('已换成你上传的封面', 'success')
+      toast(t('已换成你上传的封面'), 'success')
     } catch (failure) {
-      toast(failure.message || '封面处理失败', 'error')
+      toast(failure.message || t('封面处理失败'), 'error')
     } finally {
       setCoverBusy(false)
     }
@@ -4456,9 +4791,9 @@ function PublishSection(props) {
       setConfigOpen(false)
       setAppId('')
       setAppSecret('')
-      toast('公众号密钥已保存到本机凭据库', 'success')
+      toast(t('公众号密钥已保存到本机凭据库'), 'success')
     } catch (failure) {
-      toast(failure.message || '保存失败', 'error')
+      toast(failure.message || t('保存失败'), 'error')
     } finally {
       setConfigBusy(false)
     }
@@ -4470,7 +4805,7 @@ function PublishSection(props) {
       const value = await callHost('testConnection')
       toast(`连接成功，access_token 有效 ${Math.round((value.expiresIn ?? 7200) / 60)} 分钟`, 'success')
     } catch (failure) {
-      toast(failure.message || '连接失败', 'error')
+      toast(failure.message || t('连接失败'), 'error')
     } finally {
       setConfigBusy(false)
     }
@@ -4483,7 +4818,7 @@ function PublishSection(props) {
       setHostStatus({ phase: 'ready', configured: false, appIdPreview: null, message: '' })
       toast('已清除本机保存的公众号密钥')
     } catch (failure) {
-      toast(failure.message || '清除失败', 'error')
+      toast(failure.message || t('清除失败'), 'error')
     } finally {
       setConfigBusy(false)
     }
@@ -4495,7 +4830,7 @@ function PublishSection(props) {
       const value = await callHost('listDrafts', { count: 10 })
       setDraftBox({ phase: 'ready', items: Array.isArray(value.items) ? value.items : [], error: '' })
     } catch (failure) {
-      setDraftBox({ phase: 'error', items: [], error: failure.message || '读取草稿箱失败' })
+      setDraftBox({ phase: 'error', items: [], error: failure.message || t('读取草稿箱失败') })
     } finally {
       setDraftBusy(false)
     }
@@ -4513,9 +4848,9 @@ function PublishSection(props) {
     try {
       await callHost('deleteDraft', { mediaId })
       setDraftBox(current => ({ ...current, items: current.items.filter(item => item.mediaId !== mediaId) }))
-      toast('草稿已删除')
+      toast(t('草稿已删除'))
     } catch (failure) {
-      toast(failure.message || '删除失败', 'error')
+      toast(failure.message || t('删除失败'), 'error')
     }
   }
 
@@ -4532,9 +4867,9 @@ function PublishSection(props) {
 
     try {
       if (!hostStatus.configured) {
-        throw Object.assign(new Error('还没有配置公众号 AppID / AppSecret'), { code: 'not-configured' })
+        throw Object.assign(new Error(t('还没有配置公众号 AppID / AppSecret')), { code: 'not-configured' })
       }
-      push('检查公众号配置', 'done')
+      push(t('检查公众号配置'), 'done')
 
       const extras = bundleIds
         .map(id => store.docs.find(entry => entry.id === id))
@@ -4625,7 +4960,7 @@ function PublishSection(props) {
       setResult({ kind: 'draft', mediaId: draft.mediaId, warnings, count: preparedArticles.length })
 
       if (mode === 'publish') {
-        push('提交发布', 'running')
+        push(t('提交发布'), 'running')
         const published = await callHost('publish', { mediaId: draft.mediaId }, { timeoutMs: 120000 })
         setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done', detail: published.publishId } : step)))
         let status = null
@@ -4640,15 +4975,15 @@ function PublishSection(props) {
         }
         setResult({ kind: 'published', mediaId: draft.mediaId, publishId: published.publishId, status, count: preparedArticles.length })
         push(
-          '发布结果',
+          t('发布结果'),
           status?.publishStatus === 0 || status?.publishStatus === 1 ? 'done' : status?.publishStatus === -1 ? 'running' : 'error',
-          status?.statusText ?? '状态未知',
+          status?.statusText ?? t('状态未知'),
         )
       }
       toast(mode === 'publish' ? '已提交发布，结果见下方状态' : '已保存到公众号草稿箱', 'success')
     } catch (failure) {
-      setError({ message: failure.message || '发布失败', code: failure.code })
-      toast(failure.message || '发布失败', 'error')
+      setError({ message: failure.message || t('发布失败'), code: failure.code })
+      toast(failure.message || t('发布失败'), 'error')
       setSteps(list => list.map((step, index) => (index === list.length - 1 && step.state === 'running' ? { ...step, state: 'error' } : step)))
     } finally {
       setBusy(false)
@@ -4659,7 +4994,7 @@ function PublishSection(props) {
     h('div', { className: 'ws-card' },
       h('div', { className: 'ws-card-head' },
         h(Icon, { name: 'key', size: 14 }),
-        h('span', null, '公众号配置'),
+        h('span', null, t('公众号配置')),
         h('span', { className: 'ws-badge ' + (hostStatus.configured ? 'ok' : '') }, hostStatus.configured ? '已连接' : hostStatus.phase === 'error' ? '服务未响应' : '未配置'),
       ),
       hostStatus.phase === 'error'
@@ -4674,42 +5009,42 @@ function PublishSection(props) {
           h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, 'AppSecret'), h('input', { className: 'ws-input', type: 'password', value: appSecret, placeholder: '32 位密钥，保存后不再显示', onChange: event => setAppSecret(event.target.value) })),
           h('div', { className: 'ws-row' },
             h(Button, { variant: 'primary', disabled: configBusy || appId.trim() === '' || appSecret.trim() === '', onClick: saveConfig }, configBusy ? '保存中…' : '保存'),
-            h(Button, { onClick: () => setConfigOpen(false) }, '取消'),
+            h(Button, { onClick: () => setConfigOpen(false) }, t('取消')),
           ),
         )
         : h('div', { className: 'ws-row' },
           h(Button, { variant: hostStatus.configured ? 'ghost' : 'primary', onClick: () => setConfigOpen(true), disabled: hostStatus.phase === 'error' }, hostStatus.configured ? '更新密钥' : '填写密钥'),
-          hostStatus.configured ? h(Button, { onClick: testConnection, disabled: configBusy }, configBusy ? '测试中…' : '测试连接') : null,
-          hostStatus.configured ? h(Button, { onClick: clearConfig, disabled: configBusy, variant: 'ghost' }, '清除') : null,
+          hostStatus.configured ? h(Button, { onClick: testConnection, disabled: configBusy }, configBusy ? t('测试中…') : t('测试连接')) : null,
+          hostStatus.configured ? h(Button, { onClick: clearConfig, disabled: configBusy, variant: 'ghost' }, t('清除')) : null,
         ),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, '文章信息'), h('span', { className: 'ws-group-note' }, `标题 ${title.length}/64 · 摘要 ${digest.length}/120`)),
-      h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, '标题'), h('input', { className: 'ws-input', value: doc.meta.title, placeholder: title || '文章标题', maxLength: 64, onChange: event => store.updateMeta({ title: event.target.value }) })),
-      h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, '公众号名称'), h('input', { className: 'ws-input', value: doc.meta.brand ?? '', placeholder: '预览顶栏显示；留空显示“公众号”', maxLength: 30, onChange: event => store.updateMeta({ brand: event.target.value }) })),
-      h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, '作者'), h('input', { className: 'ws-input', value: doc.meta.author, placeholder: '留空则用公众号主体名', maxLength: 8, onChange: event => store.updateMeta({ author: event.target.value }) })),
-      h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, '摘要'), h('textarea', { className: 'ws-input ws-textarea', rows: 2, value: doc.meta.digest, placeholder: digest || '留空自动取首段', maxLength: 120, onChange: event => store.updateMeta({ digest: event.target.value }) })),
-      h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, '原文链接'), h('input', { className: 'ws-input', value: doc.meta.sourceUrl, placeholder: '可选，https://', onChange: event => store.updateMeta({ sourceUrl: event.target.value }) })),
+      h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, t('标题')), h('input', { className: 'ws-input', value: doc.meta.title, placeholder: title || t('文章标题'), maxLength: 64, onChange: event => store.updateMeta({ title: event.target.value }) })),
+      h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, t('公众号名称')), h('input', { className: 'ws-input', value: doc.meta.brand ?? '', placeholder: t('预览顶栏显示；留空显示“公众号”'), maxLength: 30, onChange: event => store.updateMeta({ brand: event.target.value }) })),
+      h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, t('作者')), h('input', { className: 'ws-input', value: doc.meta.author, placeholder: t('留空则用公众号主体名'), maxLength: 8, onChange: event => store.updateMeta({ author: event.target.value }) })),
+      h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, t('摘要')), h('textarea', { className: 'ws-input ws-textarea', rows: 2, value: doc.meta.digest, placeholder: digest || t('留空自动取首段'), maxLength: 120, onChange: event => store.updateMeta({ digest: event.target.value }) })),
+      h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, t('原文链接')), h('input', { className: 'ws-input', value: doc.meta.sourceUrl, placeholder: t('可选，https://'), onChange: event => store.updateMeta({ sourceUrl: event.target.value }) })),
     ),
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, '发布选项')),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('发布选项'))),
       h(Toggle, {
-        label: '允许读者评论',
+        label: t('允许读者评论'),
         checked: doc.meta.needOpenComment === true,
         onChange: value => store.updateMeta(value ? { needOpenComment: true } : { needOpenComment: false, onlyFansCanComment: false }),
       }),
       doc.meta.needOpenComment === true
         ? h(Toggle, {
-          label: '仅关注者可评论',
+          label: t('仅关注者可评论'),
           checked: doc.meta.onlyFansCanComment === true,
           onChange: value => store.updateMeta({ onlyFansCanComment: value }),
         })
         : null,
-      h('p', { className: 'ws-hint' }, '评论设置会写进草稿；公众号后台仍可再改。'),
+      h('p', { className: 'ws-hint' }, t('评论设置会写进草稿；公众号后台仍可再改。')),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },
-        h('span', null, '合集（可选）'),
+        h('span', null, t('合集（可选）')),
         h('span', { className: 'ws-group-note' }, `${Math.min(8, bundleIds.length + 1)}/8 篇`),
       ),
       (() => {
@@ -4720,7 +5055,7 @@ function PublishSection(props) {
           ...candidates.map((entry) => {
             const checked = bundleIds.includes(entry.id)
             const heading = (entry.text.match(/^#\s+(.+)$/m) ?? [])[1] ?? ''
-            const label = entry.meta.title.trim() || heading || '未命名草稿'
+            const label = entry.meta.title.trim() || heading || t('未命名草稿')
             return h('button', {
               key: entry.id,
               type: 'button',
@@ -4734,11 +5069,11 @@ function PublishSection(props) {
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, '封面（2.35:1）'), h('span', { className: 'ws-group-note' }, doc.meta.coverCustom === true ? '当前是自定义封面' : '自动按主题生成')),
       coverDataUrl !== ''
-        ? h('img', { className: 'ws-cover', src: coverDataUrl, alt: '封面预览' })
-        : h('div', { className: 'ws-cover ws-cover-empty' }, '封面生成中…'),
+        ? h('img', { className: 'ws-cover', src: coverDataUrl, alt: t('封面预览') })
+        : h('div', { className: 'ws-cover ws-cover-empty' }, t('封面生成中…')),
       h('div', { className: 'ws-row' },
-        h(Button, { onClick: regenerateCover, disabled: coverBusy }, '按主题重绘'),
-        h(Button, { onClick: () => coverInputRef.current?.click(), disabled: coverBusy }, coverBusy ? '处理中…' : '上传图片'),
+        h(Button, { onClick: regenerateCover, disabled: coverBusy }, t('按主题重绘')),
+        h(Button, { onClick: () => coverInputRef.current?.click(), disabled: coverBusy }, coverBusy ? t('处理中…') : t('上传图片')),
         h('input', { ref: coverInputRef, type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: uploadCoverFile }),
       ),
     ),
@@ -4746,15 +5081,15 @@ function PublishSection(props) {
       h(Button, { icon: 'save', variant: 'primary', disabled: busy || hostStatus.phase === 'error', onClick: () => runPublish('draft') }, busy ? '处理中…' : '保存到草稿箱'),
       confirmPublish
         ? h('div', { className: 'ws-confirm' },
-          h('span', null, '直接发布会占用当天发布次数，确认？'),
-          h(Button, { variant: 'danger', onClick: () => runPublish('publish'), disabled: busy }, '确认发布'),
-          h(Button, { variant: 'ghost', onClick: () => setConfirmPublish(false) }, '再想想'),
+          h('span', null, t('直接发布会占用当天发布次数，确认？')),
+          h(Button, { variant: 'danger', onClick: () => runPublish('publish'), disabled: busy }, t('确认发布')),
+          h(Button, { variant: 'ghost', onClick: () => setConfirmPublish(false) }, t('再想想')),
         )
         : h(Button, { icon: 'send', variant: 'solid', disabled: busy || hostStatus.phase === 'error', onClick: () => setConfirmPublish(true) }, '直接发布'),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },
-        h('span', null, '公众号草稿箱'),
+        h('span', null, t('公众号草稿箱')),
         h('button', { type: 'button', className: 'ws-link', onClick: loadDrafts, disabled: draftBusy || hostStatus.configured !== true }, draftBusy ? '读取中…' : '读取最近 10 篇'),
       ),
       draftBox.phase === 'error' ? h('p', { className: 'ws-hint ws-error-text' }, draftBox.error) : null,
@@ -4762,11 +5097,11 @@ function PublishSection(props) {
       draftBox.items.map(item => h('div', { key: item.mediaId, className: 'ws-draft-row' },
         h('div', { className: 'ws-draft-main' },
           h('span', { className: 'ws-draft-title' }, item.title === '' ? '（无标题）' : item.title),
-          h('span', { className: 'ws-draft-meta' }, item.updateTime > 0 ? new Date(item.updateTime * 1000).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '时间未知'),
+          h('span', { className: 'ws-draft-meta' }, item.updateTime > 0 ? new Date(item.updateTime * 1000).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : t('时间未知')),
         ),
         h('button', { type: 'button', className: 'ws-link danger', onClick: () => removeDraft(item.mediaId) }, deleteArm === item.mediaId ? '确认删除' : '删除'),
       )),
-      h('p', { className: 'ws-hint' }, '删除会直接移除公众号后台的草稿，不影响已发布的文章。'),
+      h('p', { className: 'ws-hint' }, t('删除会直接移除公众号后台的草稿，不影响已发布的文章。')),
     ),
     steps.length > 0
       ? h('div', { className: 'ws-steps' }, steps.map((step, index) => h('div', { key: index, className: 'ws-step ' + step.state },
@@ -4791,7 +5126,7 @@ function PublishSection(props) {
           ? h('p', null, `发布状态：${result.status?.statusText ?? '发布中，稍后可在后台查看'}`)
           : null,
         result.warnings && result.warnings.length > 0 ? h('p', null, `提示：${result.warnings.join('；')}`) : null,
-        h('a', { className: 'ws-link', href: 'https://mp.weixin.qq.com/', target: '_blank', rel: 'noreferrer' }, '打开公众号后台'),
+        h('a', { className: 'ws-link', href: 'https://mp.weixin.qq.com/', target: '_blank', rel: 'noreferrer' }, t('打开公众号后台')),
       )
       : null,
   )
@@ -5466,6 +5801,14 @@ function panelLabel(ctx) {
 return {
   inject: ['slots'],
   apply(ctx) {
+    bindUiLocale(() => {
+      try {
+        const locale = ctx.get('locale')
+        return locale !== undefined && locale !== null && typeof locale.getLocale === 'function' ? locale.getLocale().active : ''
+      } catch {
+        return ''
+      }
+    })
     const label = () => panelLabel(ctx)
     ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
       name: 'sidebar.panellist',

@@ -11,7 +11,7 @@ const { createRoot } = ReactDOMClient
 const h = React.createElement
 
 /** Mount the generated client bundle in jsdom and return the container. */
-async function mountPanel({ width = 1280 } = {}) {
+async function mountPanel({ width = 1280, language = '' } = {}) {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
     url: 'http://127.0.0.1:52889/',
     pretendToBeVisual: true,
@@ -24,6 +24,7 @@ async function mountPanel({ width = 1280 } = {}) {
   window.matchMedia = window.matchMedia ?? (() => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
   // jsdom has no canvas; cover generation catches the failure.
   window.HTMLCanvasElement.prototype.getContext = () => null
+  if (language !== '') window.localStorage.setItem('dsh.wechat-studio.uiLang', language)
 
   const sandbox = {
     window,
@@ -128,6 +129,24 @@ test('窄宽度下切换到单栏视图', async () => {
     assert.ok(container.querySelector('.ws-narrow') || container.querySelector('.ws-root'), 'panel renders in narrow mode')
     const views = [...container.querySelectorAll('.ws-view-switch button, .ws-top .ws-btn')]
     assert.ok(views.length > 0)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+
+test('英文语言包翻译核心导航与页签', async () => {
+  const { dom, container, root } = await mountPanel({ language: 'en' })
+  try {
+    const tabs = [...container.querySelectorAll('.ws-tab')].map(button => button.textContent.trim())
+    assert.ok(tabs.includes('Theme'), `theme tab translated: ${tabs.join(', ')}`)
+    assert.ok(tabs.includes('Publish'))
+    assert.ok(tabs.includes('Type'))
+    assert.ok(tabs.includes('Design'))
+    const text = container.textContent
+    assert.match(text, /Auto layout/)
+    assert.match(text, /AI edit|AI chat/)
   } finally {
     root.unmount()
     dom.window.close()

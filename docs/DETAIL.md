@@ -20,6 +20,7 @@ A DeepSeek Harness (DSH) sidebar bundle for turning Markdown into WeChat Officia
   - `render.mjs` — one node tree projected both to React (preview) and to inline-style HTML (clipboard/publish).
   - `docparse.mjs` — `.docx` ZIP/XML parsing, `.html` → Markdown, embedded image extraction.
   - `bridge.mjs` — host calls, clipboard, image compression.
+  - `i18n.mjs` — gettext-style UI copy: Chinese source strings, English catalog, language from explicit override, DSH locale, then document `lang`.
   - `images.mjs` — image registry: editor text keeps `wsimg://id` refs, data URLs live in IndexedDB, refs are expanded before parsing/rendering/publishing.
   - `ui.mjs` — three-pane panel, editor, preview, design controls, publish panel, AI chat.
 

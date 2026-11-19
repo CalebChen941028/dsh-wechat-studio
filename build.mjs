@@ -22,7 +22,7 @@ function stripModuleSyntax(source) {
     .replace(/^export\s+/gm, '')
 }
 
-const sources = ['themes', 'engine', 'render', 'docparse', 'images', 'bridge', 'ui-shell', 'ui-editor', 'ui-design', 'ui-misc']
+const sources = ['i18n', 'themes', 'engine', 'render', 'docparse', 'images', 'bridge', 'ui-shell', 'ui-editor', 'ui-design', 'ui-misc']
   .map(name => {
     const code = stripModuleSyntax(readFileSync(join(root, 'src', `${name}.mjs`), 'utf8'))
     return `/* ===== src/${name}.mjs ===== */\n${code.trim()}\n`
@@ -55,6 +55,14 @@ function panelLabel(ctx) {
 return {
   inject: ['slots'],
   apply(ctx) {
+    bindUiLocale(() => {
+      try {
+        const locale = ctx.get('locale')
+        return locale !== undefined && locale !== null && typeof locale.getLocale === 'function' ? locale.getLocale().active : ''
+      } catch {
+        return ''
+      }
+    })
     const label = () => panelLabel(ctx)
     ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
       name: 'sidebar.panellist',

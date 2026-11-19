@@ -11,15 +11,15 @@ const APPEARANCE_KEY = 'dsh.wechat-studio.appearance.v1'
 const LONG_TEXT_CHUNK_THRESHOLD = 7000
 const DEVICE_KEY = 'dsh.wechat-studio.device.v1'
 const SKINS = [
-  { id: 'auto', name: '跟随应用', hint: '自动适配深浅' },
-  { id: 'light', name: '浅色玻璃', hint: '明亮通透' },
-  { id: 'dark', name: '深色玻璃', hint: '低光环境' },
-  { id: 'sand', name: '暖砂', hint: '米色柔光' },
+  { id: 'auto', name: t('跟随应用'), hint: t('自动适配深浅') },
+  { id: 'light', name: t('浅色玻璃'), hint: t('明亮通透') },
+  { id: 'dark', name: t('深色玻璃'), hint: t('低光环境') },
+  { id: 'sand', name: t('暖砂'), hint: t('米色柔光') },
 ]
 const UI_ACCENTS = ['#0A84FF', '#3A3A3C', '#0E7C86', '#A2653B', '#B23A3A', '#6E6E73']
-const BG_CHOICES = [['', '跟随主题'], ['#FFFFFF', '纸白'], ['#F7F4EE', '米色'], ['#F3F4F6', '冷灰'], ['#161616', '墨黑']]
-const BG_PATTERNS = [['none', '无底纹'], ['paper', '纸纹'], ['grid', '网格'], ['dots', '点阵'], ['lines', '竖线'], ['wash', '淡彩']]
-const ORNAMENTS = [['none', '不加角标'], ['corner', '边角线'], ['column', '栏线'], ['seal', '印记'], ['leaf', '叶形']]
+const BG_CHOICES = [['', t('跟随主题')], ['#FFFFFF', t('纸白')], ['#F7F4EE', t('米色')], ['#F3F4F6', t('冷灰')], ['#161616', t('墨黑')]]
+const BG_PATTERNS = [['none', t('无底纹')], ['paper', t('纸纹')], ['grid', t('网格')], ['dots', t('点阵')], ['lines', t('竖线')], ['wash', t('淡彩')]]
+const ORNAMENTS = [['none', t('不加角标')], ['corner', t('边角线')], ['column', t('栏线')], ['seal', t('印记')], ['leaf', t('叶形')]]
 
 /** Parse a CSS color and report whether it is dark. */
 function cssColorIsDark(value) {
@@ -487,7 +487,7 @@ function StudioPanel(props) {
       const mode = await copyRichHtml(html)
       toast(mode === 'rich' ? '已复制带样式的正文，粘到公众号编辑器即可' : '已复制，样式可能不完整', 'success')
     } catch (error) {
-      toast(error.message || '复制失败', 'error')
+      toast(error.message || t('复制失败'), 'error')
     }
   }
 
@@ -595,7 +595,7 @@ function StudioPanel(props) {
         refineTimerRef.current = setTimeout(() => { refineWithAi() }, 900)
       }
     } catch (error) {
-      toast(error.message || '导入失败', 'error')
+      toast(error.message || t('导入失败'), 'error')
     }
   }, [store, autoRefine, narrow, refineWithAi, toast, bumpImages])
 
