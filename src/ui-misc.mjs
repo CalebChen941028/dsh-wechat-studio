@@ -134,6 +134,7 @@ const STUDIO_CSS = `
 .ws-stage{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;gap:14px;padding:20px 18px 26px}
 .ws-phone{position:relative;width:410px;max-width:100%;flex:none;display:flex;flex-direction:column;max-height:calc(100% - 40px);padding:4px;border-radius:62px;background:linear-gradient(150deg,#55565b 0%,#26272b 26%,#1a1b1e 52%,#2f3035 74%,#5c5d63 100%);box-shadow:0 34px 78px rgba(0,0,0,.30),0 3px 10px rgba(0,0,0,.22),inset 0 0 0 1px rgba(255,255,255,.18)}
 .ws-screen{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;background:#fff;border-radius:58px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
+.ws-lang-switch{margin-top:8px;align-self:flex-start}
 .ws-device-switch{display:flex;gap:2px;border:1px solid var(--ws-border);border-radius:8px;padding:2px;background:var(--ws-surface2)}
 .ws-device-btn{border:0;background:transparent;color:var(--ws-muted);font:inherit;font-size:11px;line-height:1.4;padding:2px 8px;border-radius:6px;cursor:pointer}
 .ws-device-btn.on{background:var(--ws-glass-strong);color:var(--ws-text);box-shadow:0 1px 2px rgba(0,0,0,.08)}

@@ -342,6 +342,34 @@ const UI_EN = {
   '发布中，稍后可在后台查看': 'Publishing; check the backend later',
   '，含 {count} 张插图': ', {count} images included',
   '第 {index}/{total} 段改写中': 'Rewriting section {index}/{total}',
+  '修改中…': 'Editing…',
+  'Enter 发送，Shift+Enter 换行': 'Enter to send, Shift+Enter for a new line',
+  '直接说想怎么改，AI 会改正文、换主题或调版式，改完可以撤销。': 'Describe the change; AI can rewrite copy, switch themes or tune layout. Every edit is undoable.',
+  '可以缩小改动范围再试一次；连续失败就去「设置 → 模型」检查当前默认模型。': 'Try a smaller change; if it keeps failing, check the default model under Settings → Model.',
+  '模型是当前会话的默认模型；要求改版式时只动主题与装饰，不会重写正文。': 'Uses this session’s default model. Layout requests only touch theme and decor, never the text.',
+  '已提交发布，结果见下方状态': 'Submitted for publishing; status below',
+  '（已保存）': '(saved)',
+  'wx 开头的一串字符': 'Starts with wx',
+  '32 位密钥，保存后不再显示': '32-character secret, hidden after saving',
+  '更新密钥': 'Update credentials',
+  '当前是自定义封面': 'Custom cover',
+  '处理中…': 'Working…',
+  '读取中…': 'Loading…',
+  '（无标题）': '(Untitled)',
+  '确认删除': 'Confirm delete',
+  '已提交发布': 'Submitted',
+  '提示：{warnings}': 'Note: {warnings}',
+  '已复制带样式的正文，粘到公众号编辑器即可': 'Styled HTML copied. Paste it into the WeChat editor.',
+  '这份文档里没有可用的正文': 'This document has no usable body text.',
+  '这个 JSON 里没有可用的正文': 'This JSON has no usable body text.',
+  '未命名草稿': 'Untitled draft',
+  'AI 正在按内容精排版式…': 'AI is refining the layout…',
+  'AI 正在精排…': 'AI is refining…',
+
+  '界面语言': 'Language',
+  '中文': 'Chinese',
+  'English': 'English',
+
 }
 
 
@@ -3458,7 +3486,7 @@ function StudioPanel(props) {
     const html = serializeNodes(tree.nodes)
     try {
       const mode = await copyRichHtml(html)
-      toast(mode === 'rich' ? '已复制带样式的正文，粘到公众号编辑器即可' : t('已复制，样式可能不完整'), 'success')
+      toast(mode === 'rich' ? t('已复制带样式的正文，粘到公众号编辑器即可') : t('已复制，样式可能不完整'), 'success')
     } catch (error) {
       toast(error.message || t('复制失败'), 'error')
     }
@@ -3555,7 +3583,7 @@ function StudioPanel(props) {
       const shrunk = await shrinkMarkdownImages(String(text ?? ''))
       const body = (await materializeInlineImages(shrunk, { kind: 'import' })).trim()
       bumpImages()
-      if (body.length < 20) throw new Error('这份文档里没有可用的正文')
+      if (body.length < 20) throw new Error(t('这份文档里没有可用的正文'))
       const parsedNow = parseArticle(body)
       const designNow = autoCompose(parsedNow.blocks, body, 0).design
       store.addDoc(body, designNow)
@@ -3625,7 +3653,7 @@ function StudioPanel(props) {
         h('span', { className: 'ws-typing-dot' }),
         h('span', { className: 'ws-typing-dot' }),
         h('span', { className: 'ws-typing-dot' }),
-        h('span', null, 'AI 正在按内容精排版式…'),
+        h('span', null, t('AI 正在按内容精排版式…')),
       )
       : null,
     h(ToastStack, { toasts }),
@@ -3682,11 +3710,11 @@ function TopBar(props) {
       }
       const content = await file.text()
       const parsed = JSON.parse(content)
-      if (!parsed || typeof parsed.text !== 'string') throw new Error('这个 JSON 里没有可用的正文')
+      if (!parsed || typeof parsed.text !== 'string') throw new Error(t('这个 JSON 里没有可用的正文'))
       const importedText = await materializeInlineImages(parsed.text, { kind: 'import' })
       bumpImages()
       store.addDoc(importedText, parsed.design, parsed.meta)
-      toast(`已导入「${parsed.meta?.title || '未命名草稿'}」`, 'success')
+      toast(`已导入「${parsed.meta?.title || t('未命名草稿')}」`, 'success')
     } catch (error) {
       toast(error.message || t('导入失败'), 'error')
     }
@@ -3756,6 +3784,25 @@ function TopBar(props) {
               title: color,
               onClick: () => setAppearance({ ...appearance, accent: color }),
             })),
+          ),
+          h('div', { className: 'ws-appearance-sub' }, t('界面语言')),
+          h('div', { className: 'ws-device-switch ws-lang-switch' },
+            [['', t('跟随应用')], ['zh', t('中文')], ['en', 'English']].map(([value, label]) => {
+              let current = ''
+              try { current = window.localStorage.getItem('dsh.wechat-studio.uiLang') ?? '' } catch { current = '' }
+              return h('button', {
+                key: value === '' ? 'auto' : value,
+                type: 'button',
+                className: 'ws-device-btn' + (current === value ? ' on' : ''),
+                onClick: () => {
+                  try {
+                    if (value === '') window.localStorage.removeItem('dsh.wechat-studio.uiLang')
+                    else window.localStorage.setItem('dsh.wechat-studio.uiLang', value)
+                  } catch { /* private mode */ }
+                  window.location.reload()
+                },
+              }, label)
+            }),
           ),
         )
         : null,
@@ -4467,7 +4514,7 @@ function AiSection(props) {
     ),
     messages.length === 0
       ? h('div', { className: 'ws-chat-empty' },
-        h('p', null, '直接说想怎么改，AI 会改正文、换主题或调版式，改完可以撤销。'),
+        h('p', null, t('直接说想怎么改，AI 会改正文、换主题或调版式，改完可以撤销。')),
         h('div', { className: 'ws-chips' },
           suggestions.map(text => h('button', {
             key: text,
@@ -4481,7 +4528,7 @@ function AiSection(props) {
         messages.map((message, index) => h('div', { key: index, className: 'ws-msg ' + message.role },
           h('div', { className: 'ws-msg-body' }, message.content),
           message.role === 'error' && (message.code === 'model-failed' || message.code === 'ai-timeout' || message.code === 'response-truncated')
-            ? h('div', { className: 'ws-msg-model' }, '可以缩小改动范围再试一次；连续失败就去「设置 → 模型」检查当前默认模型。')
+            ? h('div', { className: 'ws-msg-model' }, t('可以缩小改动范围再试一次；连续失败就去「设置 → 模型」检查当前默认模型。'))
             : null,
           message.applied && message.applied.length > 0
             ? h('div', { className: 'ws-msg-tags' },
@@ -4527,8 +4574,8 @@ function AiSection(props) {
         },
       }),
       h('div', { className: 'ws-row' },
-        h(Button, { variant: 'primary', disabled: busy || input.trim() === '', onClick: () => send() }, busy ? '修改中…' : t('发送')),
-        h('span', { className: 'ws-hint' }, 'Enter 发送，Shift+Enter 换行'),
+        h(Button, { variant: 'primary', disabled: busy || input.trim() === '', onClick: () => send() }, busy ? t('修改中…') : t('发送')),
+        h('span', { className: 'ws-hint' }, t('Enter 发送，Shift+Enter 换行')),
       ),
     ),
     messages.length > 0
@@ -4539,7 +4586,7 @@ function AiSection(props) {
         onClick: () => send(text),
       }, text)))
       : null,
-    h('p', { className: 'ws-hint' }, '模型是当前会话的默认模型；要求改版式时只动主题与装饰，不会重写正文。'),
+    h('p', { className: 'ws-hint' }, t('模型是当前会话的默认模型；要求改版式时只动主题与装饰，不会重写正文。')),
   )
 }
 
@@ -4582,7 +4629,7 @@ function ThemeSection(props) {
       h('div', { className: 'ws-group-head' }, h('span', null, t('自动编排'))),
       h('p', { className: 'ws-hint' }, t('粘贴或上传文档后，先本地按内容套一版（不联网、立即出效果），随后可让 AI 再精排一次。')),
       h(Toggle, { label: t('粘贴 / 上传后让 AI 精排'), checked: autoRefine, onChange: setAutoRefine }),
-      h(Button, { onClick: onRefineNow, disabled: refining }, refining ? 'AI 正在精排…' : t('现在就 AI 精排')),
+      h(Button, { onClick: onRefineNow, disabled: refining }, refining ? t('AI 正在精排…') : t('现在就 AI 精排')),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('主题库')), h('span', { className: 'ws-group-note' }, `${THEMES.reduce((count, entry) => count + entry.variants.length, 0)} 个版式`)),
@@ -5072,7 +5119,7 @@ function PublishSection(props) {
           status?.statusText ?? t('状态未知'),
         )
       }
-      toast(mode === 'publish' ? '已提交发布，结果见下方状态' : t('已保存到公众号草稿箱'), 'success')
+      toast(mode === 'publish' ? t('已提交发布，结果见下方状态') : t('已保存到公众号草稿箱'), 'success')
     } catch (failure) {
       setError({ message: failure.message || t('发布失败'), code: failure.code })
       toast(failure.message || t('发布失败'), 'error')
@@ -5087,25 +5134,25 @@ function PublishSection(props) {
       h('div', { className: 'ws-card-head' },
         h(Icon, { name: 'key', size: 14 }),
         h('span', null, t('公众号配置')),
-        h('span', { className: 'ws-badge ' + (hostStatus.configured ? 'ok' : '') }, hostStatus.configured ? '已连接' : hostStatus.phase === 'error' ? '服务未响应' : t('未配置')),
+        h('span', { className: 'ws-badge ' + (hostStatus.configured ? 'ok' : '') }, hostStatus.configured ? t('已连接') : hostStatus.phase === 'error' ? t('服务未响应') : t('未配置')),
       ),
       hostStatus.phase === 'error'
         ? h('p', { className: 'ws-hint danger' }, hostStatus.message)
         : null,
       hostStatus.configured
-        ? h('p', { className: 'ws-hint' }, `AppID：${hostStatus.appIdPreview ?? '（已保存）'}。密钥只在本机凭据库，页面拿不到明文。`)
+        ? h('p', { className: 'ws-hint' }, `AppID：${hostStatus.appIdPreview ?? t('（已保存）')}。密钥只在本机凭据库，页面拿不到明文。`)
         : h('p', { className: 'ws-hint' }, t('在公众号后台「设置与开发 → 基本配置」拿到 AppID 与 AppSecret。还需要把本机出口 IP 加进白名单。')),
       configOpen
         ? h('div', { className: 'ws-config' },
-          h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, 'AppID'), h('input', { className: 'ws-input', value: appId, placeholder: 'wx 开头的一串字符', onChange: event => setAppId(event.target.value) })),
-          h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, 'AppSecret'), h('input', { className: 'ws-input', type: 'password', value: appSecret, placeholder: '32 位密钥，保存后不再显示', onChange: event => setAppSecret(event.target.value) })),
+          h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, 'AppID'), h('input', { className: 'ws-input', value: appId, placeholder: t('wx 开头的一串字符'), onChange: event => setAppId(event.target.value) })),
+          h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, 'AppSecret'), h('input', { className: 'ws-input', type: 'password', value: appSecret, placeholder: t('32 位密钥，保存后不再显示'), onChange: event => setAppSecret(event.target.value) })),
           h('div', { className: 'ws-row' },
-            h(Button, { variant: 'primary', disabled: configBusy || appId.trim() === '' || appSecret.trim() === '', onClick: saveConfig }, configBusy ? '保存中…' : t('保存')),
+            h(Button, { variant: 'primary', disabled: configBusy || appId.trim() === '' || appSecret.trim() === '', onClick: saveConfig }, configBusy ? t('保存中…') : t('保存')),
             h(Button, { onClick: () => setConfigOpen(false) }, t('取消')),
           ),
         )
         : h('div', { className: 'ws-row' },
-          h(Button, { variant: hostStatus.configured ? 'ghost' : 'primary', onClick: () => setConfigOpen(true), disabled: hostStatus.phase === 'error' }, hostStatus.configured ? '更新密钥' : t('填写密钥')),
+          h(Button, { variant: hostStatus.configured ? 'ghost' : 'primary', onClick: () => setConfigOpen(true), disabled: hostStatus.phase === 'error' }, hostStatus.configured ? t('更新密钥') : t('填写密钥')),
           hostStatus.configured ? h(Button, { onClick: testConnection, disabled: configBusy }, configBusy ? t('测试中…') : t('测试连接')) : null,
           hostStatus.configured ? h(Button, { onClick: clearConfig, disabled: configBusy, variant: 'ghost' }, t('清除')) : null,
         ),
@@ -5159,7 +5206,7 @@ function PublishSection(props) {
       })(),
     ),
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, t('封面（2.35:1）')), h('span', { className: 'ws-group-note' }, doc.meta.coverCustom === true ? '当前是自定义封面' : t('自动按主题生成'))),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('封面（2.35:1）')), h('span', { className: 'ws-group-note' }, doc.meta.coverCustom === true ? t('当前是自定义封面') : t('自动按主题生成'))),
       coverDataUrl !== ''
         ? h('img', { className: 'ws-cover', src: coverDataUrl, alt: t('封面预览') })
         : h('div', { className: 'ws-cover ws-cover-empty' }, t('封面生成中…')),
@@ -5170,7 +5217,7 @@ function PublishSection(props) {
       ),
     ),
     h('div', { className: 'ws-publish-actions' },
-      h(Button, { icon: 'save', variant: 'primary', disabled: busy || hostStatus.phase === 'error', onClick: () => runPublish('draft') }, busy ? '处理中…' : t('保存到草稿箱')),
+      h(Button, { icon: 'save', variant: 'primary', disabled: busy || hostStatus.phase === 'error', onClick: () => runPublish('draft') }, busy ? t('处理中…') : t('保存到草稿箱')),
       confirmPublish
         ? h('div', { className: 'ws-confirm' },
           h('span', null, t('直接发布会占用当天发布次数，确认？')),
@@ -5182,16 +5229,16 @@ function PublishSection(props) {
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },
         h('span', null, t('公众号草稿箱')),
-        h('button', { type: 'button', className: 'ws-link', onClick: loadDrafts, disabled: draftBusy || hostStatus.configured !== true }, draftBusy ? '读取中…' : t('读取最近 10 篇')),
+        h('button', { type: 'button', className: 'ws-link', onClick: loadDrafts, disabled: draftBusy || hostStatus.configured !== true }, draftBusy ? t('读取中…') : t('读取最近 10 篇')),
       ),
       draftBox.phase === 'error' ? h('p', { className: 'ws-hint ws-error-text' }, draftBox.error) : null,
       draftBox.phase === 'ready' && draftBox.items.length === 0 ? h('p', { className: 'ws-hint' }, t('草稿箱是空的。')) : null,
       draftBox.items.map(item => h('div', { key: item.mediaId, className: 'ws-draft-row' },
         h('div', { className: 'ws-draft-main' },
-          h('span', { className: 'ws-draft-title' }, item.title === '' ? '（无标题）' : item.title),
+          h('span', { className: 'ws-draft-title' }, item.title === '' ? t('（无标题）') : item.title),
           h('span', { className: 'ws-draft-meta' }, item.updateTime > 0 ? new Date(item.updateTime * 1000).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : t('时间未知')),
         ),
-        h('button', { type: 'button', className: 'ws-link danger', onClick: () => removeDraft(item.mediaId) }, deleteArm === item.mediaId ? '确认删除' : t('删除')),
+        h('button', { type: 'button', className: 'ws-link danger', onClick: () => removeDraft(item.mediaId) }, deleteArm === item.mediaId ? t('确认删除') : t('删除')),
       )),
       h('p', { className: 'ws-hint' }, t('删除会直接移除公众号后台的草稿，不影响已发布的文章。')),
     ),
@@ -5212,12 +5259,12 @@ function PublishSection(props) {
       : null,
     result
       ? h('div', { className: 'ws-result' },
-        h('strong', null, result.kind === 'published' ? '已提交发布' : t('已进入草稿箱')),
+        h('strong', null, result.kind === 'published' ? t('已提交发布') : t('已进入草稿箱')),
         result.kind === 'draft' ? h('p', null, result.count > 1 ? t('已写入 {count} 篇多图文草稿，到公众号后台「内容管理 → 草稿箱」查看。', { count: result.count }) : t('到公众号后台「内容管理 → 草稿箱」就能看到这篇，手机预览后手动发布。')) : null,
         result.kind === 'published'
           ? h('p', null, t('发布状态：{status}', { status: result.status?.statusText ?? t('发布中，稍后可在后台查看') }))
           : null,
-        result.warnings && result.warnings.length > 0 ? h('p', null, `提示：${result.warnings.join('；')}`) : null,
+        result.warnings && result.warnings.length > 0 ? h('p', null, t('提示：{warnings}', { warnings: result.warnings.join('；') })) : null,
         h('a', { className: 'ws-link', href: 'https://mp.weixin.qq.com/', target: '_blank', rel: 'noreferrer' }, t('打开公众号后台')),
       )
       : null,
@@ -5507,6 +5554,7 @@ const STUDIO_CSS = `
 .ws-stage{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;gap:14px;padding:20px 18px 26px}
 .ws-phone{position:relative;width:410px;max-width:100%;flex:none;display:flex;flex-direction:column;max-height:calc(100% - 40px);padding:4px;border-radius:62px;background:linear-gradient(150deg,#55565b 0%,#26272b 26%,#1a1b1e 52%,#2f3035 74%,#5c5d63 100%);box-shadow:0 34px 78px rgba(0,0,0,.30),0 3px 10px rgba(0,0,0,.22),inset 0 0 0 1px rgba(255,255,255,.18)}
 .ws-screen{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;background:#fff;border-radius:58px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
+.ws-lang-switch{margin-top:8px;align-self:flex-start}
 .ws-device-switch{display:flex;gap:2px;border:1px solid var(--ws-border);border-radius:8px;padding:2px;background:var(--ws-surface2)}
 .ws-device-btn{border:0;background:transparent;color:var(--ws-muted);font:inherit;font-size:11px;line-height:1.4;padding:2px 8px;border-radius:6px;cursor:pointer}
 .ws-device-btn.on{background:var(--ws-glass-strong);color:var(--ws-text);box-shadow:0 1px 2px rgba(0,0,0,.08)}

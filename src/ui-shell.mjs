@@ -485,7 +485,7 @@ function StudioPanel(props) {
     const html = serializeNodes(tree.nodes)
     try {
       const mode = await copyRichHtml(html)
-      toast(mode === 'rich' ? '已复制带样式的正文，粘到公众号编辑器即可' : t('已复制，样式可能不完整'), 'success')
+      toast(mode === 'rich' ? t('已复制带样式的正文，粘到公众号编辑器即可') : t('已复制，样式可能不完整'), 'success')
     } catch (error) {
       toast(error.message || t('复制失败'), 'error')
     }
@@ -582,7 +582,7 @@ function StudioPanel(props) {
       const shrunk = await shrinkMarkdownImages(String(text ?? ''))
       const body = (await materializeInlineImages(shrunk, { kind: 'import' })).trim()
       bumpImages()
-      if (body.length < 20) throw new Error('这份文档里没有可用的正文')
+      if (body.length < 20) throw new Error(t('这份文档里没有可用的正文'))
       const parsedNow = parseArticle(body)
       const designNow = autoCompose(parsedNow.blocks, body, 0).design
       store.addDoc(body, designNow)
@@ -652,7 +652,7 @@ function StudioPanel(props) {
         h('span', { className: 'ws-typing-dot' }),
         h('span', { className: 'ws-typing-dot' }),
         h('span', { className: 'ws-typing-dot' }),
-        h('span', null, 'AI 正在按内容精排版式…'),
+        h('span', null, t('AI 正在按内容精排版式…')),
       )
       : null,
     h(ToastStack, { toasts }),

@@ -43,11 +43,11 @@ function TopBar(props) {
       }
       const content = await file.text()
       const parsed = JSON.parse(content)
-      if (!parsed || typeof parsed.text !== 'string') throw new Error('这个 JSON 里没有可用的正文')
+      if (!parsed || typeof parsed.text !== 'string') throw new Error(t('这个 JSON 里没有可用的正文'))
       const importedText = await materializeInlineImages(parsed.text, { kind: 'import' })
       bumpImages()
       store.addDoc(importedText, parsed.design, parsed.meta)
-      toast(`已导入「${parsed.meta?.title || '未命名草稿'}」`, 'success')
+      toast(`已导入「${parsed.meta?.title || t('未命名草稿')}」`, 'success')
     } catch (error) {
       toast(error.message || t('导入失败'), 'error')
     }
@@ -117,6 +117,25 @@ function TopBar(props) {
               title: color,
               onClick: () => setAppearance({ ...appearance, accent: color }),
             })),
+          ),
+          h('div', { className: 'ws-appearance-sub' }, t('界面语言')),
+          h('div', { className: 'ws-device-switch ws-lang-switch' },
+            [['', t('跟随应用')], ['zh', t('中文')], ['en', 'English']].map(([value, label]) => {
+              let current = ''
+              try { current = window.localStorage.getItem('dsh.wechat-studio.uiLang') ?? '' } catch { current = '' }
+              return h('button', {
+                key: value === '' ? 'auto' : value,
+                type: 'button',
+                className: 'ws-device-btn' + (current === value ? ' on' : ''),
+                onClick: () => {
+                  try {
+                    if (value === '') window.localStorage.removeItem('dsh.wechat-studio.uiLang')
+                    else window.localStorage.setItem('dsh.wechat-studio.uiLang', value)
+                  } catch { /* private mode */ }
+                  window.location.reload()
+                },
+              }, label)
+            }),
           ),
         )
         : null,

@@ -112,6 +112,7 @@ test('工作台可以切换排版、装饰 tab 与外观皮肤', async () => {
     await new Promise(resolve => setTimeout(resolve, 120))
     const popover = container.querySelector('.ws-appearance')
     assert.ok(popover, 'appearance popover opens')
+    assert.ok(popover.querySelector('.ws-lang-switch'), 'language switch renders')
     const dark = [...popover.querySelectorAll('.ws-skin')].find(button => button.textContent.includes('深色玻璃'))
     dark.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await new Promise(resolve => setTimeout(resolve, 120))
