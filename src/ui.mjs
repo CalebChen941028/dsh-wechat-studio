@@ -312,6 +312,7 @@ function useDocumentStore() {
   return {
     docs, doc, activeId, updateDoc, updateDesign, updateMeta,
     undo, redo, canUndo: past.length > 0, canRedo: future.length > 0, persistError,
+    historyTexts: () => [...pastRef.current, ...futureRef.current].map(entry => entry.text),
     selectDoc, addDoc, removeDoc,
     getDoc: () => docRef.current,
   }
@@ -342,6 +343,24 @@ function StudioPanel(props) {
   const [selectedBlock, setSelectedBlock] = React.useState(null)
   const [toasts, setToasts] = React.useState([])
   const [hostStatus, setHostStatus] = React.useState({ phase: 'loading', configured: false, appIdPreview: null, message: '' })
+  const [imageReady, setImageReady] = React.useState(false)
+  const [imageVersion, setImageVersion] = React.useState(0)
+  const bumpImages = React.useCallback(() => setImageVersion(value => value + 1), [])
+  React.useEffect(() => {
+    let cancelled = false
+    loadImages().then(() => {
+      if (cancelled) return
+      setImageReady(true)
+      setImageVersion(value => value + 1)
+    })
+    return () => { cancelled = true }
+  }, [])
+  React.useEffect(() => {
+    if (!imageReady) return undefined
+    // Orphaned images should not occupy IndexedDB forever.
+    const timer = setTimeout(() => { pruneImages([...store.docs.map(entry => entry.text), ...store.historyTexts()]) }, 3000)
+    return () => clearTimeout(timer)
+  }, [store.docs, imageReady])
   const [appearance, setAppearance] = React.useState(loadAppearance)
   const hostDark = useHostDark()
   React.useEffect(() => {
@@ -412,10 +431,13 @@ function StudioPanel(props) {
     return () => { cancelled = true }
   }, [])
 
-  const parsed = React.useMemo(() => parseArticle(doc.text), [doc.text])
+  const renderText = React.useMemo(() => expandImageRefs(doc.text), [doc.text, imageVersion])
+  // Counting/ranking must not count base64 payloads as article characters.
+  const measureText = React.useMemo(() => doc.text.replace(/data:image\/[a-zA-Z+]+;base64,[^)\s]+/g, ''), [doc.text])
+  const parsed = React.useMemo(() => parseArticle(renderText), [renderText])
   const design = React.useMemo(() => composeDesign(doc.design), [doc.design])
-  const features = React.useMemo(() => measure(parsed.blocks, doc.text), [parsed.blocks, doc.text])
-  const analysis = React.useMemo(() => autoCompose(parsed.blocks, doc.text, 0).analysis, [parsed.blocks, doc.text])
+  const features = React.useMemo(() => measure(parsed.blocks, measureText), [parsed.blocks, measureText])
+  const analysis = React.useMemo(() => autoCompose(parsed.blocks, measureText, 0).analysis, [parsed.blocks, measureText])
   const date = formatDate(doc.updatedAt)
   const meta = {
     title: doc.meta.title.trim(),
@@ -445,6 +467,10 @@ function StudioPanel(props) {
   const copyArticle = async () => {
     if (doc.text.trim() === '') {
       toast('编辑区还是空的，先写点内容再复制', 'error')
+      return
+    }
+    if (hasUnresolvedImageRefs(doc.text)) {
+      toast('正文图片还在从本地图库读取，等一秒再复制。', 'error')
       return
     }
     const tree = buildArticle({ blocks: parsed.blocks, design, meta })
@@ -545,7 +571,9 @@ function StudioPanel(props) {
     if (!file) return
     try {
       const { text, images } = await readDocumentFile(file)
-      const body = (await shrinkMarkdownImages(String(text ?? ''))).trim()
+      const shrunk = await shrinkMarkdownImages(String(text ?? ''))
+      const body = (await materializeInlineImages(shrunk, { kind: 'import' })).trim()
+      bumpImages()
       if (body.length < 20) throw new Error('这份文档里没有可用的正文')
       const parsedNow = parseArticle(body)
       const designNow = autoCompose(parsedNow.blocks, body, 0).design
@@ -561,7 +589,7 @@ function StudioPanel(props) {
     } catch (error) {
       toast(error.message || '导入失败', 'error')
     }
-  }, [store, autoRefine, narrow, refineWithAi, toast])
+  }, [store, autoRefine, narrow, refineWithAi, toast, bumpImages])
 
   const openDesign = (nextTab) => {
     setTab(nextTab)
@@ -598,10 +626,11 @@ function StudioPanel(props) {
       h(DocRail, {
         store, parsed, features, textareaRef, toast, narrow, selectedBlock, setSelectedBlock,
         onImportDocument: importDocument, onContentPasted: () => scheduleAutoCompose(true),
+        onImagesChanged: bumpImages,
         onOpenAi: () => openDesign('ai'),
       }),
       h(PreviewStage, {
-        article, design, doc, parsed, features, selectedBlock, setSelectedBlock, store, toast, narrow, date,
+        article, design, doc, parsed, features, selectedBlock, setSelectedBlock, store, toast, narrow, date, onImagesChanged: bumpImages,
       }),
       compact && !narrow && rightOpen ? h('div', { className: 'ws-scrim', onClick: () => setRightOpen(false) }) : null,
       h(DesignPanel, {
@@ -645,7 +674,7 @@ function TopBar(props) {
 
   const exportHtml = () => {
     const tree = buildArticle({
-      blocks: parseArticle(store.doc.text).blocks,
+      blocks: parseArticle(expandImageRefs(store.doc.text)).blocks,
       design,
       meta: { title: store.doc.meta.title, author: store.doc.meta.author, date: formatDate(store.doc.updatedAt), readingMinutes: features.readingMinutes },
     })
@@ -653,11 +682,11 @@ function TopBar(props) {
     setMenuOpen(false)
   }
   const exportMarkdown = () => {
-    downloadFile(`${(store.doc.meta.title || 'wechat-article').slice(0, 40)}.md`, store.doc.text, 'text/markdown;charset=utf-8')
+    downloadFile(`${(store.doc.meta.title || 'wechat-article').slice(0, 40)}.md`, expandImageRefs(store.doc.text), 'text/markdown;charset=utf-8')
     setMenuOpen(false)
   }
   const exportJson = () => {
-    downloadFile('wechat-studio-draft.json', JSON.stringify(store.doc, null, 2), 'application/json;charset=utf-8')
+    downloadFile('wechat-studio-draft.json', JSON.stringify({ ...store.doc, text: expandImageRefs(store.doc.text) }, null, 2), 'application/json;charset=utf-8')
     setMenuOpen(false)
   }
   const importFile = async (event) => {
@@ -672,7 +701,9 @@ function TopBar(props) {
       const content = await file.text()
       const parsed = JSON.parse(content)
       if (!parsed || typeof parsed.text !== 'string') throw new Error('这个 JSON 里没有可用的正文')
-      store.addDoc(parsed.text, parsed.design, parsed.meta)
+      const importedText = await materializeInlineImages(parsed.text, { kind: 'import' })
+      bumpImages()
+      store.addDoc(importedText, parsed.design, parsed.meta)
       toast(`已导入「${parsed.meta?.title || '未命名草稿'}」`, 'success')
     } catch (error) {
       toast(error.message || '导入失败', 'error')
@@ -769,7 +800,7 @@ function TopBar(props) {
  * ------------------------------------------------------------------ */
 
 function DocRail(props) {
-  const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onImportDocument, onContentPasted, onOpenAi } = props
+  const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onImportDocument, onContentPasted, onOpenAi, onImagesChanged } = props
   const { doc } = store
   const [docMenu, setDocMenu] = React.useState(false)
   React.useEffect(() => {
@@ -822,7 +853,9 @@ function DocRail(props) {
       const raw = await readFileAsDataUrl(file)
       const compressed = await compressImage(raw, 720)
       const alt = String(file.name ?? '配图').replace(/\.[^.]+$/, '') || '配图'
-      insertText(`\n\n![${alt}](${compressed.dataUrl})\n\n`)
+      const ref = await materializeImage(compressed.dataUrl, { kind: 'content' })
+      insertText(`\n\n![${alt}](${ref})\n\n`)
+      if (typeof onImagesChanged === 'function') onImagesChanged()
       toast('图片已插入正文，发布时会自动转存到微信 CDN', 'success')
     } catch (error) {
       toast(error.message || '图片处理失败', 'error')
@@ -964,6 +997,15 @@ function DocRail(props) {
           return
         }
         const pasted = event.clipboardData?.getData('text') ?? ''
+        if (pasted.includes('data:image/')) {
+          event.preventDefault()
+          materializeInlineImages(pasted, { kind: 'paste' }).then(text => {
+            insertText(text)
+            if (typeof onImagesChanged === 'function') onImagesChanged()
+            if (text.trim().length >= 240) onContentPasted()
+          }).catch(error => toast(error.message || '图片处理失败', 'error'))
+          return
+        }
         const element = event.currentTarget
         const replacingAll = element.selectionStart === 0 && element.selectionEnd === element.value.length
         const before = element.value.trim().length
@@ -1098,7 +1140,7 @@ function WechatPhoneChrome(props) {
 }
 
 function PreviewStage(props) {
-  const { article, design, doc, parsed, features, selectedBlock, setSelectedBlock, store, toast, narrow, date } = props
+  const { article, design, doc, parsed, features, selectedBlock, setSelectedBlock, store, toast, narrow, date, onImagesChanged } = props
   const previewImageRef = React.useRef(null)
   const pendingReplaceRef = React.useRef(null)
   const replaceImage = (blockIndex) => {
@@ -1112,13 +1154,15 @@ function PreviewStage(props) {
       const raw = await readFileAsDataUrl(file)
       const compressed = await compressImage(raw, 1200)
       const alt = String(file.name ?? '配图').replace(/\.[^.]+$/, '') || '配图'
+      const ref = await materializeImage(compressed.dataUrl, { kind: 'content' })
       const lines = doc.text.split('\n')
       const next = [
         ...lines.slice(0, block.lines[0]),
-        `![${alt}](${compressed.dataUrl})`,
+        `![${alt}](${ref})`,
         ...lines.slice(block.lines[1] + 1),
       ].join('\n')
       store.updateDoc(current => ({ ...current, text: next }))
+      if (typeof onImagesChanged === 'function') onImagesChanged()
       toast('图片已替换')
     } catch (error) {
       toast(error.message || '图片处理失败', 'error')
@@ -1130,10 +1174,12 @@ function PreviewStage(props) {
       const raw = await readFileAsDataUrl(file)
       const compressed = await compressImage(raw, 1200)
       const alt = String(file.name ?? '配图').replace(/\.[^.]+$/, '') || '配图'
+      const ref = await materializeImage(compressed.dataUrl, { kind: 'content' })
       store.updateDoc(current => ({
         ...current,
-        text: `${current.text.trimEnd()}${current.text.trim() === '' ? '' : '\n\n'}![${alt}](${compressed.dataUrl})`,
+        text: `${current.text.trimEnd()}${current.text.trim() === '' ? '' : '\n\n'}![${alt}](${ref})`,
       }))
+      if (typeof onImagesChanged === 'function') onImagesChanged()
       toast('插图已加到正文末尾')
     } catch (error) {
       toast(error.message || '图片处理失败', 'error')
@@ -1868,6 +1914,7 @@ function PublishSection(props) {
   }
 
   const runPublish = async (mode) => {
+    if (hasUnresolvedImageRefs(doc.text)) { toast('正文图片还在从本地图库读取，等一秒再发布。', 'error'); return }
     if (title === '') { toast('先填文章标题', 'error'); return }
     setBusy(true)
     setConfirmPublish(false)
