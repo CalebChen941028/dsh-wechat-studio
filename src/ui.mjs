@@ -137,7 +137,7 @@ function createDocument(seedText, design, meta) {
     id: docId(),
     text,
     design: composed,
-    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', ...(meta ?? {}) },
+    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }
@@ -188,6 +188,17 @@ function useElementWidth(ref) {
  * Document store (drafts + undo/redo + persistence)
  * ------------------------------------------------------------------ */
 
+/** Persist only durable fields: generated covers are rebuilt from the theme. */
+function serializeDocs(docs) {
+  return docs.map(entry => {
+    if (entry?.meta?.coverCustom === true) return entry
+    if (typeof entry?.meta?.coverDataUrl === 'string' && entry.meta.coverDataUrl !== '') {
+      return { ...entry, meta: { ...entry.meta, coverDataUrl: '' } }
+    }
+    return entry
+  })
+}
+
 function useDocumentStore() {
   const initialRef = React.useRef(null)
   if (initialRef.current === null) initialRef.current = loadStore()
@@ -195,6 +206,7 @@ function useDocumentStore() {
   const [activeId, setActiveId] = React.useState(initialRef.current.activeId)
   const [past, setPast] = React.useState([])
   const [future, setFuture] = React.useState([])
+  const [persistError, setPersistError] = React.useState(false)
   const lastPushRef = React.useRef({ key: '', at: 0 })
 
   const doc = React.useMemo(
@@ -209,9 +221,12 @@ function useDocumentStore() {
   React.useEffect(() => {
     const timer = setTimeout(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ docs, activeId }))
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ docs: serializeDocs(docs), activeId }))
+        setPersistError(false)
       } catch {
-        // Quota or privacy mode: keep working in memory.
+        // Quota or privacy mode: the panel keeps working in memory, and the
+        // header shows a warning so the draft is not lost silently.
+        setPersistError(true)
       }
     }, 350)
     return () => clearTimeout(timer)
@@ -296,7 +311,7 @@ function useDocumentStore() {
 
   return {
     docs, doc, activeId, updateDoc, updateDesign, updateMeta,
-    undo, redo, canUndo: past.length > 0, canRedo: future.length > 0,
+    undo, redo, canUndo: past.length > 0, canRedo: future.length > 0, persistError,
     selectDoc, addDoc, removeDoc,
     getDoc: () => docRef.current,
   }
@@ -369,6 +384,17 @@ function StudioPanel(props) {
     setToasts(list => [...list, { id, message, kind }])
     setTimeout(() => setToasts(list => list.filter(entry => entry.id !== id)), kind === 'error' ? 6000 : 3800)
   }, [])
+  const persistWarnedRef = React.useRef(false)
+  React.useEffect(() => {
+    if (!store.persistError) {
+      persistWarnedRef.current = false
+      return
+    }
+    if (persistWarnedRef.current) return
+    persistWarnedRef.current = true
+    toast('本地存储已满，这轮修改只保存在内存里，刷新会丢失。请导出草稿 JSON，或删掉带大图的草稿。', 'error')
+  }, [store.persistError, toast])
+
 
   // Host capability probe. A failure is a normal state here: the panel still
   // renders and copies HTML, only publishing stays disabled.
@@ -746,6 +772,16 @@ function DocRail(props) {
   const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onImportDocument, onContentPasted, onOpenAi } = props
   const { doc } = store
   const [docMenu, setDocMenu] = React.useState(false)
+  React.useEffect(() => {
+    if (!docMenu) return undefined
+    const onPointerDown = (event) => {
+      const target = event.target
+      if (target instanceof Element && target.closest('.ws-doc-switch') !== null) return
+      setDocMenu(false)
+    }
+    document.addEventListener('mousedown', onPointerDown, true)
+    return () => document.removeEventListener('mousedown', onPointerDown, true)
+  }, [docMenu])
   const [dragging, setDragging] = React.useState(false)
   const uploadRef = React.useRef(null)
   const imageRef = React.useRef(null)
@@ -1064,6 +1100,30 @@ function WechatPhoneChrome(props) {
 function PreviewStage(props) {
   const { article, design, doc, parsed, features, selectedBlock, setSelectedBlock, store, toast, narrow, date } = props
   const previewImageRef = React.useRef(null)
+  const pendingReplaceRef = React.useRef(null)
+  const replaceImage = (blockIndex) => {
+    pendingReplaceRef.current = blockIndex
+    previewImageRef.current?.click()
+  }
+  const replaceImageFile = async (blockIndex, file) => {
+    const block = sourceBlocks[blockIndex]
+    if (!block || block.type !== 'image') return
+    try {
+      const raw = await readFileAsDataUrl(file)
+      const compressed = await compressImage(raw, 1200)
+      const alt = String(file.name ?? '配图').replace(/\.[^.]+$/, '') || '配图'
+      const lines = doc.text.split('\n')
+      const next = [
+        ...lines.slice(0, block.lines[0]),
+        `![${alt}](${compressed.dataUrl})`,
+        ...lines.slice(block.lines[1] + 1),
+      ].join('\n')
+      store.updateDoc(current => ({ ...current, text: next }))
+      toast('图片已替换')
+    } catch (error) {
+      toast(error.message || '图片处理失败', 'error')
+    }
+  }
   const insertPreviewImage = async (file) => {
     if (!file) return
     try {
@@ -1150,8 +1210,12 @@ function PreviewStage(props) {
         style: { display: 'none' },
         onChange: event => {
           const file = event.target.files?.[0]
+          const replaceIndex = pendingReplaceRef.current
+          pendingReplaceRef.current = null
           event.target.value = ''
-          if (file) insertPreviewImage(file)
+          if (!file) return
+          if (replaceIndex !== null) replaceImageFile(replaceIndex, file)
+          else insertPreviewImage(file)
         },
       }),
       h('div', { className: 'ws-stage-bar' },
@@ -1166,7 +1230,7 @@ function PreviewStage(props) {
 }
 
 function ArticleBody(props) {
-  const { root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel } = props
+  const { root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage } = props
   const [hovered, setHovered] = React.useState(null)
   const children = root.children
 
@@ -1189,6 +1253,7 @@ function ArticleBody(props) {
     isSelected ? h('div', { className: 'ws-block-tag' }, blockLabel(block)) : null,
     content,
     h('div', { className: 'ws-block-tools' },
+      block.type === 'image' ? h('button', { type: 'button', title: '替换图片', onClick: event => { event.stopPropagation(); replaceImage(blockIndex) } }, h(Icon, { name: 'image', size: 12 })) : null,
       h('button', { type: 'button', title: '上移', onClick: event => { event.stopPropagation(); moveBlock(blockIndex, -1) } }, h(Icon, { name: 'arrowUp', size: 12 })),
       h('button', { type: 'button', title: '下移', onClick: event => { event.stopPropagation(); moveBlock(blockIndex, 1) } }, h(Icon, { name: 'arrowDown', size: 12 })),
       h('button', { type: 'button', title: '删除这一段', onClick: event => { event.stopPropagation(); removeBlock(blockIndex) } }, h(Icon, { name: 'trash', size: 12 })),
@@ -1627,6 +1692,20 @@ function DecorSection(props) {
       )),
     ),
     h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' }, h('span', null, '图片')),
+      h('label', { className: 'ws-field' },
+        h('span', { className: 'ws-field-label' }, '宽度'),
+        h('select', { className: 'ws-input', value: String(design.decor.imageWidth), onChange: event => set({ imageWidth: Number(event.target.value) }) },
+          [['100', '通栏'], ['85', '大图'], ['70', '中等'], ['50', '小图']].map(([value, label]) => h('option', { key: value, value }, label))),
+      ),
+      h('label', { className: 'ws-field' },
+        h('span', { className: 'ws-field-label' }, '对齐'),
+        h('select', { className: 'ws-input', value: design.decor.imageAlign, onChange: event => set({ imageAlign: event.target.value }) },
+          [['center', '居中'], ['left', '左对齐'], ['right', '右对齐']].map(([value, label]) => h('option', { key: value, value }, label))),
+      ),
+      h('p', { className: 'ws-hint' }, '图片样式选「通栏」时会忽略宽度。悬停图片可以点工具条里的图标换图。'),
+    ),
+    h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, '显示项')),
       h(Toggle, { label: '标题下方显示作者与日期', checked: design.decor.showMeta, onChange: value => set({ showMeta: value }) }),
       h(Toggle, { label: '话题标签', checked: design.decor.showEyebrow, onChange: value => set({ showEyebrow: value }) }),
@@ -1668,6 +1747,11 @@ function PublishSection(props) {
   const [error, setError] = React.useState(null)
   const [confirmPublish, setConfirmPublish] = React.useState(false)
   const [coverBusy, setCoverBusy] = React.useState(false)
+  const [draftBox, setDraftBox] = React.useState({ phase: 'idle', items: [], error: '' })
+  const [draftBusy, setDraftBusy] = React.useState(false)
+  const [deleteArm, setDeleteArm] = React.useState('')
+  const deleteArmTimer = React.useRef(undefined)
+  React.useEffect(() => () => clearTimeout(deleteArmTimer.current), [])
   const coverInputRef = React.useRef(null)
   const title = (doc.meta.title.trim() || parsed.title || '').trim()
   const author = doc.meta.author.trim()
@@ -1753,6 +1837,36 @@ function PublishSection(props) {
     }
   }
 
+  const loadDrafts = async () => {
+    setDraftBusy(true)
+    try {
+      const value = await callHost('listDrafts', { count: 10 })
+      setDraftBox({ phase: 'ready', items: Array.isArray(value.items) ? value.items : [], error: '' })
+    } catch (failure) {
+      setDraftBox({ phase: 'error', items: [], error: failure.message || '读取草稿箱失败' })
+    } finally {
+      setDraftBusy(false)
+    }
+  }
+
+  const removeDraft = async (mediaId) => {
+    if (deleteArm !== mediaId) {
+      setDeleteArm(mediaId)
+      clearTimeout(deleteArmTimer.current)
+      deleteArmTimer.current = setTimeout(() => setDeleteArm(''), 4000)
+      return
+    }
+    clearTimeout(deleteArmTimer.current)
+    setDeleteArm('')
+    try {
+      await callHost('deleteDraft', { mediaId })
+      setDraftBox(current => ({ ...current, items: current.items.filter(item => item.mediaId !== mediaId) }))
+      toast('草稿已删除')
+    } catch (failure) {
+      toast(failure.message || '删除失败', 'error')
+    }
+  }
+
   const runPublish = async (mode) => {
     if (title === '') { toast('先填文章标题', 'error'); return }
     setBusy(true)
@@ -1825,6 +1939,8 @@ function PublishSection(props) {
         content: html,
         thumbMediaId: coverValue.mediaId,
         contentSourceUrl: doc.meta.sourceUrl.trim() || undefined,
+        needOpenComment: doc.meta.needOpenComment === true,
+        onlyFansCanComment: doc.meta.needOpenComment === true && doc.meta.onlyFansCanComment === true,
       }, { timeoutMs: 120000 })
       const warnings = Array.isArray(draft.warnings) ? draft.warnings : []
       setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done', detail: warnings.join('；') || draft.mediaId } : step)))
@@ -1899,6 +2015,22 @@ function PublishSection(props) {
       h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, '原文链接'), h('input', { className: 'ws-input', value: doc.meta.sourceUrl, placeholder: '可选，https://', onChange: event => store.updateMeta({ sourceUrl: event.target.value }) })),
     ),
     h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' }, h('span', null, '发布选项')),
+      h(Toggle, {
+        label: '允许读者评论',
+        checked: doc.meta.needOpenComment === true,
+        onChange: value => store.updateMeta(value ? { needOpenComment: true } : { needOpenComment: false, onlyFansCanComment: false }),
+      }),
+      doc.meta.needOpenComment === true
+        ? h(Toggle, {
+          label: '仅关注者可评论',
+          checked: doc.meta.onlyFansCanComment === true,
+          onChange: value => store.updateMeta({ onlyFansCanComment: value }),
+        })
+        : null,
+      h('p', { className: 'ws-hint' }, '评论设置会写进草稿；公众号后台仍可再改。'),
+    ),
+    h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, '封面（2.35:1）'), h('span', { className: 'ws-group-note' }, doc.meta.coverCustom === true ? '当前是自定义封面' : '自动按主题生成')),
       coverDataUrl !== ''
         ? h('img', { className: 'ws-cover', src: coverDataUrl, alt: '封面预览' })
@@ -1918,6 +2050,22 @@ function PublishSection(props) {
           h(Button, { variant: 'ghost', onClick: () => setConfirmPublish(false) }, '再想想'),
         )
         : h(Button, { icon: 'send', variant: 'solid', disabled: busy || hostStatus.phase === 'error', onClick: () => setConfirmPublish(true) }, '直接发布'),
+    ),
+    h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' },
+        h('span', null, '公众号草稿箱'),
+        h('button', { type: 'button', className: 'ws-link', onClick: loadDrafts, disabled: draftBusy || hostStatus.configured !== true }, draftBusy ? '读取中…' : '读取最近 10 篇'),
+      ),
+      draftBox.phase === 'error' ? h('p', { className: 'ws-hint ws-error-text' }, draftBox.error) : null,
+      draftBox.phase === 'ready' && draftBox.items.length === 0 ? h('p', { className: 'ws-hint' }, '草稿箱是空的。') : null,
+      draftBox.items.map(item => h('div', { key: item.mediaId, className: 'ws-draft-row' },
+        h('div', { className: 'ws-draft-main' },
+          h('span', { className: 'ws-draft-title' }, item.title === '' ? '（无标题）' : item.title),
+          h('span', { className: 'ws-draft-meta' }, item.updateTime > 0 ? new Date(item.updateTime * 1000).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '时间未知'),
+        ),
+        h('button', { type: 'button', className: 'ws-link danger', onClick: () => removeDraft(item.mediaId) }, deleteArm === item.mediaId ? '确认删除' : '删除'),
+      )),
+      h('p', { className: 'ws-hint' }, '删除会直接移除公众号后台的草稿，不影响已发布的文章。'),
     ),
     steps.length > 0
       ? h('div', { className: 'ws-steps' }, steps.map((step, index) => h('div', { key: index, className: 'ws-step ' + step.state },
@@ -2329,6 +2477,12 @@ const STUDIO_CSS = `
 .ws-toggle-track.on .ws-toggle-knob{transform:translateX(13px)}
 .ws-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .ws-config{display:flex;flex-direction:column;gap:8px;margin:8px 0 4px;padding:10px;border:1px dashed var(--ws-border2);border-radius:8px}
+.ws-draft-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--ws-border)}
+.ws-draft-row:first-of-type{border-top:0}
+.ws-draft-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ws-draft-title{font-size:12.5px;color:var(--ws-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-draft-meta{font-size:11px;color:var(--ws-muted)}
+.ws-error-text{color:var(--ws-danger)}
 .ws-cover{width:100%;aspect-ratio:900/383;border-radius:8px;object-fit:cover;display:block;border:1px solid var(--ws-border)}
 .ws-cover-empty{display:flex;align-items:center;justify-content:center;background:var(--ws-surface2);color:var(--ws-muted);font-size:11.5px}
 .ws-publish-actions{display:flex;flex-direction:column;gap:8px}

@@ -349,6 +349,57 @@ export function createWechatClient({ fetchImpl = fetch, timeoutMs = DEFAULT_TIME
     },
 
     /**
+     * 读取公众号草稿箱。
+     * @param {{ accessToken: string, offset?: number, count?: number }} input 分页参数。
+     * @returns {Promise<{ totalCount: number, items: Array<object> }>} 草稿摘要。
+     */
+    async listDrafts({ accessToken, offset = 0, count = 10 } = {}) {
+      const endpoint = 'cgi-bin/draft/batchget'
+      requireToken(accessToken, endpoint)
+      const data = await call({
+        url: withAccessToken(`${WECHAT_API_BASE}/${endpoint}`, accessToken),
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ offset, count, no_content: 0 }),
+        endpoint,
+      })
+      const items = Array.isArray(data.item) ? data.item : []
+      return {
+        totalCount: Number(data.total_count) || 0,
+        items: items.map((item) => {
+          const news = item?.content?.news_item?.[0] ?? {}
+          return {
+            mediaId: typeof item.media_id === 'string' ? item.media_id : '',
+            title: typeof news.title === 'string' ? news.title : '',
+            digest: typeof news.digest === 'string' ? news.digest : '',
+            updateTime: Number(item.update_time) || 0,
+          }
+        }).filter(item => item.mediaId !== ''),
+      }
+    },
+
+    /**
+     * 删除一篇草稿。
+     * @param {{ accessToken: string, mediaId: string }} input 草稿 media_id。
+     * @returns {Promise<{ deleted: true }>} 删除结果。
+     */
+    async deleteDraft({ accessToken, mediaId } = {}) {
+      const endpoint = 'cgi-bin/draft/delete'
+      requireToken(accessToken, endpoint)
+      if (typeof mediaId !== 'string' || mediaId === '') {
+        throw new WechatApiError({ errcode: null, errmsg: '缺少草稿 media_id', endpoint, kind: 'response' })
+      }
+      await call({
+        url: withAccessToken(`${WECHAT_API_BASE}/${endpoint}`, accessToken),
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ media_id: mediaId }),
+        endpoint,
+      })
+      return { deleted: true }
+    },
+
+    /**
      * 提交发布任务。
      * @param {{ accessToken: string, mediaId: string }} input 草稿 media_id。
      * @returns {Promise<{ publishId: string }>} 发布任务 id。

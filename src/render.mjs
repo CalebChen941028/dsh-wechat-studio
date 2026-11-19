@@ -532,8 +532,16 @@ function renderImage(block, ctx) {
   const caption = alt === ''
     ? []
     : [section({ fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '8px', letterSpacing: '0.04em' }, text(alt))]
-  const base = { width: '100%', display: 'block', boxSizing: 'border-box' }
-  const wrap = (style, children) => section({ margin: `0 0 ${type.paraGap + 2}px`, textAlign: 'center', ...style }, children)
+  const width = design.decor.imageStyle === 'full' ? 100 : design.decor.imageWidth
+  const align = design.decor.imageAlign
+  const base = {
+    width: `${width}%`,
+    display: 'block',
+    boxSizing: 'border-box',
+    marginLeft: align === 'left' ? '0' : 'auto',
+    marginRight: align === 'right' ? '0' : 'auto',
+  }
+  const wrap = (style, children) => section({ margin: `0 0 ${type.paraGap + 2}px`, textAlign: align, ...style }, children)
 
   switch (design.decor.imageStyle) {
     case 'rounded':

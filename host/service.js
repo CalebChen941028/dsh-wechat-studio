@@ -188,6 +188,52 @@ function decodeImageDataUrl(dataUrl, { maxBytes, label, name }) {
  * @param {{ ctx: object, fetchImpl?: typeof fetch }} options 上下文与 fetch 注入。
  * @returns {object} 动作方法集合。
  */
+/** Hostnames that never make sense as public article images. */
+const PRIVATE_HOST_SUFFIXES = ['.localhost', '.local', '.internal', '.home.arpa']
+
+/** Parse a dotted IPv4 into octets. */
+function parseIpv4(hostname) {
+  const parts = hostname.split('.')
+  if (parts.length !== 4) return null
+  const values = parts.map(part => (/^\d{1,3}$/.test(part) ? Number(part) : Number.NaN))
+  if (values.some(value => !Number.isInteger(value) || value < 0 || value > 255)) return null
+  return values
+}
+
+/** Loopback, private, link-local and reserved IPv4 ranges. */
+function isPrivateIpv4([a, b]) {
+  if (a === 10 || a === 127 || a === 0 || a === 255) return true
+  if (a === 169 && b === 254) return true
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 192 && b === 168) return true
+  if (a === 100 && b >= 64 && b <= 127) return true
+  if (a === 198 && (b === 18 || b === 19)) return true
+  if (a >= 224) return true
+  if (a === 192 && b === 0) return true
+  if (a === 198 && b === 51) return true
+  if (a === 203 && b === 0) return true
+  return false
+}
+
+/** True for localhost, private IP literals and local-only suffixes. */
+function isPrivateHostname(hostname) {
+  const host = String(hostname ?? '').toLowerCase().replace(/^\[|\]$/g, '')
+  if (host === '' || host === 'localhost' || host === '0.0.0.0' || host === '::' || host === '::1') return true
+  if (PRIVATE_HOST_SUFFIXES.some(suffix => host.endsWith(suffix))) return true
+  if (host.includes(':')) {
+    return host.startsWith('fc') || host.startsWith('fd') || /^fe[89ab]/.test(host) || host.startsWith('::ffff:')
+  }
+  const ipv4 = parseIpv4(host)
+  return ipv4 !== null && isPrivateIpv4(ipv4)
+}
+
+/** Refuse image URLs that point at the machine or its local network. */
+function assertPublicImageUrl(parsed, rawUrl) {
+  if (isPrivateHostname(parsed.hostname)) {
+    throw new StudioError('image-fetch-failed', `图片地址指向本机或内网（${parsed.hostname}），已拒绝：${rawUrl}`)
+  }
+}
+
 export function createStudioService({ ctx, fetchImpl = fetch } = {}) {
   if (ctx === undefined || ctx === null) throw new TypeError('createStudioService 需要 Cordis 上下文')
   const ai = createAiEditor({ ctx })
@@ -285,6 +331,7 @@ export function createStudioService({ ctx, fetchImpl = fetch } = {}) {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       throw new StudioError('image-fetch-failed', `图片地址必须是 http 或 https：${rawUrl}`)
     }
+    assertPublicImageUrl(parsed, rawUrl)
     let response
     try {
       response = await fetchImpl(rawUrl, {
@@ -301,6 +348,10 @@ export function createStudioService({ ctx, fetchImpl = fetch } = {}) {
     }
     if (response.ok !== true) {
       throw new StudioError('image-fetch-failed', `下载图片失败（${rawUrl}）：图片地址返回 HTTP ${response.status}`)
+    }
+    if (typeof response.url === 'string' && response.url !== '') {
+      // A public URL may redirect into the local network; refuse before reading.
+      assertPublicImageUrl(new URL(response.url), rawUrl)
     }
     const contentType = String(response.headers?.get?.('content-type') ?? '').split(';')[0].trim().toLowerCase()
     if (contentType !== 'image/png' && contentType !== 'image/jpeg') {
@@ -548,13 +599,15 @@ export function createStudioService({ ctx, fetchImpl = fetch } = {}) {
 
       const contentSourceUrl = typeof payload?.contentSourceUrl === 'string' ? payload.contentSourceUrl.trim() : ''
 
+      const needOpenComment = payload?.needOpenComment === true ? 1 : 0
+      const onlyFansCanComment = needOpenComment === 1 && payload?.onlyFansCanComment === true ? 1 : 0
       const article = {
         article_type: 'news',
         title,
         content,
         thumb_media_id: thumbMediaId,
-        need_open_comment: 0,
-        only_fans_can_comment: 0,
+        need_open_comment: needOpenComment,
+        only_fans_can_comment: onlyFansCanComment,
       }
       if (author !== '') article.author = author
       if (digest !== '') article.digest = digest
@@ -563,6 +616,30 @@ export function createStudioService({ ctx, fetchImpl = fetch } = {}) {
       return wechatCall(async () => {
         const result = await withToken(account, (token) => client.createDraft({ accessToken: token, article }))
         return { mediaId: result.mediaId, warnings }
+      })
+    },
+
+    /** 读取公众号草稿箱，用于在面板里查看和清理。 */
+    async listDrafts(payload = {}) {
+      const account = await readAccount({ required: true })
+      const rawCount = Number(payload?.count)
+      const rawOffset = Number(payload?.offset)
+      const count = Number.isFinite(rawCount) ? Math.min(20, Math.max(1, Math.trunc(rawCount))) : 10
+      const offset = Number.isFinite(rawOffset) ? Math.max(0, Math.trunc(rawOffset)) : 0
+      return wechatCall(async () => {
+        const result = await withToken(account, (token) => client.listDrafts({ accessToken: token, offset, count }))
+        return { totalCount: result.totalCount, items: result.items }
+      })
+    },
+
+    /** 删除一篇公众号草稿。 */
+    async deleteDraft(payload = {}) {
+      const account = await readAccount({ required: true })
+      const mediaId = typeof payload?.mediaId === 'string' ? payload.mediaId.trim() : ''
+      if (mediaId === '') throw new StudioError('media-required', '缺少草稿 mediaId，无法删除')
+      return wechatCall(async () => {
+        await withToken(account, (token) => client.deleteDraft({ accessToken: token, mediaId }))
+        return { deleted: true, mediaId }
       })
     },
 

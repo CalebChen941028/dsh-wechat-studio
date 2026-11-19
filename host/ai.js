@@ -7,7 +7,10 @@
  */
 
 /** 模型响应上限，留足整篇正文重写的空间。 */
-const MAX_TOKENS = 4096
+const MIN_MAX_TOKENS = 4096
+const MAX_MAX_TOKENS = 8192
+/** 超过这个长度时只允许改版式，避免正文被截断。 */
+const LONG_TEXT_DESIGN_ONLY = 7000
 
 /** 单次对话的超时时间。 */
 const TIMEOUT_MS = 120000
@@ -53,6 +56,7 @@ const DECOR_OPTIONS = {
   dividerStyle: ['dots', 'diamond', 'ornament', 'line', 'dash', 'none'],
   listStyle: ['dot', 'num', 'square', 'arrow'],
   imageStyle: ['plain', 'rounded', 'shadow', 'frame', 'polaroid', 'full'],
+  imageAlign: ['left', 'center', 'right'],
   bgStyle: ['none', 'paper', 'grid', 'dots', 'lines', 'wash'],
   ornament: ['none', 'corner', 'column', 'seal', 'leaf'],
 }
@@ -71,6 +75,7 @@ const SYSTEM_PROMPT = `你是「公众号排版工作台」的编辑助手。用
 - 版式与结构匹配：长文用衬线和大行高（column/ink/paper），分析用清晰层级（ocean/scholar），产品用无衬线（mint/pine/mono），人物故事可用纸感（paper/rose），视觉内容可用 magazine。
 - 数值范围：bodySize 15-18、lineHeight 1.7-2.05、letterSpacing 0-0.05、paraGap 18-30、paddingX 16-24、titleSize 26-38。
 - 背景：bg 用 #RRGGBB；bgStyle 可选 none/paper/grid/dots/lines/wash，默认 none。
+- 图片：imageWidth 40-100（百分比），imageAlign 可选 left/center/right。
 - 矢量角标：ornament 可选 none/corner/column/seal/leaf，默认 none，最多用一个。
 - 设计原则：留白优先、同级统一、一个记忆点；不用渐变底色、霓虹色、emoji、外发光和重阴影。
 - 用户说「精排 / 设计感 / 优化排版 / 按内容排版」时，返回完整 design（themeId、variantId、overrides，必要时含背景与角标），不要只换一个颜色。reply 用一句话说明设计判断。
@@ -165,6 +170,7 @@ function buildUserPrompt(payload) {
   const meta = payload?.meta && typeof payload.meta === 'object' ? payload.meta : {}
   const history = Array.isArray(payload?.history) ? payload.history.slice(-6) : []
   const article = clipArticle(text)
+  const designOnly = article.clipped || text.length > LONG_TEXT_DESIGN_ONLY
   const lines = []
   lines.push(`用户指令：${instruction}`)
   lines.push('')
@@ -203,8 +209,11 @@ function buildUserPrompt(payload) {
   if (article.clipped) {
     lines.push('')
     lines.push('注意：这篇文章过长，上面只是节选。本次只允许修改 design，不要返回 text，否则正文会丢失。')
+  } else if (designOnly) {
+    lines.push('')
+    lines.push('注意：这篇文章较长，本次只允许修改 design，不要返回 text，避免长文被截断。')
   }
-  return { prompt: lines.join('\n'), clipped: article.clipped }
+  return { prompt: lines.join('\n'), clipped: article.clipped, designOnly }
 }
 
 /** 从模型输出里取出 JSON；容忍代码围栏和前后说明文字。 */
@@ -226,7 +235,7 @@ function parseModelJson(raw) {
 function sanitizeOverrides(raw) {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return undefined
   const out = {}
-  const numbers = ['bodySize', 'lineHeight', 'letterSpacing', 'paraGap', 'paddingX', 'titleSize']
+  const numbers = ['bodySize', 'lineHeight', 'letterSpacing', 'paraGap', 'paddingX', 'titleSize', 'imageWidth']
   const enums = {
     bgStyle: DECOR_OPTIONS.bgStyle,
     ornament: DECOR_OPTIONS.ornament,
@@ -236,6 +245,7 @@ function sanitizeOverrides(raw) {
     dividerStyle: DECOR_OPTIONS.dividerStyle,
     listStyle: DECOR_OPTIONS.listStyle,
     imageStyle: DECOR_OPTIONS.imageStyle,
+    imageAlign: DECOR_OPTIONS.imageAlign,
   }
   for (const key of numbers) {
     if (typeof raw[key] === 'number' && Number.isFinite(raw[key])) out[key] = raw[key]
@@ -280,10 +290,14 @@ export function createAiEditor({ ctx }) {
 
       const model = await resolveModel(ctx, llm)
       const sessionId = pickSessionId(ctx)
-      const { prompt: userPrompt, clipped } = buildUserPrompt(payload)
+      const { prompt: userPrompt, clipped, designOnly } = buildUserPrompt(payload)
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+      const maxTokens = designOnly
+        ? 2048
+        : Math.min(MAX_MAX_TOKENS, Math.max(MIN_MAX_TOKENS, Math.ceil(sourceText.length * 1.8) + 600))
       let output = ''
+      let truncated = false
       try {
         for await (const chunk of llm.stream({
           provider: model.provider,
@@ -293,7 +307,7 @@ export function createAiEditor({ ctx }) {
           system: SYSTEM_PROMPT,
           messages: [{ role: 'user', content: [{ type: 'text', text: userPrompt }] }],
           temperature: 0.3,
-          maxTokens: MAX_TOKENS,
+          maxTokens,
           signal: controller.signal,
         })) {
           if (chunk?.type === 'text-delta' && typeof chunk.text === 'string') output += chunk.text
@@ -301,6 +315,8 @@ export function createAiEditor({ ctx }) {
             throw new AiError('model-failed', `模型返回失败：${chunk.reason.failure?.message ?? '未知原因'}`)
           } else if (chunk?.type === 'finish' && chunk.reason?.kind === 'aborted') {
             throw new AiError('ai-aborted', '这次修改被中止了，重新发一次即可。')
+          } else if (chunk?.type === 'finish' && ['max-tokens', 'length', 'max_tokens'].includes(chunk.reason?.kind)) {
+            truncated = true
           }
         }
       } catch (error) {
@@ -312,6 +328,9 @@ export function createAiEditor({ ctx }) {
       }
 
       if (output.trim() === '') throw new AiError('empty-response', '模型没有返回内容，换一句指令再试。')
+      if (truncated) {
+        throw new AiError('response-truncated', '模型输出被截断：这篇文章偏长，本次只改了版式；要改正文就把文章拆成两段再试。')
+      }
       const parsed = parseModelJson(output)
       if (parsed === null) {
         return {
@@ -342,7 +361,7 @@ export function createAiEditor({ ctx }) {
         if (typeof parsed.meta.digest === 'string' && parsed.meta.digest.length <= 200) meta.digest = parsed.meta.digest
         if (Object.keys(meta).length > 0) result.meta = meta
       }
-      if (clipped && result.text !== undefined) {
+      if ((clipped || designOnly) && result.text !== undefined) {
         delete result.text
         result.reply = `${result.reply}（文章较长，这次只应用了版式修改，正文没有替换）`
       }

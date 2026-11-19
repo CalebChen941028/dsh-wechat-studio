@@ -31,6 +31,8 @@ const KNOWN_ACTIONS = new Set([
   'importImages',
   'uploadCover',
   'createDraft',
+  'listDrafts',
+  'deleteDraft',
   'publish',
   'publishStatus',
   'aiEdit',

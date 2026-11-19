@@ -167,3 +167,60 @@ test('aiEdit drops unknown background and ornament values', async () => {
   assert.equal(result.design.overrides.ornament, undefined)
   assert.equal(result.design.overrides.bodySize, 16)
 })
+
+
+const MIN_EXPECTED = 4096
+
+test('aiEdit scales maxTokens with article length, capped at 8192', async () => {
+  const short = await (async () => {
+    const { ctx, calls } = fakeContext({ chunks: jsonReply({ reply: 'ok', design: { themeId: 'ink', overrides: { bodySize: 16 } } }) })
+    await createAiEditor({ ctx }).edit({ instruction: '只改版式', text: ARTICLE })
+    return calls[0].maxTokens
+  })()
+  assert.equal(short, MIN_EXPECTED)
+
+  const { ctx, calls } = fakeContext({ chunks: jsonReply({ reply: 'ok', design: { themeId: 'ink', overrides: { bodySize: 16 } } }) })
+  const medium = '# 长文\n\n' + '字'.repeat(3000)
+  await createAiEditor({ ctx }).edit({ instruction: '只改版式', text: medium })
+  assert.ok(calls[0].maxTokens > 4096, `got ${calls[0].maxTokens}`)
+  assert.ok(calls[0].maxTokens <= 8192, `got ${calls[0].maxTokens}`)
+})
+
+test('aiEdit 对长文只允许改版式并丢弃返回的正文', async () => {
+  const { ctx, calls } = fakeContext({
+    chunks: jsonReply({ reply: '按长文处理', text: '# 新的标题\n\n被截断的正文', design: { themeId: 'column', variantId: 'essay' } }),
+  })
+  const longText = '# 长文\n\n' + '字'.repeat(8000)
+  const result = await createAiEditor({ ctx }).edit({ instruction: '改一下标题', text: longText })
+  assert.equal(calls[0].maxTokens, 2048)
+  assert.match(calls[0].messages[0].content[0].text, /只允许修改 design/)
+  assert.equal(result.text, undefined)
+  assert.match(result.reply, /只应用了版式修改/)
+})
+
+test('aiEdit 在模型 max-tokens 截断时给出可执行的错误', async () => {
+  const { ctx } = fakeContext({
+    chunks: [
+      { type: 'text-delta', text: '{"reply":"写到一半' },
+      { type: 'finish', reason: { kind: 'max-tokens' } },
+    ],
+  })
+  await assert.rejects(
+    () => createAiEditor({ ctx }).edit({ instruction: '改正文', text: ARTICLE }),
+    (error) => {
+      assert.equal(error.code, 'response-truncated')
+      assert.match(error.message, /拆成两段/)
+      return true
+    },
+  )
+})
+
+
+test('aiEdit 接受图片宽度与对齐覆盖', async () => {
+  const { ctx } = fakeContext({
+    chunks: jsonReply({ reply: '图片调窄', design: { themeId: 'column', overrides: { imageWidth: 70, imageAlign: 'left' } } }),
+  })
+  const result = await createAiEditor({ ctx }).edit({ instruction: '图片窄一点，左对齐', text: ARTICLE })
+  assert.equal(result.design.overrides.imageWidth, 70)
+  assert.equal(result.design.overrides.imageAlign, 'left')
+})

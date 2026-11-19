@@ -392,6 +392,8 @@ export function composeDesign(stored) {
     quoteStyle: overrides.quoteStyle ?? variant.quoteStyle,
     listStyle: overrides.listStyle ?? variant.listStyle,
     imageStyle: overrides.imageStyle ?? variant.imageStyle,
+    imageWidth: Math.round(Math.min(100, Math.max(40, typeof overrides.imageWidth === 'number' && Number.isFinite(overrides.imageWidth) ? overrides.imageWidth : 100))),
+    imageAlign: ['left', 'center', 'right'].includes(overrides.imageAlign) ? overrides.imageAlign : 'center',
     showMeta: overrides.showMeta !== false,
     showFooter: overrides.showFooter !== false,
     showEyebrow: overrides.showEyebrow !== false,

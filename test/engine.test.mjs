@@ -265,6 +265,19 @@ test('data images are collected and rewritten in place', () => {
   assert.ok(!html.includes('data:image/png'))
 })
 
+test('图片宽度与对齐进入版式，并限制在 40-100%', () => {
+  const { blocks } = parseArticle('# 图\n\n![示例](https://example.com/a.png)')
+  const design = composeDesign({ themeId: 'column', overrides: { imageWidth: 70, imageAlign: 'right' } })
+  assert.equal(design.decor.imageWidth, 70)
+  assert.equal(design.decor.imageAlign, 'right')
+  assert.equal(composeDesign({ themeId: 'column', overrides: { imageWidth: 5 } }).decor.imageWidth, 40)
+  assert.equal(composeDesign({ themeId: 'column', overrides: { imageWidth: 200 } }).decor.imageWidth, 100)
+  const html = serializeNodes(buildArticle({ blocks, design, meta: {} }).nodes)
+  assert.ok(html.includes('width:70%'))
+  assert.ok(html.includes('margin-left:auto'))
+  assert.ok(html.includes('margin-right:0'))
+})
+
 test('背景与角标：深色底自动换浅色字，图案与 svg 进入输出', () => {
   const { blocks } = parseArticle(ARTICLE)
   const design = composeDesign({

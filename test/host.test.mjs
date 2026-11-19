@@ -529,6 +529,110 @@ test('importImages：超过 5MB 的上限时拒绝', async () => {
   )
 })
 
+test('createDraft：评论开关按 payload 写入，关闭评论时忽略仅粉丝选项', async () => {
+  const { service, calls } = makeService({
+    routes: [
+      ['/cgi-bin/token', () => jsonResponse({ access_token: 'TOKEN-1', expires_in: 7200 })],
+      ['/cgi-bin/draft/add', () => jsonResponse({ media_id: 'DRAFT-1' })],
+    ],
+  })
+  await service.createDraft(draftPayload({ needOpenComment: true, onlyFansCanComment: true }))
+  const first = JSON.parse(calls.find(call => call.url.includes('/cgi-bin/draft/add')).init.body).articles[0]
+  assert.equal(first.need_open_comment, 1)
+  assert.equal(first.only_fans_can_comment, 1)
+
+  await service.createDraft(draftPayload({ needOpenComment: false, onlyFansCanComment: true }))
+  const second = JSON.parse(calls.filter(call => call.url.includes('/cgi-bin/draft/add')).at(-1).init.body).articles[0]
+  assert.equal(second.need_open_comment, 0)
+  assert.equal(second.only_fans_can_comment, 0)
+})
+
+test('importImages：拒绝本机、内网与元数据地址，不发起请求', async () => {
+  const { service, calls } = makeService({ routes: [] })
+  const blocked = [
+    'http://127.0.0.1/a.png',
+    'http://localhost/a.png',
+    'http://192.168.1.2/a.png',
+    'http://10.0.0.8/a.png',
+    'http://169.254.169.254/latest/meta-data.png',
+    'http://[::1]/a.png',
+    'http://service.internal/a.png',
+  ]
+  for (const url of blocked) {
+    await assert.rejects(
+      () => service.importImages({ urls: [url] }),
+      (error) => {
+        assert.equal(error.code, 'image-fetch-failed')
+        assert.match(error.message, /本机或内网/)
+        return true
+      },
+      url,
+    )
+  }
+  assert.equal(calls.filter(call => call.url.includes('cdn') || call.url.includes('127.0.0.1')).length, 0)
+})
+
+test('importImages：重定向后的地址也要通过内网校验', async () => {
+  const { service } = makeService({
+    routes: [['cdn.example.com/redirect.png', () => ({
+      ok: true,
+      status: 200,
+      url: 'http://127.0.0.1/secret.png',
+      headers: new Headers({ 'content-type': 'image/png' }),
+    })]],
+  })
+  await assert.rejects(
+    () => service.importImages({ urls: ['https://cdn.example.com/redirect.png'] }),
+    (error) => {
+      assert.equal(error.code, 'image-fetch-failed')
+      assert.match(error.message, /本机或内网/)
+      return true
+    },
+  )
+})
+
+test('listDrafts：读取草稿箱并映射标题与时间', async () => {
+  const { service, calls } = makeService({
+    routes: [
+      ['/cgi-bin/token', () => jsonResponse({ access_token: 'TOKEN-1', expires_in: 7200 })],
+      ['/cgi-bin/draft/batchget', () => jsonResponse({
+        total_count: 2,
+        item_count: 2,
+        item: [
+          { media_id: 'DRAFT-1', update_time: 1700000000, content: { news_item: [{ title: '第一篇', digest: '摘要一' }] } },
+          { media_id: 'DRAFT-2', update_time: 1700000100, content: { news_item: [{ title: '第二篇', digest: '' }] } },
+        ],
+      })],
+    ],
+  })
+  const result = await service.listDrafts({ count: 5, offset: 2 })
+  assert.deepEqual(result, {
+    totalCount: 2,
+    items: [
+      { mediaId: 'DRAFT-1', title: '第一篇', digest: '摘要一', updateTime: 1700000000 },
+      { mediaId: 'DRAFT-2', title: '第二篇', digest: '', updateTime: 1700000100 },
+    ],
+  })
+  const request = calls.find(call => call.url.includes('/cgi-bin/draft/batchget'))
+  const body = JSON.parse(request.init.body)
+  assert.equal(body.offset, 2)
+  assert.equal(body.count, 5)
+  assert.equal(body.no_content, 0)
+})
+
+test('deleteDraft：调用 draft/delete 并校验 mediaId', async () => {
+  const { service, calls } = makeService({
+    routes: [
+      ['/cgi-bin/token', () => jsonResponse({ access_token: 'TOKEN-1', expires_in: 7200 })],
+      ['/cgi-bin/draft/delete', () => jsonResponse({ errcode: 0 })],
+    ],
+  })
+  await service.deleteDraft({ mediaId: 'DRAFT-1' })
+  const request = calls.find(call => call.url.includes('/cgi-bin/draft/delete'))
+  assert.deepEqual(JSON.parse(request.init.body), { media_id: 'DRAFT-1' })
+  await assert.rejects(() => service.deleteDraft({}), (error) => error.code === 'media-required')
+})
+
 // ---------------------------------------------------------------------------
 // 发布
 // ---------------------------------------------------------------------------
