@@ -332,17 +332,21 @@ export function createWechatClient({ fetchImpl = fetch, timeoutMs = DEFAULT_TIME
 
     /**
      * 新建公众号草稿。
-     * @param {{ accessToken: string, article: object }} input 单篇文章内容。
+     * @param {{ accessToken: string, article?: object, articles?: object[] }} input 单篇或多篇文章内容。
      * @returns {Promise<{ mediaId: string }>} 草稿的 media_id。
      */
-    async createDraft({ accessToken, article } = {}) {
+    async createDraft({ accessToken, article, articles } = {}) {
       const endpoint = 'cgi-bin/draft/add'
       requireToken(accessToken, endpoint)
+      const list = Array.isArray(articles) ? articles : (article === undefined ? [] : [article])
+      if (list.length === 0) {
+        throw new WechatApiError({ errcode: null, errmsg: '草稿里没有文章内容', endpoint, kind: 'response' })
+      }
       const data = await call({
         url: withAccessToken(`${WECHAT_API_BASE}/${endpoint}`, accessToken),
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ articles: [article] }),
+        body: JSON.stringify({ articles: list }),
         endpoint,
       })
       return { mediaId: requireStringField(data, 'media_id', endpoint, '草稿 media_id') }

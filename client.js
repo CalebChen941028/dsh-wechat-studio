@@ -4382,6 +4382,7 @@ function PublishSection(props) {
   const [error, setError] = React.useState(null)
   const [confirmPublish, setConfirmPublish] = React.useState(false)
   const [coverBusy, setCoverBusy] = React.useState(false)
+  const [bundleIds, setBundleIds] = React.useState([])
   const [draftBox, setDraftBox] = React.useState({ phase: 'idle', items: [], error: '' })
   const [draftBusy, setDraftBusy] = React.useState(false)
   const [deleteArm, setDeleteArm] = React.useState('')
@@ -4511,6 +4512,7 @@ function PublishSection(props) {
     setError(null)
     setSteps([])
     const push = (label, state, detail) => setSteps(list => [...list, { label, state, detail }])
+    const markLastDone = () => setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done' } : step)))
 
     try {
       if (!hostStatus.configured) {
@@ -4518,69 +4520,93 @@ function PublishSection(props) {
       }
       push('检查公众号配置', 'done')
 
-      const tree = buildArticle({
-        blocks: parsed.blocks,
-        design,
-        meta: { title, author, date: formatDate(doc.updatedAt), readingMinutes: features.readingMinutes },
-      })
-      const dataImages = collectDataImages(tree.nodes)
-      const remoteImages = collectRemoteImages(tree.nodes)
-      if (dataImages.length > 0) {
-        push(`压缩并上传正文图片（${dataImages.length} 张）`, 'running')
-        // The WeChat CDN caps content images at 1 MiB, so re-encode locally and
-        // keep the original data URL as the rewrite key.
-        const prepared = []
-        const originalById = new Map()
-        for (let index = 0; index < dataImages.length; index += 1) {
-          const original = dataImages[index]
-          const id = `img-${index}`
-          const compressed = await compressImage(original)
-          prepared.push({ id, dataUrl: compressed.dataUrl, name: `image-${index}.jpg` })
-          originalById.set(id, original)
+      const extras = bundleIds
+        .map(id => store.docs.find(entry => entry.id === id))
+        .filter(entry => entry !== undefined && entry.id !== doc.id)
+        .slice(0, 7)
+      const entries = [doc, ...extras]
+      const preparedArticles = []
+
+      for (let index = 0; index < entries.length; index += 1) {
+        const entry = entries[index]
+        const prefix = entries.length > 1 ? `第 ${index + 1} 篇：` : ''
+        const text = expandImageRefs(entry.text)
+        const parsedEntry = parseArticle(text)
+        const designEntry = composeDesign(entry.design)
+        const entryTitle = (entry.meta.title.trim() || parsedEntry.title || '').trim()
+        if (entryTitle === '') throw new Error(`${prefix}标题为空，先填标题再发布`)
+        const entryAuthor = entry.meta.author.trim()
+        const entryDigest = entry.meta.digest.trim() || deriveDigest(parsedEntry.blocks)
+        const measureText = text.replace(/data:image\/[a-zA-Z+]+;base64,[^)\s]+/g, '')
+        const readingMinutes = measure(parsedEntry.blocks, measureText).readingMinutes
+        const tree = buildArticle({
+          blocks: parsedEntry.blocks,
+          design: designEntry,
+          meta: { title: entryTitle, author: entryAuthor, date: formatDate(entry.updatedAt), readingMinutes },
+        })
+
+        const dataImages = collectDataImages(tree.nodes)
+        if (dataImages.length > 0) {
+          push(`${prefix}压缩并上传正文图片（${dataImages.length} 张）`, 'running')
+          const preparedImages = []
+          const originalById = new Map()
+          for (let imageIndex = 0; imageIndex < dataImages.length; imageIndex += 1) {
+            const original = dataImages[imageIndex]
+            const id = `img-${index}-${imageIndex}`
+            const compressed = await compressImage(original)
+            preparedImages.push({ id, dataUrl: compressed.dataUrl, name: `image-${imageIndex}.jpg` })
+            originalById.set(id, original)
+          }
+          const value = await callHost('uploadImages', { images: preparedImages }, { timeoutMs: 180000 })
+          const mapping = new Map()
+          for (const image of value.images ?? []) {
+            const original = originalById.get(image.id)
+            if (original && image.url) mapping.set(original, image.url)
+          }
+          rewriteImageSources(tree.nodes, mapping)
+          markLastDone()
         }
-        const value = await callHost('uploadImages', { images: prepared }, { timeoutMs: 180000 })
-        const mapping = new Map()
-        for (const entry of value.images ?? []) {
-          const original = originalById.get(entry.id)
-          if (original && entry.url) mapping.set(original, entry.url)
+
+        const remoteImages = collectRemoteImages(tree.nodes)
+        if (remoteImages.length > 0) {
+          push(`${prefix}转存外链图片（${remoteImages.length} 张）`, 'running')
+          const value = await callHost('importImages', { urls: remoteImages }, { timeoutMs: 180000 })
+          const mapping = new Map()
+          for (const image of value.images ?? []) {
+            if (image.url && image.wechatUrl) mapping.set(image.url, image.wechatUrl)
+          }
+          rewriteImageSources(tree.nodes, mapping)
+          markLastDone()
         }
-        rewriteImageSources(tree.nodes, mapping)
-        setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done' } : step)))
+
+        const html = serializeNodes(tree.nodes)
+        if (html.length > 950 * 1024) throw new Error(`${prefix}正文 HTML 超过 950KB，删掉几张图或缩短正文后再试`)
+        push(`${prefix}生成内联样式正文`, 'done', `${Math.round(html.length / 1024)}KB`)
+
+        push(`${prefix}上传封面到素材库`, 'running')
+        const cover = entry.meta.coverCustom === true && typeof entry.meta.coverDataUrl === 'string' && entry.meta.coverDataUrl !== ''
+          ? entry.meta.coverDataUrl
+          : renderCover({ title: entryTitle, design: designEntry })
+        const coverValue = await callHost('uploadCover', { dataUrl: cover, name: 'cover.png' }, { timeoutMs: 120000 })
+        markLastDone()
+
+        preparedArticles.push({
+          title: entryTitle,
+          author: entryAuthor === '' ? undefined : entryAuthor,
+          digest: entryDigest,
+          content: html,
+          thumbMediaId: coverValue.mediaId,
+          contentSourceUrl: entry.meta.sourceUrl.trim() || undefined,
+          needOpenComment: entry.meta.needOpenComment === true,
+          onlyFansCanComment: entry.meta.needOpenComment === true && entry.meta.onlyFansCanComment === true,
+        })
       }
-      if (remoteImages.length > 0) {
-        push(`转存外链图片（${remoteImages.length} 张）`, 'running')
-        const value = await callHost('importImages', { urls: remoteImages }, { timeoutMs: 180000 })
-        const mapping = new Map()
-        for (const entry of value.images ?? []) {
-          if (entry.url && entry.wechatUrl) mapping.set(entry.url, entry.wechatUrl)
-        }
-        rewriteImageSources(tree.nodes, mapping)
-        setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done' } : step)))
-      }
 
-      const html = serializeNodes(tree.nodes)
-      if (html.length > 950 * 1024) throw Object.assign(new Error('正文 HTML 超过 950KB，删掉几张图或缩短正文后再试'), { code: 'content-too-large' })
-      push('生成内联样式正文', 'done', `${Math.round(html.length / 1024)}KB`)
-
-      push('上传封面到素材库', 'running')
-      const cover = coverDataUrl || renderCover({ title, design })
-      const coverValue = await callHost('uploadCover', { dataUrl: cover, name: 'cover.png' }, { timeoutMs: 120000 })
-      setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done', detail: coverValue.mediaId } : step)))
-
-      push('写入公众号草稿箱', 'running')
-      const draft = await callHost('createDraft', {
-        title,
-        author: author === '' ? undefined : author,
-        digest,
-        content: html,
-        thumbMediaId: coverValue.mediaId,
-        contentSourceUrl: doc.meta.sourceUrl.trim() || undefined,
-        needOpenComment: doc.meta.needOpenComment === true,
-        onlyFansCanComment: doc.meta.needOpenComment === true && doc.meta.onlyFansCanComment === true,
-      }, { timeoutMs: 120000 })
+      push(`写入公众号草稿箱${preparedArticles.length > 1 ? `（${preparedArticles.length} 篇）` : ''}`, 'running')
+      const draft = await callHost('createDraft', { articles: preparedArticles }, { timeoutMs: 120000 })
       const warnings = Array.isArray(draft.warnings) ? draft.warnings : []
       setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done', detail: warnings.join('；') || draft.mediaId } : step)))
-      setResult({ kind: 'draft', mediaId: draft.mediaId, warnings })
+      setResult({ kind: 'draft', mediaId: draft.mediaId, warnings, count: preparedArticles.length })
 
       if (mode === 'publish') {
         push('提交发布', 'running')
@@ -4594,10 +4620,9 @@ function PublishSection(props) {
             if (status.publishStatus !== 1) break
           }
         } catch {
-          // The submission already succeeded; only the readback failed.
           status = { publishStatus: -1, statusText: '状态查询失败，发布可能仍在继续，稍后到公众号后台确认' }
         }
-        setResult({ kind: 'published', mediaId: draft.mediaId, publishId: published.publishId, status })
+        setResult({ kind: 'published', mediaId: draft.mediaId, publishId: published.publishId, status, count: preparedArticles.length })
         push(
           '发布结果',
           status?.publishStatus === 0 || status?.publishStatus === 1 ? 'done' : status?.publishStatus === -1 ? 'running' : 'error',
@@ -4667,6 +4692,30 @@ function PublishSection(props) {
       h('p', { className: 'ws-hint' }, '评论设置会写进草稿；公众号后台仍可再改。'),
     ),
     h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' },
+        h('span', null, '合集（可选）'),
+        h('span', { className: 'ws-group-note' }, `${Math.min(8, bundleIds.length + 1)}/8 篇`),
+      ),
+      (() => {
+        const candidates = store.docs.filter(entry => entry.id !== doc.id)
+        if (candidates.length === 0) return h('p', { className: 'ws-hint' }, '只有当前草稿。新建几篇本地草稿后，可以把它们一起保存成多图文草稿。')
+        return [
+          h('p', { className: 'ws-hint' }, '把其他本地草稿加入，一起保存成公众号多图文草稿（最多 8 篇，含当前这篇）。'),
+          ...candidates.map((entry) => {
+            const checked = bundleIds.includes(entry.id)
+            const heading = (entry.text.match(/^#\s+(.+)$/m) ?? [])[1] ?? ''
+            const label = entry.meta.title.trim() || heading || '未命名草稿'
+            return h('button', {
+              key: entry.id,
+              type: 'button',
+              className: 'ws-bundle-row' + (checked ? ' on' : ''),
+              onClick: () => setBundleIds(list => (list.includes(entry.id) ? list.filter(id => id !== entry.id) : (list.length >= 7 ? list : [...list, entry.id]))),
+            }, h('span', { className: 'ws-bundle-check' }, checked ? '✓' : ''), h('span', { className: 'ws-bundle-title' }, label))
+          }),
+        ]
+      })(),
+    ),
+    h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, '封面（2.35:1）'), h('span', { className: 'ws-group-note' }, doc.meta.coverCustom === true ? '当前是自定义封面' : '自动按主题生成')),
       coverDataUrl !== ''
         ? h('img', { className: 'ws-cover', src: coverDataUrl, alt: '封面预览' })
@@ -4721,7 +4770,7 @@ function PublishSection(props) {
     result
       ? h('div', { className: 'ws-result' },
         h('strong', null, result.kind === 'published' ? '已提交发布' : '已进入草稿箱'),
-        result.kind === 'draft' ? h('p', null, '到公众号后台「内容管理 → 草稿箱」就能看到这篇，手机预览后手动发布。') : null,
+        result.kind === 'draft' ? h('p', null, result.count > 1 ? `已写入 ${result.count} 篇多图文草稿，到公众号后台「内容管理 → 草稿箱」查看。` : '到公众号后台「内容管理 → 草稿箱」就能看到这篇，手机预览后手动发布。') : null,
         result.kind === 'published'
           ? h('p', null, `发布状态：${result.status?.statusText ?? '发布中，稍后可在后台查看'}`)
           : null,
@@ -5113,6 +5162,11 @@ const STUDIO_CSS = `
 .ws-toggle-track.on .ws-toggle-knob{transform:translateX(13px)}
 .ws-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .ws-config{display:flex;flex-direction:column;gap:8px;margin:8px 0 4px;padding:10px;border:1px dashed var(--ws-border2);border-radius:8px}
+.ws-bundle-row{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border:1px solid var(--ws-border);border-radius:8px;background:transparent;color:var(--ws-text);font:inherit;font-size:12px;text-align:left;cursor:pointer;margin-bottom:6px}
+.ws-bundle-row.on{border-color:var(--ws-accent);background:color-mix(in srgb,var(--ws-accent) 8%,transparent)}
+.ws-bundle-check{width:16px;height:16px;border:1px solid var(--ws-border2);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;flex:none}
+.ws-bundle-row.on .ws-bundle-check{border-color:var(--ws-accent);color:var(--ws-accent)}
+.ws-bundle-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ws-draft-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--ws-border)}
 .ws-draft-row:first-of-type{border-top:0}
 .ws-draft-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}

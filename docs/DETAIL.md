@@ -40,7 +40,7 @@ A DeepSeek Harness (DSH) sidebar bundle for turning Markdown into WeChat Officia
 
 ## Limits
 
-- WeChat draft/publish APIs need a verified account and an IP allowlist.
+- WeChat draft/publish APIs need a verified account and an IP allowlist; one draft can contain up to eight articles.
 - Image content is capped at 1MB per image (we re-encode to ~900KB).
 - Long articles (>7,000 chars) get design-only AI edits.
 - Tables, nested lists and formulas are not supported; Word images outside the body are skipped.

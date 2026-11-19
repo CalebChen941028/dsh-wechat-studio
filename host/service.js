@@ -234,6 +234,49 @@ function assertPublicImageUrl(parsed, rawUrl) {
   }
 }
 
+/** Validate one draft article and apply WeChat field limits. */
+function normalizeDraftArticle(raw, position, total) {
+  const warnings = []
+  const prefix = total > 1 ? `第 ${position + 1} 篇：` : ''
+  let title = typeof raw?.title === 'string' ? raw.title.trim() : ''
+  if (title === '') throw new StudioError('title-required', `${prefix}标题不能为空，请先填写文章标题`)
+  if (textLength(title) > 64) {
+    warnings.push(`${prefix}标题超过微信 64 字上限，已截断为前 64 字`)
+    title = truncateText(title, 64)
+  }
+  const content = typeof raw?.content === 'string' ? raw.content : ''
+  if (content.trim() === '') throw new StudioError('content-required', `${prefix}正文内容是空的，请先写好文章内容再保存草稿`)
+  const thumbMediaId = typeof raw?.thumbMediaId === 'string' ? raw.thumbMediaId.trim() : ''
+  if (thumbMediaId === '') {
+    throw new StudioError('cover-required', `${prefix}缺少封面图。请先在发布面板生成或上传封面，再保存草稿`)
+  }
+  let author = typeof raw?.author === 'string' ? raw.author.trim() : ''
+  if (author !== '' && textLength(author) > 8) {
+    author = truncateText(author, 8)
+    warnings.push(`${prefix}作者名超过微信 8 字上限，已截断为「${author}」`)
+  }
+  let digest = typeof raw?.digest === 'string' ? raw.digest.trim() : ''
+  if (digest !== '' && textLength(digest) > 120) {
+    digest = truncateText(digest, 120)
+    warnings.push(`${prefix}摘要超过微信 120 字上限，已截断为前 120 字`)
+  }
+  const contentSourceUrl = typeof raw?.contentSourceUrl === 'string' ? raw.contentSourceUrl.trim() : ''
+  const needOpenComment = raw?.needOpenComment === true ? 1 : 0
+  const onlyFansCanComment = needOpenComment === 1 && raw?.onlyFansCanComment === true ? 1 : 0
+  const article = {
+    article_type: 'news',
+    title,
+    content,
+    thumb_media_id: thumbMediaId,
+    need_open_comment: needOpenComment,
+    only_fans_can_comment: onlyFansCanComment,
+  }
+  if (author !== '') article.author = author
+  if (digest !== '') article.digest = digest
+  if (contentSourceUrl !== '') article.content_source_url = contentSourceUrl
+  return { article, warnings }
+}
+
 export function createStudioService({ ctx, fetchImpl = fetch } = {}) {
   if (ctx === undefined || ctx === null) throw new TypeError('createStudioService 需要 Cordis 上下文')
   const ai = createAiEditor({ ctx })
@@ -565,57 +608,25 @@ export function createStudioService({ ctx, fetchImpl = fetch } = {}) {
       })
     },
 
-    /** 新建草稿，按微信限制截断标题/作者/摘要并返回 warnings。 */
+    /**
+     * 新建草稿。payload 可以是单篇字段，也可以用 `articles` 传 1-8 篇。
+     * 按微信限制截断标题/作者/摘要，返回 warnings 与篇数。
+     */
     async createDraft(payload = {}) {
       const account = await readAccount({ required: true })
+      const rawArticles = Array.isArray(payload?.articles) ? payload.articles : [payload]
+      if (rawArticles.length === 0) throw new StudioError('articles-required', '草稿里至少需要一篇文章')
+      if (rawArticles.length > 8) throw new StudioError('too-many-articles', '一篇草稿最多 8 篇文章，请分两次保存')
+      const total = rawArticles.length
       const warnings = []
-
-      let title = typeof payload?.title === 'string' ? payload.title.trim() : ''
-      if (title === '') throw new StudioError('title-required', '标题不能为空，请先填写文章标题')
-      if (textLength(title) > 64) {
-        warnings.push(`标题超过微信 64 字上限，已截断为前 64 字`)
-        title = truncateText(title, 64)
-      }
-
-      const content = typeof payload?.content === 'string' ? payload.content : ''
-      if (content.trim() === '') throw new StudioError('content-required', '正文内容是空的，请先写好文章内容再保存草稿')
-
-      const thumbMediaId = typeof payload?.thumbMediaId === 'string' ? payload.thumbMediaId.trim() : ''
-      if (thumbMediaId === '') {
-        throw new StudioError('cover-required', '缺少封面图。请先在发布面板生成或上传封面，再保存草稿')
-      }
-
-      let author = typeof payload?.author === 'string' ? payload.author.trim() : ''
-      if (author !== '' && textLength(author) > 8) {
-        author = truncateText(author, 8)
-        warnings.push(`作者名超过微信 8 字上限，已截断为「${author}」`)
-      }
-
-      let digest = typeof payload?.digest === 'string' ? payload.digest.trim() : ''
-      if (digest !== '' && textLength(digest) > 120) {
-        digest = truncateText(digest, 120)
-        warnings.push('摘要超过微信 120 字上限，已截断为前 120 字')
-      }
-
-      const contentSourceUrl = typeof payload?.contentSourceUrl === 'string' ? payload.contentSourceUrl.trim() : ''
-
-      const needOpenComment = payload?.needOpenComment === true ? 1 : 0
-      const onlyFansCanComment = needOpenComment === 1 && payload?.onlyFansCanComment === true ? 1 : 0
-      const article = {
-        article_type: 'news',
-        title,
-        content,
-        thumb_media_id: thumbMediaId,
-        need_open_comment: needOpenComment,
-        only_fans_can_comment: onlyFansCanComment,
-      }
-      if (author !== '') article.author = author
-      if (digest !== '') article.digest = digest
-      if (contentSourceUrl !== '') article.content_source_url = contentSourceUrl
-
+      const articles = rawArticles.map((raw, index) => {
+        const normalized = normalizeDraftArticle(raw, index, total)
+        warnings.push(...normalized.warnings)
+        return normalized.article
+      })
       return wechatCall(async () => {
-        const result = await withToken(account, (token) => client.createDraft({ accessToken: token, article }))
-        return { mediaId: result.mediaId, warnings }
+        const result = await withToken(account, (token) => client.createDraft({ accessToken: token, articles }))
+        return { mediaId: result.mediaId, warnings, count: articles.length }
       })
     },
 

@@ -304,7 +304,7 @@ test('token 失效（40001）自动清缓存并重试一次', async () => {
     ],
   })
   const result = await service.createDraft(draftPayload())
-  assert.deepEqual(result, { mediaId: 'DRAFT-1', warnings: [] })
+  assert.deepEqual(result, { mediaId: 'DRAFT-1', warnings: [], count: 1 })
   assert.equal(tokenCalls, 2, '重试时必须重新取 token')
   assert.equal(draftCalls, 2, '失败的动作必须重试一次')
 })
@@ -1022,4 +1022,36 @@ test('index.js：aiEditStream 用 SSE 推送进度与最终结果', async () => 
   assert.ok(done)
   assert.equal(done.value.reply, '已改好')
   assert.equal(done.value.design.themeId, 'column')
+})
+
+
+test('createDraft：支持一次写入 1-8 篇文章', async () => {
+  const { service, calls } = makeService({
+    routes: [
+      ['/cgi-bin/token', () => jsonResponse({ access_token: 'TOKEN-1', expires_in: 7200 })],
+      ['/cgi-bin/draft/add', () => jsonResponse({ media_id: 'BUNDLE-1' })],
+    ],
+  })
+  const result = await service.createDraft({
+    articles: [
+      draftPayload(),
+      draftPayload({ title: '第二篇', thumbMediaId: 'MEDIA-2', needOpenComment: true }),
+    ],
+  })
+  assert.equal(result.count, 2)
+  const body = JSON.parse(calls.find(call => call.url.includes('/cgi-bin/draft/add')).init.body)
+  assert.equal(body.articles.length, 2)
+  assert.equal(body.articles[1].title, '第二篇')
+  assert.equal(body.articles[1].thumb_media_id, 'MEDIA-2')
+  assert.equal(body.articles[1].need_open_comment, 1)
+})
+
+test('createDraft：超过 8 篇或某篇缺字段时拒绝', async () => {
+  const { service } = makeService({ routes: [['/cgi-bin/token', () => jsonResponse({ access_token: 'TOKEN-1', expires_in: 7200 })]] })
+  const many = Array.from({ length: 9 }, () => draftPayload())
+  await assert.rejects(() => service.createDraft({ articles: many }), error => error.code === 'too-many-articles')
+  await assert.rejects(
+    () => service.createDraft({ articles: [draftPayload(), { ...draftPayload(), title: '   ' }] }),
+    error => error.code === 'title-required' && /第 2 篇/.test(error.message),
+  )
 })
