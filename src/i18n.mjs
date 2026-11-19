@@ -407,6 +407,46 @@ const UI_EN = {
 
   '微信走的出口和普通流量不同：微信是 {wechat}，普通流量是 {general}。IP 白名单必须填微信那个。': 'WeChat exits through a different IP than normal traffic: WeChat {wechat}, general {general}. The allowlist must use the WeChat one.',
 
+  '排版预设': 'Type presets',
+  '紧凑': 'Compact',
+  '标准': 'Standard',
+  '舒展': 'Relaxed',
+  '杂志': 'Magazine',
+  '按主题比例一键切换字号、行高、段距与留白，下面仍可继续微调。': 'Switch type scale, line height, paragraph gap and padding in one click; the sliders below still fine-tune.',
+  '已应用排版预设：{name}': 'Type preset applied: {name}',
+  '已恢复当前主题的默认排版': 'Restored the theme default type settings',
+  '已恢复主题默认装饰': 'Restored the theme default decoration',
+
+  '已把富文本转换为 Markdown': 'Converted rich text to Markdown',
+  '富文本转换失败': 'Rich-text conversion failed',
+
+  '发布检查': 'Preflight',
+  '可以发布': 'Ready',
+  '{count} 个问题': '{count} issue(s)',
+  '{count} 项提醒': '{count} warning(s)',
+  '标题为空': 'Title is empty',
+  '先填标题再保存或发布': 'Add a title before saving or publishing',
+  '标题超过 64 字，保存时会被截断': 'Title exceeds 64 characters and will be truncated',
+  '作者超过 8 字，保存时会被截断': 'Author exceeds 8 characters and will be truncated',
+  '摘要超过 120 字，保存时会被截断': 'Summary exceeds 120 characters and will be truncated',
+  '公众号还没配置': 'WeChat account not configured',
+  '保存/发布前先填写 AppID 和 AppSecret': 'Fill in AppID and AppSecret first',
+  '有图片还没从本地图库加载完': 'Some images are still loading',
+  '等一秒再试': 'Wait a second and retry',
+  '图片原始体积约 {size}，发布前会压缩': 'Raw images total about {size}; they are compressed before publishing',
+  '建议删减几张': 'Remove a few images',
+  '正文图片 {count} 张': '{count} inline image(s)',
+  '发布时自动上传': 'Uploaded automatically on publish',
+  '外链图片建议使用 HTTPS': 'Use HTTPS for remote images',
+  '外链图片 {count} 张，发布时会转存': '{count} remote image(s) will be re-uploaded',
+  '正文 HTML 超过 950KB，删掉图片或缩短正文': 'Article HTML exceeds 950KB; remove images or shorten the text',
+  '正文 HTML 约 {size}，接近微信上限': 'Article HTML is about {size}, close to the WeChat limit',
+  '封面已就绪': 'Cover ready',
+  '封面还在生成': 'Cover is still being generated',
+  '等封面出现或手动上传': 'Wait for it or upload one manually',
+  '合集共 {count} 篇': 'Bundle: {count} articles',
+  '保存时会逐篇上传': 'Uploaded article by article',
+
 }
 
 

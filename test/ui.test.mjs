@@ -108,6 +108,12 @@ test('工作台可以切换排版、装饰 tab 与外观皮肤', async () => {
     await new Promise(resolve => setTimeout(resolve, 120))
     assert.ok([...container.querySelectorAll('.ws-group-head')].some(node => node.textContent.includes('图片')))
 
+    const typeTab = tabs.find(button => button.textContent.trim() === '排版')
+    assert.ok(typeTab)
+    typeTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.equal(container.querySelectorAll('.ws-preset-row .ws-chip').length, 4)
+
     const palette = container.querySelector('[title="外观与主题"]')
     assert.ok(palette)
     palette.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
@@ -190,6 +196,7 @@ test('发布面板：读取草稿箱并导入为本地草稿', async () => {
     await new Promise(resolve => setTimeout(resolve, 150))
 
     assert.ok(container.querySelector('.ws-egress-row'), 'egress IP card renders')
+    assert.ok(container.querySelector('.ws-preflight'), 'publish preflight renders')
     assert.ok([...container.querySelectorAll('button')].some(button => button.textContent.includes('获取出口 IP')))
 
     const loadButton = [...container.querySelectorAll('button')].find(button => button.textContent.includes('读取最近'))

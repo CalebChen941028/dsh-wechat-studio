@@ -359,6 +359,18 @@ function DocRail(props) {
           return
         }
         const pasted = event.clipboardData?.getData('text') ?? ''
+        const pastedHtml = event.clipboardData?.getData('text/html') ?? ''
+        const clipboard = markdownFromClipboard(pastedHtml, pasted)
+        if (clipboard.converted) {
+          event.preventDefault()
+          materializeInlineImages(clipboard.markdown, { kind: 'paste' }).then(text => {
+            insertText(text)
+            if (typeof onImagesChanged === 'function') onImagesChanged()
+            toast(t('已把富文本转换为 Markdown'), 'success')
+            if (text.trim().length >= 240) onContentPasted()
+          }).catch(error => toast(error.message || t('富文本转换失败'), 'error'))
+          return
+        }
         if (pasted.includes('data:image/')) {
           event.preventDefault()
           materializeInlineImages(pasted, { kind: 'paste' }).then(text => {

@@ -235,17 +235,23 @@ function ThemeSection(props) {
   const { store, design, analysis, doc, toast, autoRefine, setAutoRefine, refining, onRefineNow } = props
   const activeTheme = THEMES.find(theme => theme.id === design.themeId) ?? THEMES[0]
   const applyTheme = (theme) => {
-    store.updateDoc(current => ({
-      ...current,
-      design: {
-        themeId: theme.id,
-        variantId: theme.variants[0].id,
-        overrides: {
-          eyebrow: current.design?.overrides?.eyebrow ?? analysis.label,
-          showEyebrow: ['eyebrow', 'tag', 'centered', 'kicker'].includes(theme.variants[0].titleStyle),
+    store.updateDoc(current => {
+      const previous = current.design?.overrides ?? {}
+      // Keep a deliberately chosen accent; theme decoration and type reset.
+      const preservedAccent = typeof previous.accent === 'string' ? { accent: previous.accent } : {}
+      return {
+        ...current,
+        design: {
+          themeId: theme.id,
+          variantId: theme.variants[0].id,
+          overrides: {
+            ...preservedAccent,
+            eyebrow: previous.eyebrow ?? analysis.label,
+            showEyebrow: ['eyebrow', 'tag', 'centered', 'kicker'].includes(theme.variants[0].titleStyle),
+          },
         },
-      },
-    }))
+      }
+    })
   }
   const setVariant = (variantId) => store.updateDesign(current => ({ ...current, variantId }))
   const setAccent = (accent) => store.updateDesign(current => ({
@@ -344,6 +350,20 @@ function formatSlider(value) {
   return Number.isInteger(value) ? String(value) : value.toFixed(value < 0.1 ? 3 : 2)
 }
 
+const TYPE_OVERRIDE_KEYS = ['titleSize', 'bodySize', 'lineHeight', 'letterSpacing', 'paraGap', 'paddingX', 'sectionGap', 'titleGap', 'titleTracking']
+const DECOR_OVERRIDE_KEYS = [
+  'bg', 'bgStyle', 'ornament',
+  'titleStyle', 'sectionStyle', 'quoteStyle', 'dividerStyle', 'listStyle', 'imageStyle',
+  'imageWidth', 'imageAlign',
+]
+
+/** Remove only the given override keys, leaving accent/type/decor/display intact. */
+function withoutOverrideKeys(design, keys) {
+  const overrides = { ...(design?.overrides ?? {}) }
+  for (const key of keys) delete overrides[key]
+  return { ...design, overrides }
+}
+
 function TypeSection(props) {
   const { store, design, toast } = props
   const set = (patch) => store.updateDesign(current => ({ ...current, overrides: { ...(current.overrides ?? {}), ...patch } }))
@@ -356,10 +376,78 @@ function TypeSection(props) {
     { key: 'paddingX', label: t('左右留白'), value: design.layout.paddingX, min: 8, max: 28, step: 1, unit: 'px' },
   ]
   const reset = () => {
-    store.updateDesign(current => ({ themeId: current.themeId, variantId: current.variantId, overrides: {} }))
-    toast('已恢复当前主题的默认排版')
+    store.updateDesign(current => withoutOverrideKeys(current, TYPE_OVERRIDE_KEYS))
+    toast(t('已恢复当前主题的默认排版'))
+  }
+  const theme = THEMES.find(entry => entry.id === design.themeId) ?? THEMES[0]
+  const base = theme.type
+  const round2 = value => Math.round(value * 100) / 100
+  const presetSpecs = [
+    {
+      id: 'compact',
+      label: t('紧凑'),
+      values: {
+        bodySize: base.bodySize,
+        lineHeight: round2(Math.max(1.5, base.lineHeight - 0.08)),
+        letterSpacing: parseFloat(base.letterSpacing) || 0,
+        paraGap: Math.max(10, base.paraGap - 4),
+        paddingX: Math.max(8, base.paddingX - 2),
+      },
+    },
+    { id: 'standard', label: t('标准'), values: null },
+    {
+      id: 'relaxed',
+      label: t('舒展'),
+      values: {
+        bodySize: base.bodySize,
+        lineHeight: round2(Math.min(2.4, base.lineHeight + 0.12)),
+        letterSpacing: parseFloat(base.letterSpacing) || 0,
+        paraGap: Math.min(40, base.paraGap + 6),
+        paddingX: Math.min(28, base.paddingX + 2),
+      },
+    },
+    {
+      id: 'magazine',
+      label: t('杂志'),
+      values: {
+        titleSize: Math.min(40, base.titleSize + 2),
+        bodySize: Math.min(20, base.bodySize + 0.5),
+        lineHeight: round2(Math.min(2.4, base.lineHeight + 0.18)),
+        letterSpacing: parseFloat(base.letterSpacing) || 0,
+        paraGap: Math.min(40, base.paraGap + 10),
+        paddingX: Math.min(28, base.paddingX + 2),
+      },
+    },
+  ]
+  const rawOverrides = store.doc.design?.overrides ?? {}
+  const matchesPreset = (values) => {
+    if (values === null) return TYPE_OVERRIDE_KEYS.every(key => !(key in rawOverrides))
+    return Object.entries(values).every(([key, value]) => {
+      const current = key === 'paddingX' ? design.layout.paddingX : design.type[key]
+      return Math.abs(Number(current) - Number(value)) < 0.011
+    })
+  }
+  const applyPreset = (spec) => {
+    if (spec.values === null) {
+      store.updateDesign(current => withoutOverrideKeys(current, TYPE_OVERRIDE_KEYS))
+    } else {
+      store.updateDesign(current => ({ ...current, overrides: { ...(current.overrides ?? {}), ...spec.values } }))
+    }
+    toast(t('已应用排版预设：{name}', { name: spec.label }))
   }
   return h('div', { className: 'ws-sections' },
+    h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' }, h('span', null, t('排版预设'))),
+      h('div', { className: 'ws-preset-row' },
+        presetSpecs.map(spec => h('button', {
+          key: spec.id,
+          type: 'button',
+          className: 'ws-chip' + (matchesPreset(spec.values) ? ' on' : ''),
+          onClick: () => applyPreset(spec),
+        }, spec.label)),
+      ),
+      h('p', { className: 'ws-hint' }, t('按主题比例一键切换字号、行高、段距与留白，下面仍可继续微调。')),
+    ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('字号与节奏')), h('button', { type: 'button', className: 'ws-link', onClick: reset }, t('恢复默认'))),
       rows.map(row => h('div', { key: row.key, className: 'ws-slider-row' },
@@ -413,7 +501,7 @@ function DecorSection(props) {
   const { store, design, toast } = props
   const set = (patch) => store.updateDesign(current => ({ ...current, overrides: { ...(current.overrides ?? {}), ...patch } }))
   const resetDecor = () => {
-    store.updateDesign(current => ({ themeId: current.themeId, variantId: current.variantId, overrides: {} }))
+    store.updateDesign(current => withoutOverrideKeys(current, DECOR_OVERRIDE_KEYS))
     toast('已恢复主题默认装饰')
   }
   const surface = design.surface ?? { bg: design.themeBg, pattern: 'none', ornament: 'none' }
@@ -502,7 +590,7 @@ function DecorSection(props) {
  * ------------------------------------------------------------------ */
 
 function PublishSection(props) {
-  const { store, design, doc, parsed, features, hostStatus, setHostStatus, toast } = props
+  const { store, design, doc, parsed, article, features, hostStatus, setHostStatus, toast } = props
   const [configOpen, setConfigOpen] = React.useState(false)
   const [appId, setAppId] = React.useState('')
   const [appSecret, setAppSecret] = React.useState('')
@@ -548,6 +636,36 @@ function PublishSection(props) {
   const author = doc.meta.author.trim()
   const digest = doc.meta.digest.trim() || deriveDigest(parsed.blocks)
   const coverDataUrl = doc.meta.coverDataUrl || ''
+
+  const preflight = React.useMemo(() => {
+    const checks = []
+    const push = (level, label, detail) => checks.push({ level, label, detail })
+    const formatSize = (bytes) => bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)}MB` : `${Math.round(bytes / 1024)}KB`
+    if (title === '') push('error', t('标题为空'), t('先填标题再保存或发布'))
+    else if (title.length > 64) push('warn', t('标题超过 64 字，保存时会被截断'), `${title.length}/64`)
+    if (author.length > 8) push('warn', t('作者超过 8 字，保存时会被截断'), `${author.length}/8`)
+    if (digest.length > 120) push('warn', t('摘要超过 120 字，保存时会被截断'), `${digest.length}/120`)
+    if (!hostStatus.configured) push('warn', t('公众号还没配置'), t('保存/发布前先填写 AppID 和 AppSecret'))
+    if (hasUnresolvedImageRefs(doc.text)) push('error', t('有图片还没从本地图库加载完'), t('等一秒再试'))
+    const dataImages = collectDataImages(article.nodes)
+    if (dataImages.length > 0) {
+      const bytes = dataImages.reduce((sum, url) => sum + Math.floor((url.length * 3) / 4), 0)
+      if (bytes > 6 * 1024 * 1024) push('warn', t('图片原始体积约 {size}，发布前会压缩', { size: formatSize(bytes) }), t('建议删减几张'))
+      else push('ok', t('正文图片 {count} 张', { count: dataImages.length }), t('发布时自动上传'))
+    }
+    const remoteImages = collectRemoteImages(article.nodes)
+    if (remoteImages.length > 0) {
+      if (remoteImages.some(url => !/^https:/i.test(url))) push('warn', t('外链图片建议使用 HTTPS'), `${remoteImages.length}`)
+      else push('ok', t('外链图片 {count} 张，发布时会转存', { count: remoteImages.length }), '')
+    }
+    const htmlLength = serializeNodes(article.nodes).length
+    if (htmlLength > 950 * 1024) push('error', t('正文 HTML 超过 950KB，删掉图片或缩短正文'), formatSize(htmlLength))
+    else if (htmlLength > 800 * 1024) push('warn', t('正文 HTML 约 {size}，接近微信上限', { size: formatSize(htmlLength) }), '')
+    if (coverDataUrl !== '' || doc.meta.coverCustom === true) push('ok', t('封面已就绪'), '')
+    else push('warn', t('封面还在生成'), t('等封面出现或手动上传'))
+    if (bundleIds.length > 0) push('ok', t('合集共 {count} 篇', { count: bundleIds.length + 1 }), t('保存时会逐篇上传'))
+    return checks
+  }, [article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length])
 
   React.useEffect(() => {
     // Keep the generated cover in step with the current theme; a cover the user
@@ -1045,6 +1163,25 @@ function PublishSection(props) {
         h(Button, { onClick: regenerateCover, disabled: coverBusy }, t('按主题重绘')),
         h(Button, { onClick: () => coverInputRef.current?.click(), disabled: coverBusy }, coverBusy ? t('处理中…') : t('上传图片')),
         h('input', { ref: coverInputRef, type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: uploadCoverFile }),
+      ),
+    ),
+    h('div', { className: 'ws-card ws-preflight' },
+      h('div', { className: 'ws-card-head' },
+        h(Icon, { name: 'check', size: 14 }),
+        h('span', null, t('发布检查')),
+        h('span', { className: 'ws-badge ' + (preflight.some(item => item.level === 'error') ? 'danger' : preflight.some(item => item.level === 'warn') ? '' : 'ok') },
+          preflight.some(item => item.level === 'error')
+            ? t('{count} 个问题', { count: preflight.filter(item => item.level === 'error').length })
+            : preflight.some(item => item.level === 'warn')
+              ? t('{count} 项提醒', { count: preflight.filter(item => item.level === 'warn').length })
+              : t('可以发布')),
+      ),
+      h('div', { className: 'ws-preflight-list' },
+        preflight.map((item, index) => h('div', { key: `${item.label}-${index}`, className: 'ws-preflight-row ' + item.level },
+          h('span', { className: 'ws-preflight-dot' }),
+          h('span', { className: 'ws-preflight-label' }, item.label),
+          item.detail !== '' ? h('span', { className: 'ws-preflight-detail' }, item.detail) : null,
+        )),
       ),
     ),
     h('div', { className: 'ws-publish-actions' },

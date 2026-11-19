@@ -119,6 +119,30 @@ export function htmlToMarkdown(html) {
   return blocks.join('\n\n')
 }
 
+const RICH_CLIPBOARD_HTML = /<(?:p|h[1-6]|ul|ol|li|blockquote|pre|figure|img|table|strong|em|section|article|div)[\s>]/i
+
+/**
+ * Prefer clipboard HTML over plain text when it carries structure.
+ * Returns `{ markdown, converted }`; plain text is the fallback.
+ * @param {string} html clipboard `text/html`.
+ * @param {string} text clipboard `text/plain`.
+ * @returns {{ markdown: string, converted: boolean }}
+ */
+export function markdownFromClipboard(html, text) {
+  const source = typeof html === 'string' ? html.trim() : ''
+  if (source !== '' && RICH_CLIPBOARD_HTML.test(source)) {
+    try {
+      const markdown = htmlToMarkdown(source).trim()
+      if (markdown !== '' && (markdown.length >= 20 || markdown.includes('!['))) {
+        return { markdown, converted: true }
+      }
+    } catch {
+      // Fall through to plain text.
+    }
+  }
+  return { markdown: typeof text === 'string' ? text : '', converted: false }
+}
+
 function inlineText(element) {
   let out = ''
   const visit = (node) => {

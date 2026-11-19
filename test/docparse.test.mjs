@@ -8,7 +8,7 @@ import { JSDOM } from 'jsdom'
 const { DOMParser } = new JSDOM('').window
 globalThis.DOMParser = DOMParser
 
-const { readDocumentFile, htmlToMarkdown, docxToMarkdown, normalizeMarkdown } = await import('../src/docparse.mjs')
+const { readDocumentFile, htmlToMarkdown, docxToMarkdown, normalizeMarkdown, markdownFromClipboard } = await import('../src/docparse.mjs')
 
 /** Build the minimal File-like object readDocumentFile expects. */
 function fileLike(name, bytes) {
@@ -85,4 +85,18 @@ test('readDocumentFile 拒绝不支持的 PDF，并提示可用格式', async ()
       return true
     },
   )
+})
+
+
+test('markdownFromClipboard：有结构的 HTML 优先，纯文本回退', () => {
+  const rich = markdownFromClipboard('<h2>小标题</h2><p>正文<strong>加粗</strong></p><ul><li>一项</li></ul>', '小标题 正文 加粗 一项')
+  assert.equal(rich.converted, true)
+  assert.match(rich.markdown, /^## 小标题/m)
+  assert.match(rich.markdown, /- 一项/)
+  const plain = markdownFromClipboard('<div>普通文字</div>', '保留纯文本')
+  assert.equal(plain.converted, false)
+  assert.equal(plain.markdown, '保留纯文本')
+  const image = markdownFromClipboard('<img src="https://example.com/a.png" alt="图">', '')
+  assert.equal(image.converted, true)
+  assert.match(image.markdown, /!\[图\]/)
 })
