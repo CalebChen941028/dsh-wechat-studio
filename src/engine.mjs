@@ -507,6 +507,144 @@ export function rankThemes(topic, features) {
   return ranked
 }
 
+/** Half-width punctuation surrounded by CJK characters. */
+const CJK_HALF_PUNCT = /[\u4e00-\u9fff][,.;:!?](?=$|[\s\u4e00-\u9fff，。；：！？、”’）】》])/g
+const CJK_PUNCT_MAP = { ',': '，', '.': '。', ';': '；', ':': '：', '!': '！', '?': '？' }
+
+/** Count and summarize typography issues in parsed blocks and raw Markdown. */
+export function auditTypography(blocks, text) {
+  const source = String(text ?? '')
+  const paragraphs = (blocks ?? []).filter(block => block.type === 'paragraph')
+  const images = (blocks ?? []).filter(block => block.type === 'image')
+  const headings = (blocks ?? []).filter(block => block.type === 'heading' || block.type === 'title')
+  const longParagraphs = paragraphs.filter(block => block.text.length > 140).length
+  const halfWidthPunctuation = (source.match(CJK_HALF_PUNCT) ?? []).length
+  const extraBlankLines = (source.match(/\n{3,}/g) ?? []).length
+  const highlights = Math.floor((source.match(/==/g) ?? []).length / 2)
+  const missingCaptions = images.filter(block => String(block.alt ?? '').trim() === '').length
+  let headingSkips = 0
+  let previous = 0
+  for (const block of headings) {
+    const level = Number(block.level) || 1
+    if (previous > 0 && level - previous > 1) headingSkips += 1
+    previous = level
+  }
+  return { longParagraphs, halfWidthPunctuation, extraBlankLines, highlights, missingCaptions, headingSkips }
+}
+
+/** Split long ordinary paragraphs at sentence boundaries, leaving headings/lists/quotes alone. */
+export function splitLongParagraphs(text, maxChars = 140) {
+  const lines = String(text ?? '').split('\n')
+  const output = []
+  let inFence = false
+  const isPlainLine = (line) => {
+    const value = line.trim()
+    if (value === '') return false
+    if (/^(#{1,6}\s|>|\s*[-*+]\s|\s*\d+[.)]\s|!\[|```|---+\s*$)/.test(value)) return false
+    return true
+  }
+  const splitLine = (line) => {
+    const sentences = line.match(/[^。！？!?；;]+[。！？!?；;]?/g) ?? [line]
+    const chunks = []
+    let current = ''
+    for (const sentence of sentences) {
+      if (current === '') current = sentence
+      else if ((current + sentence).length <= maxChars) current += sentence
+      else {
+        chunks.push(current)
+        current = sentence
+      }
+    }
+    if (current !== '') chunks.push(current)
+    return chunks.join('\n\n')
+  }
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence
+      output.push(line)
+      continue
+    }
+    if (!inFence && isPlainLine(line) && line.trim().length > maxChars) {
+      output.push(splitLine(line))
+    } else {
+      output.push(line)
+    }
+  }
+  return output.join('\n')
+}
+
+/** Convert half-width punctuation used between Chinese characters. */
+export function normalizeCjkPunctuation(text) {
+  return String(text ?? '').replace(/([\u4e00-\u9fff])([,.;:!?])(?=$|[\s\u4e00-\u9fff，。；：！？、”’）】》])/g, (match, previous, punctuation) => `${previous}${CJK_PUNCT_MAP[punctuation]}`)
+}
+
+/** Collapse repeated blank lines and trailing spaces. */
+export function tidyMarkdown(text) {
+  return String(text ?? '')
+    .split('\n')
+    .map(line => line.replace(/[ \t]+$/, ''))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
+ * Line-level diff for previewing an AI rewrite.
+ * Returns same/add/remove operations; very large inputs fall back to a
+ * common-prefix/suffix diff so the panel stays responsive.
+ * @param {string} before current text.
+ * @param {string} after proposed text.
+ * @param {{ maxCells?: number }} [options] LCS budget.
+ * @returns {Array<{ type: 'same'|'add'|'remove', text: string }>}
+ */
+export function diffTextLines(before, after, options = {}) {
+  const left = String(before ?? '').split('\n')
+  const right = String(after ?? '').split('\n')
+  const maxCells = options.maxCells ?? 200000
+  const operations = []
+  if (left.length * right.length > maxCells) {
+    let prefix = 0
+    while (prefix < left.length && prefix < right.length && left[prefix] === right[prefix]) prefix += 1
+    let suffix = 0
+    while (
+      suffix < left.length - prefix
+      && suffix < right.length - prefix
+      && left[left.length - 1 - suffix] === right[right.length - 1 - suffix]
+    ) suffix += 1
+    for (let index = 0; index < prefix; index += 1) operations.push({ type: 'same', text: left[index] })
+    for (let index = prefix; index < left.length - suffix; index += 1) operations.push({ type: 'remove', text: left[index] })
+    for (let index = prefix; index < right.length - suffix; index += 1) operations.push({ type: 'add', text: right[index] })
+    for (let index = right.length - suffix; index < right.length; index += 1) operations.push({ type: 'same', text: right[index] })
+    return operations
+  }
+  const rows = left.length
+  const columns = right.length
+  const dp = Array.from({ length: rows + 1 }, () => new Uint32Array(columns + 1))
+  for (let i = rows - 1; i >= 0; i -= 1) {
+    for (let j = columns - 1; j >= 0; j -= 1) {
+      dp[i][j] = left[i] === right[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1])
+    }
+  }
+  let i = 0
+  let j = 0
+  while (i < rows && j < columns) {
+    if (left[i] === right[j]) {
+      operations.push({ type: 'same', text: left[i] })
+      i += 1
+      j += 1
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      operations.push({ type: 'remove', text: left[i] })
+      i += 1
+    } else {
+      operations.push({ type: 'add', text: right[j] })
+      j += 1
+    }
+  }
+  while (i < rows) { operations.push({ type: 'remove', text: left[i] }); i += 1 }
+  while (j < columns) { operations.push({ type: 'add', text: right[j] }); j += 1 }
+  return operations
+}
+
 /**
  * Split a long Markdown article into chunks for per-section AI rewrites.
  * Headings stay with their own section, and fenced code blocks are never cut.

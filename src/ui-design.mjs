@@ -16,7 +16,7 @@ function DesignPanel(props) {
       h('div', { className: 'ws-pane' + (tab === 'theme' ? '' : ' ws-pane-hidden') },
         h(ThemeSection, { store, design, analysis, doc, toast, autoRefine, setAutoRefine, refining, onRefineNow })),
       h('div', { className: 'ws-pane' + (tab === 'type' ? '' : ' ws-pane-hidden') },
-        h(TypeSection, { store, design, toast })),
+        h(TypeSection, { store, design, doc, parsed, toast })),
       h('div', { className: 'ws-pane' + (tab === 'decor' ? '' : ' ws-pane-hidden') },
         h(DecorSection, { store, design, toast })),
       h('div', { className: 'ws-pane' + (tab === 'publish' ? '' : ' ws-pane-hidden') },
@@ -35,6 +35,7 @@ function AiSection(props) {
   const [progress, setProgress] = React.useState(0)
   const [phase, setPhase] = React.useState('')
   const [chunked, setChunked] = React.useState(false)
+  const [pending, setPending] = React.useState(null)
   const listRef = React.useRef(null)
   const inputRef = React.useRef(null)
 
@@ -46,6 +47,7 @@ function AiSection(props) {
   const send = async (override) => {
     const instruction = String(override ?? input).trim()
     if (instruction === '' || busy) return
+    if (pending !== null) { toast(t('先应用或放弃当前建议')); return }
     if (doc.text.trim() === '') {
       toast('编辑区还是空的，先写点内容', 'error')
       return
@@ -92,7 +94,6 @@ function AiSection(props) {
         }, { timeoutMs: 150000, onProgress: chars => setProgress(chars) })
       }
 
-      const applied = []
       const current = store.doc
       const typedMeanwhile = typeof value.text === 'string' && current.text !== sentText
       const nextText = typeof value.text === 'string' && value.text.trim() !== '' && value.text !== current.text && !typedMeanwhile
@@ -115,27 +116,35 @@ function AiSection(props) {
         }
       }
       const nextMeta = value.meta && typeof value.meta === 'object' ? { ...current.meta, ...value.meta } : undefined
-      if (nextText !== undefined) applied.push(t('正文'))
-      if (nextDesign !== undefined) applied.push(t('版式'))
-      if (nextMeta !== undefined) applied.push(t('标题/摘要'))
-      if (applied.length > 0) {
-        store.updateDoc(state => ({
-          ...state,
-          ...(nextText === undefined ? {} : { text: nextText }),
-          ...(nextDesign === undefined ? {} : { design: nextDesign }),
-          ...(nextMeta === undefined ? {} : { meta: nextMeta }),
-        }))
+
+      const changes = []
+      if (nextText !== undefined) changes.push(t('正文'))
+      if (nextDesign !== undefined) changes.push(t('版式'))
+      if (nextMeta !== undefined) changes.push(t('标题/摘要'))
+      if (typedMeanwhile) changes.push(t('正文有改动，未覆盖'))
+
+      if (nextText !== undefined || nextDesign !== undefined || nextMeta !== undefined) {
+        setPending({
+          baseText: sentText,
+          text: nextText,
+          design: nextDesign,
+          meta: nextMeta,
+          reply: value.reply || t('已修改'),
+          model: value.model?.model ?? '',
+          parseError: value.parseError === true,
+          changes,
+          diff: nextText === undefined ? [] : diffTextLines(sentText, nextText),
+        })
+      } else {
+        setMessages(list => [...list, {
+          role: 'assistant',
+          content: value.reply || t('已修改'),
+          applied: changes,
+          canUndo: false,
+          model: value.model?.model ?? '',
+          parseError: value.parseError === true,
+        }])
       }
-      if (typedMeanwhile) applied.push(t('正文有改动，未覆盖'))
-      setMessages(list => [...list, {
-        role: 'assistant',
-        content: value.reply || t('已修改'),
-        applied,
-        canUndo: applied.length > 0,
-        model: value.model?.model ?? '',
-        parseError: value.parseError === true,
-      }])
-      if (applied.length > 0) toast(`AI 已修改：${applied.join('、')}`, 'success')
     } catch (error) {
       setMessages(list => [...list, { role: 'error', content: error.message || t('修改失败'), code: error.code }])
     } finally {
@@ -143,6 +152,37 @@ function AiSection(props) {
       setPhase('')
       requestAnimationFrame(() => inputRef.current?.focus())
     }
+  }
+
+  const applyPending = () => {
+    if (pending === null) return
+    const applied = []
+    const patch = {}
+    const current = store.doc
+    const textSafe = pending.text !== undefined && current.text === pending.baseText
+    if (pending.text !== undefined) {
+      if (textSafe) { patch.text = pending.text; applied.push(t('正文')) }
+      else applied.push(t('正文有改动，未覆盖'))
+    }
+    if (pending.design !== undefined) { patch.design = pending.design; applied.push(t('版式')) }
+    if (pending.meta !== undefined) { patch.meta = { ...current.meta, ...pending.meta }; applied.push(t('标题/摘要')) }
+    if (Object.keys(patch).length > 0) store.updateDoc(state => ({ ...state, ...patch }))
+    setMessages(list => [...list, {
+      role: 'assistant',
+      content: pending.reply,
+      applied,
+      canUndo: Object.keys(patch).length > 0,
+      model: pending.model,
+      parseError: pending.parseError,
+    }])
+    if (Object.keys(patch).length > 0) toast(t('已应用 AI 修改：{parts}', { parts: applied.join('、') }), 'success')
+    setPending(null)
+  }
+
+  const discardPending = () => {
+    if (pending === null) return
+    setMessages(list => [...list, { role: 'assistant', content: t('已放弃这次 AI 修改'), applied: [] }])
+    setPending(null)
   }
 
   const suggestions = [t('按内容重新精排'), t('标题更有冲击力'), t('第二段压缩到两行'), t('换成杂志版式'), t('加一个小节标题'), t('行距调到 1.9')]
@@ -189,6 +229,40 @@ function AiSection(props) {
           h('span', { className: 'ws-msg-body' }, progress > 0 ? t('模型已生成 {chars} 字…', { chars: progress }) : (phase === '' ? t('正在按你的要求修改…') : phase)),
         ) : null,
       ),
+    pending !== null
+      ? h('div', { className: 'ws-diff-card' },
+        h('div', { className: 'ws-diff-head' },
+          h(Icon, { name: 'sparkles', size: 14 }),
+          h('span', null, t('AI 建议修改')),
+          h('span', { className: 'ws-badge' }, t('新增 {added} 行 · 删除 {removed} 行', {
+            added: pending.diff.filter(item => item.type === 'add').length,
+            removed: pending.diff.filter(item => item.type === 'remove').length,
+          })),
+        ),
+        pending.diff.filter(item => item.type !== 'same').length > 0
+          ? h('div', { className: 'ws-diff-lines' },
+            pending.diff.filter(item => item.type !== 'same').slice(0, 14).map((item, index) => h('div', {
+              key: index,
+              className: 'ws-diff-line ' + item.type,
+            }, `${item.type === 'add' ? '+' : '-'} ${item.text.length > 100 ? `${item.text.slice(0, 100)}…` : item.text || ' '}`)),
+            pending.diff.filter(item => item.type !== 'same').length > 14
+              ? h('div', { className: 'ws-diff-more' }, t('还有 {count} 行改动未显示', { count: pending.diff.filter(item => item.type !== 'same').length - 14 }))
+              : null,
+          )
+          : h('p', { className: 'ws-hint' }, t('只调整版式与标题摘要，不改正文')),
+        pending.design !== undefined
+          ? h('p', { className: 'ws-hint' }, t('版式：{theme}', { theme: (() => {
+            const theme = THEMES.find(entry => entry.id === pending.design.themeId)
+            const variant = theme?.variants.find(entry => entry.id === pending.design.variantId)
+            return `${theme?.name ?? pending.design.themeId}${variant === undefined ? '' : ` · ${variant.name}`}`
+          })() }))
+          : null,
+        h('div', { className: 'ws-row' },
+          h(Button, { variant: 'primary', onClick: applyPending }, t('应用修改')),
+          h(Button, { variant: 'ghost', onClick: discardPending }, t('放弃')),
+        ),
+      )
+      : null,
     doc.text.length > LONG_TEXT_CHUNK_THRESHOLD
       ? h('div', { className: 'ws-chat-compose-option' },
         h(Toggle, {
@@ -215,7 +289,7 @@ function AiSection(props) {
         },
       }),
       h('div', { className: 'ws-row' },
-        h(Button, { variant: 'primary', disabled: busy || input.trim() === '', onClick: () => send() }, busy ? t('修改中…') : t('发送')),
+        h(Button, { variant: 'primary', disabled: busy || pending !== null || input.trim() === '', onClick: () => send() }, busy ? t('修改中…') : t('发送')),
         h('span', { className: 'ws-hint' }, t('Enter 发送，Shift+Enter 换行')),
       ),
     ),
@@ -228,6 +302,31 @@ function AiSection(props) {
       }, text)))
       : null,
     h('p', { className: 'ws-hint' }, t('模型是当前会话的默认模型；要求改版式时只动主题与装饰，不会重写正文。')),
+  )
+}
+
+function ThemeMiniPreview({ theme }) {
+  const palette = theme.palette
+  const type = theme.type
+  return h('span', {
+    className: 'ws-theme-mini',
+    style: { background: palette.bg, color: palette.text, borderColor: palette.border },
+    'aria-hidden': 'true',
+  },
+  h('span', {
+    className: 'ws-theme-mini-title',
+    style: {
+      fontFamily: type.titleFont,
+      fontWeight: type.titleWeight,
+      fontSize: `${Math.min(15, Math.max(11, type.titleSize / 2.4))}px`,
+      letterSpacing: type.titleTracking,
+    },
+  }, t('标题')),
+  h('span', { className: 'ws-theme-mini-tag', style: { color: palette.accent, borderColor: palette.accentSoft } }, '01'),
+  h('span', { className: 'ws-theme-mini-rule', style: { background: palette.accent } }),
+  h('span', { className: 'ws-theme-mini-line', style: { background: palette.secondary } }),
+  h('span', { className: 'ws-theme-mini-line short', style: { background: palette.secondary } }),
+  h('span', { className: 'ws-theme-mini-quote', style: { borderLeftColor: palette.accent, color: palette.secondary, fontFamily: type.bodyFont } }, t('一句引文')),
   )
 }
 
@@ -287,11 +386,7 @@ function ThemeSection(props) {
           className: 'ws-theme' + (theme.id === activeTheme.id ? ' on' : ''),
           onClick: () => applyTheme(theme),
         },
-        h('span', { className: 'ws-theme-swatch', style: { background: theme.palette.bg, borderColor: theme.palette.border } },
-          h('i', { style: { background: theme.palette.text } }),
-          h('i', { style: { background: theme.palette.accent } }),
-          h('i', { style: { background: theme.palette.accentSoft } }),
-        ),
+        h(ThemeMiniPreview, { theme }),
         h('span', { className: 'ws-theme-meta' },
           h('span', { className: 'ws-theme-name' }, theme.name),
           h('span', { className: 'ws-theme-tag' }, theme.tagline.slice(0, 14)),
@@ -365,7 +460,7 @@ function withoutOverrideKeys(design, keys) {
 }
 
 function TypeSection(props) {
-  const { store, design, toast } = props
+  const { store, design, doc, parsed, toast } = props
   const set = (patch) => store.updateDesign(current => ({ ...current, overrides: { ...(current.overrides ?? {}), ...patch } }))
   const rows = [
     { key: 'titleSize', label: t('标题字号'), value: design.type.titleSize, min: 20, max: 40, step: 1, unit: 'px' },
@@ -435,6 +530,17 @@ function TypeSection(props) {
     }
     toast(t('已应用排版预设：{name}', { name: spec.label }))
   }
+  const audit = React.useMemo(() => auditTypography(parsed.blocks, doc.text), [parsed.blocks, doc.text])
+  const fixable = audit.longParagraphs > 0 || audit.halfWidthPunctuation > 0 || audit.extraBlankLines > 0
+  const applyTextFix = (next, message) => {
+    if (next === doc.text) { toast(t('没有需要修正的内容')); return }
+    store.updateDoc(current => ({ ...current, text: next }))
+    toast(message)
+  }
+  const fixLong = () => applyTextFix(splitLongParagraphs(doc.text), t('已拆分长段落'))
+  const fixPunctuation = () => applyTextFix(normalizeCjkPunctuation(doc.text), t('已统一中文标点'))
+  const fixBlank = () => applyTextFix(tidyMarkdown(doc.text), t('已整理多余空行'))
+  const fixAll = () => applyTextFix(tidyMarkdown(normalizeCjkPunctuation(splitLongParagraphs(doc.text))), t('已整理正文'))
   return h('div', { className: 'ws-sections' },
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('排版预设'))),
@@ -447,6 +553,42 @@ function TypeSection(props) {
         }, spec.label)),
       ),
       h('p', { className: 'ws-hint' }, t('按主题比例一键切换字号、行高、段距与留白，下面仍可继续微调。')),
+    ),
+    h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' },
+        h('span', null, t('排版体检')),
+        fixable ? h('button', { type: 'button', className: 'ws-link', onClick: fixAll }, t('一键整理')) : null,
+      ),
+      h('div', { className: 'ws-audit-list' },
+        h('div', { className: 'ws-audit-row' + (audit.longParagraphs > 0 ? ' warn' : '') },
+          h('span', null, t('长段落')),
+          h('span', { className: 'ws-audit-count' }, audit.longParagraphs),
+          audit.longParagraphs > 0 ? h('button', { type: 'button', className: 'ws-link', onClick: fixLong }, t('拆分')) : null,
+        ),
+        h('div', { className: 'ws-audit-row' + (audit.halfWidthPunctuation > 0 ? ' warn' : '') },
+          h('span', null, t('半角标点')),
+          h('span', { className: 'ws-audit-count' }, audit.halfWidthPunctuation),
+          audit.halfWidthPunctuation > 0 ? h('button', { type: 'button', className: 'ws-link', onClick: fixPunctuation }, t('统一')) : null,
+        ),
+        h('div', { className: 'ws-audit-row' + (audit.extraBlankLines > 0 ? ' warn' : '') },
+          h('span', null, t('多余空行')),
+          h('span', { className: 'ws-audit-count' }, audit.extraBlankLines),
+          audit.extraBlankLines > 0 ? h('button', { type: 'button', className: 'ws-link', onClick: fixBlank }, t('整理')) : null,
+        ),
+        h('div', { className: 'ws-audit-row' + (audit.highlights > 8 ? ' warn' : '') },
+          h('span', null, t('高亮标记')),
+          h('span', { className: 'ws-audit-count' }, audit.highlights),
+        ),
+        h('div', { className: 'ws-audit-row' + (audit.missingCaptions > 0 ? ' warn' : '') },
+          h('span', null, t('缺图注')),
+          h('span', { className: 'ws-audit-count' }, audit.missingCaptions),
+        ),
+        h('div', { className: 'ws-audit-row' + (audit.headingSkips > 0 ? ' warn' : '') },
+          h('span', null, t('标题层级跳级')),
+          h('span', { className: 'ws-audit-count' }, audit.headingSkips),
+        ),
+      ),
+      h('p', { className: 'ws-hint' }, t('图注即图片说明（alt），标题层级跳级需要手动调整。')),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('字号与节奏')), h('button', { type: 'button', className: 'ws-link', onClick: reset }, t('恢复默认'))),

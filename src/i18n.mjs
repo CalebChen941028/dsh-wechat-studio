@@ -447,6 +447,37 @@ const UI_EN = {
   '合集共 {count} 篇': 'Bundle: {count} articles',
   '保存时会逐篇上传': 'Uploaded article by article',
 
+  '一句引文': 'A short quote',
+
+  '排版体检': 'Typography check',
+  '一键整理': 'Tidy all',
+  '长段落': 'Long paragraphs',
+  '半角标点': 'Half-width punctuation',
+  '多余空行': 'Extra blank lines',
+  '高亮标记': 'Highlights',
+  '缺图注': 'Missing captions',
+  '标题层级跳级': 'Heading level jumps',
+  '拆分': 'Split',
+  '统一': 'Normalize',
+  '整理': 'Tidy',
+  '图注即图片说明（alt），标题层级跳级需要手动调整。': 'Captions use the image alt text; heading level jumps need manual edits.',
+  '没有需要修正的内容': 'Nothing to fix',
+  '已拆分长段落': 'Long paragraphs split',
+  '已统一中文标点': 'Chinese punctuation normalized',
+  '已整理多余空行': 'Blank lines tidied',
+  '已整理正文': 'Article tidied',
+
+  'AI 建议修改': 'AI suggestion',
+  '应用修改': 'Apply changes',
+  '放弃': 'Discard',
+  '先应用或放弃当前建议': 'Apply or discard the current suggestion first',
+  '新增 {added} 行 · 删除 {removed} 行': '+{added} / -{removed} lines',
+  '还有 {count} 行改动未显示': '{count} more changed lines hidden',
+  '只调整版式与标题摘要，不改正文': 'Only layout and title/summary change; the text stays as is',
+  '版式：{theme}': 'Layout: {theme}',
+  '已应用 AI 修改：{parts}': 'AI changes applied: {parts}',
+  '已放弃这次 AI 修改': 'AI suggestion discarded',
+
 }
 
 

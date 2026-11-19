@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   parseArticle, parseInline, plainText, detectTopic, measure, composeDesign,
   autoCompose, rankThemes, nextVariant, mixHex, readableOn, splitMarkdownChunks,
+  auditTypography, splitLongParagraphs, normalizeCjkPunctuation, tidyMarkdown, diffTextLines,
 } from '../src/engine.mjs'
 import { THEMES } from '../src/themes.mjs'
 import {
@@ -340,4 +341,46 @@ test('splitMarkdownChunks 按小节切分长文且不切断代码块', () => {
   assert.ok(chunks.slice(1, -1).every(chunk => chunk.length <= 1300), 'chunks without a fence stay near the cap')
   assert.ok(chunks.join('\n\n').includes('## 小节'))
   assert.ok(chunks.some(chunk => chunk.includes('```')))
+})
+
+
+test('splitLongParagraphs 只在普通长段落内按句拆分', () => {
+  const long = '第一句话。第二句话。第三句话。第四句话。第五句话。第六句话。第七句话。'.repeat(3)
+  const text = `# 标题\n\n${long}\n\n> 引用保持原样\n\n- 列表保持原样\n`
+  const fixed = splitLongParagraphs(text, 80)
+  assert.ok(fixed.includes('# 标题'))
+  assert.ok(fixed.includes('> 引用保持原样'))
+  assert.ok(fixed.includes('- 列表保持原样'))
+  const plain = fixed.split('\n').filter(line => line.trim() !== '' && !/^[#>\-]/.test(line.trim()))
+  assert.ok(plain.length > 1)
+  assert.ok(plain.every(line => line.length <= 90))
+})
+
+test('normalizeCjkPunctuation 只替换中文之间的半角标点', () => {
+  assert.equal(normalizeCjkPunctuation('你好,世界。这是测试:内容;结束!'), '你好，世界。这是测试：内容；结束！')
+  assert.equal(normalizeCjkPunctuation('版本 3.14，链接 https://a.com/x'), '版本 3.14，链接 https://a.com/x')
+})
+
+test('tidyMarkdown 去掉行尾空格并压缩空行', () => {
+  assert.equal(tidyMarkdown('第一段  \n\n\n\n第二段   '), '第一段\n\n第二段')
+})
+
+test('auditTypography 统计长段落、半角标点、空行、高亮与缺图注', () => {
+  const long = '这是长段落。'.repeat(40)
+  const text = `# 标题\n\n### 小节\n\n${long}\n\n你好,世界\n\n==高亮==\n\n![](https://example.com/a.png)\n\n\n\n结尾`
+  const audit = auditTypography(parseArticle(text).blocks, text)
+  assert.equal(audit.longParagraphs, 1)
+  assert.ok(audit.halfWidthPunctuation >= 1)
+  assert.equal(audit.extraBlankLines, 1)
+  assert.equal(audit.highlights, 1)
+  assert.equal(audit.missingCaptions, 1)
+  assert.equal(audit.headingSkips, 1)
+})
+
+
+test('diffTextLines 标记新增与删除行', () => {
+  const operations = diffTextLines('第一行\n第二行\n第三行', '第一行\n修改后的第二行\n第三行')
+  assert.deepEqual(operations.map(item => item.type), ['same', 'remove', 'add', 'same'])
+  assert.equal(operations[1].text, '第二行')
+  assert.equal(operations[2].text, '修改后的第二行')
 })

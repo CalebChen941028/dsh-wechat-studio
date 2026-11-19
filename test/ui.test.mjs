@@ -91,6 +91,7 @@ test('工作台在 1280px 宽度下渲染三栏与主题库', async () => {
     assert.ok(container.querySelector('.ws-root'))
     assert.ok(container.querySelector('.ws-editor'), 'editor textarea exists')
     assert.ok(container.querySelectorAll('.ws-theme').length >= 10, 'theme library renders')
+    assert.equal(container.querySelectorAll('.ws-theme-mini').length, container.querySelectorAll('.ws-theme').length, 'theme cards use mini previews')
     assert.ok(container.querySelector('.ws-phone'), 'phone preview renders')
   } finally {
     root.unmount()
@@ -220,6 +221,52 @@ test('发布面板：读取草稿箱并导入为本地草稿', async () => {
     const editor = container.querySelector('.ws-editor')
     assert.match(editor.value, /导入标题/)
     assert.match(editor.value, /导入正文内容/)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('AI 修改先出 diff，确认后才写入正文', async () => {
+  const fetchImpl = async (url, init) => {
+    const body = init === undefined ? {} : JSON.parse(init.body)
+    if (body.action === 'aiEditStream') {
+      const payload = JSON.stringify({
+        type: 'done',
+        value: { reply: '已按建议修改', text: '# 新标题\n\n这是 AI 改写后的正文。' },
+      })
+      return new Response(`data: ${payload}\n\n`, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })
+    }
+    const value = body.action === 'networkStatus'
+      ? { mode: 'system', proxyUrl: '', configured: false }
+      : { configured: false }
+    return { ok: true, status: 200, async json() { return { ok: true, value } } }
+  }
+
+  const { dom, window, container, root } = await mountPanel({ fetchImpl })
+  try {
+    const aiTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === 'AI')
+    assert.ok(aiTab)
+    aiTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+
+    const suggestion = container.querySelector('.ws-chat-empty .ws-chip')
+    assert.ok(suggestion)
+    suggestion.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 350))
+
+    assert.ok(container.querySelector('.ws-diff-card'), 'diff card appears before applying')
+    const editorBefore = container.querySelector('.ws-editor').value
+    assert.ok(!editorBefore.includes('AI 改写后的正文'))
+
+    const apply = [...container.querySelectorAll('.ws-diff-card button')].find(button => button.textContent.trim() === '应用修改')
+    assert.ok(apply)
+    apply.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 250))
+    assert.match(container.querySelector('.ws-editor').value, /AI 改写后的正文/)
   } finally {
     root.unmount()
     dom.window.close()

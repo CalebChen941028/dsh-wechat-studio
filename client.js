@@ -458,6 +458,37 @@ const UI_EN = {
   '合集共 {count} 篇': 'Bundle: {count} articles',
   '保存时会逐篇上传': 'Uploaded article by article',
 
+  '一句引文': 'A short quote',
+
+  '排版体检': 'Typography check',
+  '一键整理': 'Tidy all',
+  '长段落': 'Long paragraphs',
+  '半角标点': 'Half-width punctuation',
+  '多余空行': 'Extra blank lines',
+  '高亮标记': 'Highlights',
+  '缺图注': 'Missing captions',
+  '标题层级跳级': 'Heading level jumps',
+  '拆分': 'Split',
+  '统一': 'Normalize',
+  '整理': 'Tidy',
+  '图注即图片说明（alt），标题层级跳级需要手动调整。': 'Captions use the image alt text; heading level jumps need manual edits.',
+  '没有需要修正的内容': 'Nothing to fix',
+  '已拆分长段落': 'Long paragraphs split',
+  '已统一中文标点': 'Chinese punctuation normalized',
+  '已整理多余空行': 'Blank lines tidied',
+  '已整理正文': 'Article tidied',
+
+  'AI 建议修改': 'AI suggestion',
+  '应用修改': 'Apply changes',
+  '放弃': 'Discard',
+  '先应用或放弃当前建议': 'Apply or discard the current suggestion first',
+  '新增 {added} 行 · 删除 {removed} 行': '+{added} / -{removed} lines',
+  '还有 {count} 行改动未显示': '{count} more changed lines hidden',
+  '只调整版式与标题摘要，不改正文': 'Only layout and title/summary change; the text stays as is',
+  '版式：{theme}': 'Layout: {theme}',
+  '已应用 AI 修改：{parts}': 'AI changes applied: {parts}',
+  '已放弃这次 AI 修改': 'AI suggestion discarded',
+
 }
 
 
@@ -1301,6 +1332,144 @@ function rankThemes(topic, features) {
   })
   ranked.sort((a, b) => b.score - a.score)
   return ranked
+}
+
+/** Half-width punctuation surrounded by CJK characters. */
+const CJK_HALF_PUNCT = /[\u4e00-\u9fff][,.;:!?](?=$|[\s\u4e00-\u9fff，。；：！？、”’）】》])/g
+const CJK_PUNCT_MAP = { ',': '，', '.': '。', ';': '；', ':': '：', '!': '！', '?': '？' }
+
+/** Count and summarize typography issues in parsed blocks and raw Markdown. */
+function auditTypography(blocks, text) {
+  const source = String(text ?? '')
+  const paragraphs = (blocks ?? []).filter(block => block.type === 'paragraph')
+  const images = (blocks ?? []).filter(block => block.type === 'image')
+  const headings = (blocks ?? []).filter(block => block.type === 'heading' || block.type === 'title')
+  const longParagraphs = paragraphs.filter(block => block.text.length > 140).length
+  const halfWidthPunctuation = (source.match(CJK_HALF_PUNCT) ?? []).length
+  const extraBlankLines = (source.match(/\n{3,}/g) ?? []).length
+  const highlights = Math.floor((source.match(/==/g) ?? []).length / 2)
+  const missingCaptions = images.filter(block => String(block.alt ?? '').trim() === '').length
+  let headingSkips = 0
+  let previous = 0
+  for (const block of headings) {
+    const level = Number(block.level) || 1
+    if (previous > 0 && level - previous > 1) headingSkips += 1
+    previous = level
+  }
+  return { longParagraphs, halfWidthPunctuation, extraBlankLines, highlights, missingCaptions, headingSkips }
+}
+
+/** Split long ordinary paragraphs at sentence boundaries, leaving headings/lists/quotes alone. */
+function splitLongParagraphs(text, maxChars = 140) {
+  const lines = String(text ?? '').split('\n')
+  const output = []
+  let inFence = false
+  const isPlainLine = (line) => {
+    const value = line.trim()
+    if (value === '') return false
+    if (/^(#{1,6}\s|>|\s*[-*+]\s|\s*\d+[.)]\s|!\[|```|---+\s*$)/.test(value)) return false
+    return true
+  }
+  const splitLine = (line) => {
+    const sentences = line.match(/[^。！？!?；;]+[。！？!?；;]?/g) ?? [line]
+    const chunks = []
+    let current = ''
+    for (const sentence of sentences) {
+      if (current === '') current = sentence
+      else if ((current + sentence).length <= maxChars) current += sentence
+      else {
+        chunks.push(current)
+        current = sentence
+      }
+    }
+    if (current !== '') chunks.push(current)
+    return chunks.join('\n\n')
+  }
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence
+      output.push(line)
+      continue
+    }
+    if (!inFence && isPlainLine(line) && line.trim().length > maxChars) {
+      output.push(splitLine(line))
+    } else {
+      output.push(line)
+    }
+  }
+  return output.join('\n')
+}
+
+/** Convert half-width punctuation used between Chinese characters. */
+function normalizeCjkPunctuation(text) {
+  return String(text ?? '').replace(/([\u4e00-\u9fff])([,.;:!?])(?=$|[\s\u4e00-\u9fff，。；：！？、”’）】》])/g, (match, previous, punctuation) => `${previous}${CJK_PUNCT_MAP[punctuation]}`)
+}
+
+/** Collapse repeated blank lines and trailing spaces. */
+function tidyMarkdown(text) {
+  return String(text ?? '')
+    .split('\n')
+    .map(line => line.replace(/[ \t]+$/, ''))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
+ * Line-level diff for previewing an AI rewrite.
+ * Returns same/add/remove operations; very large inputs fall back to a
+ * common-prefix/suffix diff so the panel stays responsive.
+ * @param {string} before current text.
+ * @param {string} after proposed text.
+ * @param {{ maxCells?: number }} [options] LCS budget.
+ * @returns {Array<{ type: 'same'|'add'|'remove', text: string }>}
+ */
+function diffTextLines(before, after, options = {}) {
+  const left = String(before ?? '').split('\n')
+  const right = String(after ?? '').split('\n')
+  const maxCells = options.maxCells ?? 200000
+  const operations = []
+  if (left.length * right.length > maxCells) {
+    let prefix = 0
+    while (prefix < left.length && prefix < right.length && left[prefix] === right[prefix]) prefix += 1
+    let suffix = 0
+    while (
+      suffix < left.length - prefix
+      && suffix < right.length - prefix
+      && left[left.length - 1 - suffix] === right[right.length - 1 - suffix]
+    ) suffix += 1
+    for (let index = 0; index < prefix; index += 1) operations.push({ type: 'same', text: left[index] })
+    for (let index = prefix; index < left.length - suffix; index += 1) operations.push({ type: 'remove', text: left[index] })
+    for (let index = prefix; index < right.length - suffix; index += 1) operations.push({ type: 'add', text: right[index] })
+    for (let index = right.length - suffix; index < right.length; index += 1) operations.push({ type: 'same', text: right[index] })
+    return operations
+  }
+  const rows = left.length
+  const columns = right.length
+  const dp = Array.from({ length: rows + 1 }, () => new Uint32Array(columns + 1))
+  for (let i = rows - 1; i >= 0; i -= 1) {
+    for (let j = columns - 1; j >= 0; j -= 1) {
+      dp[i][j] = left[i] === right[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1])
+    }
+  }
+  let i = 0
+  let j = 0
+  while (i < rows && j < columns) {
+    if (left[i] === right[j]) {
+      operations.push({ type: 'same', text: left[i] })
+      i += 1
+      j += 1
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      operations.push({ type: 'remove', text: left[i] })
+      i += 1
+    } else {
+      operations.push({ type: 'add', text: right[j] })
+      j += 1
+    }
+  }
+  while (i < rows) { operations.push({ type: 'remove', text: left[i] }); i += 1 }
+  while (j < columns) { operations.push({ type: 'add', text: right[j] }); j += 1 }
+  return operations
 }
 
 /**
@@ -4500,7 +4669,7 @@ function DesignPanel(props) {
       h('div', { className: 'ws-pane' + (tab === 'theme' ? '' : ' ws-pane-hidden') },
         h(ThemeSection, { store, design, analysis, doc, toast, autoRefine, setAutoRefine, refining, onRefineNow })),
       h('div', { className: 'ws-pane' + (tab === 'type' ? '' : ' ws-pane-hidden') },
-        h(TypeSection, { store, design, toast })),
+        h(TypeSection, { store, design, doc, parsed, toast })),
       h('div', { className: 'ws-pane' + (tab === 'decor' ? '' : ' ws-pane-hidden') },
         h(DecorSection, { store, design, toast })),
       h('div', { className: 'ws-pane' + (tab === 'publish' ? '' : ' ws-pane-hidden') },
@@ -4519,6 +4688,7 @@ function AiSection(props) {
   const [progress, setProgress] = React.useState(0)
   const [phase, setPhase] = React.useState('')
   const [chunked, setChunked] = React.useState(false)
+  const [pending, setPending] = React.useState(null)
   const listRef = React.useRef(null)
   const inputRef = React.useRef(null)
 
@@ -4530,6 +4700,7 @@ function AiSection(props) {
   const send = async (override) => {
     const instruction = String(override ?? input).trim()
     if (instruction === '' || busy) return
+    if (pending !== null) { toast(t('先应用或放弃当前建议')); return }
     if (doc.text.trim() === '') {
       toast('编辑区还是空的，先写点内容', 'error')
       return
@@ -4576,7 +4747,6 @@ function AiSection(props) {
         }, { timeoutMs: 150000, onProgress: chars => setProgress(chars) })
       }
 
-      const applied = []
       const current = store.doc
       const typedMeanwhile = typeof value.text === 'string' && current.text !== sentText
       const nextText = typeof value.text === 'string' && value.text.trim() !== '' && value.text !== current.text && !typedMeanwhile
@@ -4599,27 +4769,35 @@ function AiSection(props) {
         }
       }
       const nextMeta = value.meta && typeof value.meta === 'object' ? { ...current.meta, ...value.meta } : undefined
-      if (nextText !== undefined) applied.push(t('正文'))
-      if (nextDesign !== undefined) applied.push(t('版式'))
-      if (nextMeta !== undefined) applied.push(t('标题/摘要'))
-      if (applied.length > 0) {
-        store.updateDoc(state => ({
-          ...state,
-          ...(nextText === undefined ? {} : { text: nextText }),
-          ...(nextDesign === undefined ? {} : { design: nextDesign }),
-          ...(nextMeta === undefined ? {} : { meta: nextMeta }),
-        }))
+
+      const changes = []
+      if (nextText !== undefined) changes.push(t('正文'))
+      if (nextDesign !== undefined) changes.push(t('版式'))
+      if (nextMeta !== undefined) changes.push(t('标题/摘要'))
+      if (typedMeanwhile) changes.push(t('正文有改动，未覆盖'))
+
+      if (nextText !== undefined || nextDesign !== undefined || nextMeta !== undefined) {
+        setPending({
+          baseText: sentText,
+          text: nextText,
+          design: nextDesign,
+          meta: nextMeta,
+          reply: value.reply || t('已修改'),
+          model: value.model?.model ?? '',
+          parseError: value.parseError === true,
+          changes,
+          diff: nextText === undefined ? [] : diffTextLines(sentText, nextText),
+        })
+      } else {
+        setMessages(list => [...list, {
+          role: 'assistant',
+          content: value.reply || t('已修改'),
+          applied: changes,
+          canUndo: false,
+          model: value.model?.model ?? '',
+          parseError: value.parseError === true,
+        }])
       }
-      if (typedMeanwhile) applied.push(t('正文有改动，未覆盖'))
-      setMessages(list => [...list, {
-        role: 'assistant',
-        content: value.reply || t('已修改'),
-        applied,
-        canUndo: applied.length > 0,
-        model: value.model?.model ?? '',
-        parseError: value.parseError === true,
-      }])
-      if (applied.length > 0) toast(`AI 已修改：${applied.join('、')}`, 'success')
     } catch (error) {
       setMessages(list => [...list, { role: 'error', content: error.message || t('修改失败'), code: error.code }])
     } finally {
@@ -4627,6 +4805,37 @@ function AiSection(props) {
       setPhase('')
       requestAnimationFrame(() => inputRef.current?.focus())
     }
+  }
+
+  const applyPending = () => {
+    if (pending === null) return
+    const applied = []
+    const patch = {}
+    const current = store.doc
+    const textSafe = pending.text !== undefined && current.text === pending.baseText
+    if (pending.text !== undefined) {
+      if (textSafe) { patch.text = pending.text; applied.push(t('正文')) }
+      else applied.push(t('正文有改动，未覆盖'))
+    }
+    if (pending.design !== undefined) { patch.design = pending.design; applied.push(t('版式')) }
+    if (pending.meta !== undefined) { patch.meta = { ...current.meta, ...pending.meta }; applied.push(t('标题/摘要')) }
+    if (Object.keys(patch).length > 0) store.updateDoc(state => ({ ...state, ...patch }))
+    setMessages(list => [...list, {
+      role: 'assistant',
+      content: pending.reply,
+      applied,
+      canUndo: Object.keys(patch).length > 0,
+      model: pending.model,
+      parseError: pending.parseError,
+    }])
+    if (Object.keys(patch).length > 0) toast(t('已应用 AI 修改：{parts}', { parts: applied.join('、') }), 'success')
+    setPending(null)
+  }
+
+  const discardPending = () => {
+    if (pending === null) return
+    setMessages(list => [...list, { role: 'assistant', content: t('已放弃这次 AI 修改'), applied: [] }])
+    setPending(null)
   }
 
   const suggestions = [t('按内容重新精排'), t('标题更有冲击力'), t('第二段压缩到两行'), t('换成杂志版式'), t('加一个小节标题'), t('行距调到 1.9')]
@@ -4673,6 +4882,40 @@ function AiSection(props) {
           h('span', { className: 'ws-msg-body' }, progress > 0 ? t('模型已生成 {chars} 字…', { chars: progress }) : (phase === '' ? t('正在按你的要求修改…') : phase)),
         ) : null,
       ),
+    pending !== null
+      ? h('div', { className: 'ws-diff-card' },
+        h('div', { className: 'ws-diff-head' },
+          h(Icon, { name: 'sparkles', size: 14 }),
+          h('span', null, t('AI 建议修改')),
+          h('span', { className: 'ws-badge' }, t('新增 {added} 行 · 删除 {removed} 行', {
+            added: pending.diff.filter(item => item.type === 'add').length,
+            removed: pending.diff.filter(item => item.type === 'remove').length,
+          })),
+        ),
+        pending.diff.filter(item => item.type !== 'same').length > 0
+          ? h('div', { className: 'ws-diff-lines' },
+            pending.diff.filter(item => item.type !== 'same').slice(0, 14).map((item, index) => h('div', {
+              key: index,
+              className: 'ws-diff-line ' + item.type,
+            }, `${item.type === 'add' ? '+' : '-'} ${item.text.length > 100 ? `${item.text.slice(0, 100)}…` : item.text || ' '}`)),
+            pending.diff.filter(item => item.type !== 'same').length > 14
+              ? h('div', { className: 'ws-diff-more' }, t('还有 {count} 行改动未显示', { count: pending.diff.filter(item => item.type !== 'same').length - 14 }))
+              : null,
+          )
+          : h('p', { className: 'ws-hint' }, t('只调整版式与标题摘要，不改正文')),
+        pending.design !== undefined
+          ? h('p', { className: 'ws-hint' }, t('版式：{theme}', { theme: (() => {
+            const theme = THEMES.find(entry => entry.id === pending.design.themeId)
+            const variant = theme?.variants.find(entry => entry.id === pending.design.variantId)
+            return `${theme?.name ?? pending.design.themeId}${variant === undefined ? '' : ` · ${variant.name}`}`
+          })() }))
+          : null,
+        h('div', { className: 'ws-row' },
+          h(Button, { variant: 'primary', onClick: applyPending }, t('应用修改')),
+          h(Button, { variant: 'ghost', onClick: discardPending }, t('放弃')),
+        ),
+      )
+      : null,
     doc.text.length > LONG_TEXT_CHUNK_THRESHOLD
       ? h('div', { className: 'ws-chat-compose-option' },
         h(Toggle, {
@@ -4699,7 +4942,7 @@ function AiSection(props) {
         },
       }),
       h('div', { className: 'ws-row' },
-        h(Button, { variant: 'primary', disabled: busy || input.trim() === '', onClick: () => send() }, busy ? t('修改中…') : t('发送')),
+        h(Button, { variant: 'primary', disabled: busy || pending !== null || input.trim() === '', onClick: () => send() }, busy ? t('修改中…') : t('发送')),
         h('span', { className: 'ws-hint' }, t('Enter 发送，Shift+Enter 换行')),
       ),
     ),
@@ -4712,6 +4955,31 @@ function AiSection(props) {
       }, text)))
       : null,
     h('p', { className: 'ws-hint' }, t('模型是当前会话的默认模型；要求改版式时只动主题与装饰，不会重写正文。')),
+  )
+}
+
+function ThemeMiniPreview({ theme }) {
+  const palette = theme.palette
+  const type = theme.type
+  return h('span', {
+    className: 'ws-theme-mini',
+    style: { background: palette.bg, color: palette.text, borderColor: palette.border },
+    'aria-hidden': 'true',
+  },
+  h('span', {
+    className: 'ws-theme-mini-title',
+    style: {
+      fontFamily: type.titleFont,
+      fontWeight: type.titleWeight,
+      fontSize: `${Math.min(15, Math.max(11, type.titleSize / 2.4))}px`,
+      letterSpacing: type.titleTracking,
+    },
+  }, t('标题')),
+  h('span', { className: 'ws-theme-mini-tag', style: { color: palette.accent, borderColor: palette.accentSoft } }, '01'),
+  h('span', { className: 'ws-theme-mini-rule', style: { background: palette.accent } }),
+  h('span', { className: 'ws-theme-mini-line', style: { background: palette.secondary } }),
+  h('span', { className: 'ws-theme-mini-line short', style: { background: palette.secondary } }),
+  h('span', { className: 'ws-theme-mini-quote', style: { borderLeftColor: palette.accent, color: palette.secondary, fontFamily: type.bodyFont } }, t('一句引文')),
   )
 }
 
@@ -4771,11 +5039,7 @@ function ThemeSection(props) {
           className: 'ws-theme' + (theme.id === activeTheme.id ? ' on' : ''),
           onClick: () => applyTheme(theme),
         },
-        h('span', { className: 'ws-theme-swatch', style: { background: theme.palette.bg, borderColor: theme.palette.border } },
-          h('i', { style: { background: theme.palette.text } }),
-          h('i', { style: { background: theme.palette.accent } }),
-          h('i', { style: { background: theme.palette.accentSoft } }),
-        ),
+        h(ThemeMiniPreview, { theme }),
         h('span', { className: 'ws-theme-meta' },
           h('span', { className: 'ws-theme-name' }, theme.name),
           h('span', { className: 'ws-theme-tag' }, theme.tagline.slice(0, 14)),
@@ -4849,7 +5113,7 @@ function withoutOverrideKeys(design, keys) {
 }
 
 function TypeSection(props) {
-  const { store, design, toast } = props
+  const { store, design, doc, parsed, toast } = props
   const set = (patch) => store.updateDesign(current => ({ ...current, overrides: { ...(current.overrides ?? {}), ...patch } }))
   const rows = [
     { key: 'titleSize', label: t('标题字号'), value: design.type.titleSize, min: 20, max: 40, step: 1, unit: 'px' },
@@ -4919,6 +5183,17 @@ function TypeSection(props) {
     }
     toast(t('已应用排版预设：{name}', { name: spec.label }))
   }
+  const audit = React.useMemo(() => auditTypography(parsed.blocks, doc.text), [parsed.blocks, doc.text])
+  const fixable = audit.longParagraphs > 0 || audit.halfWidthPunctuation > 0 || audit.extraBlankLines > 0
+  const applyTextFix = (next, message) => {
+    if (next === doc.text) { toast(t('没有需要修正的内容')); return }
+    store.updateDoc(current => ({ ...current, text: next }))
+    toast(message)
+  }
+  const fixLong = () => applyTextFix(splitLongParagraphs(doc.text), t('已拆分长段落'))
+  const fixPunctuation = () => applyTextFix(normalizeCjkPunctuation(doc.text), t('已统一中文标点'))
+  const fixBlank = () => applyTextFix(tidyMarkdown(doc.text), t('已整理多余空行'))
+  const fixAll = () => applyTextFix(tidyMarkdown(normalizeCjkPunctuation(splitLongParagraphs(doc.text))), t('已整理正文'))
   return h('div', { className: 'ws-sections' },
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('排版预设'))),
@@ -4931,6 +5206,42 @@ function TypeSection(props) {
         }, spec.label)),
       ),
       h('p', { className: 'ws-hint' }, t('按主题比例一键切换字号、行高、段距与留白，下面仍可继续微调。')),
+    ),
+    h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' },
+        h('span', null, t('排版体检')),
+        fixable ? h('button', { type: 'button', className: 'ws-link', onClick: fixAll }, t('一键整理')) : null,
+      ),
+      h('div', { className: 'ws-audit-list' },
+        h('div', { className: 'ws-audit-row' + (audit.longParagraphs > 0 ? ' warn' : '') },
+          h('span', null, t('长段落')),
+          h('span', { className: 'ws-audit-count' }, audit.longParagraphs),
+          audit.longParagraphs > 0 ? h('button', { type: 'button', className: 'ws-link', onClick: fixLong }, t('拆分')) : null,
+        ),
+        h('div', { className: 'ws-audit-row' + (audit.halfWidthPunctuation > 0 ? ' warn' : '') },
+          h('span', null, t('半角标点')),
+          h('span', { className: 'ws-audit-count' }, audit.halfWidthPunctuation),
+          audit.halfWidthPunctuation > 0 ? h('button', { type: 'button', className: 'ws-link', onClick: fixPunctuation }, t('统一')) : null,
+        ),
+        h('div', { className: 'ws-audit-row' + (audit.extraBlankLines > 0 ? ' warn' : '') },
+          h('span', null, t('多余空行')),
+          h('span', { className: 'ws-audit-count' }, audit.extraBlankLines),
+          audit.extraBlankLines > 0 ? h('button', { type: 'button', className: 'ws-link', onClick: fixBlank }, t('整理')) : null,
+        ),
+        h('div', { className: 'ws-audit-row' + (audit.highlights > 8 ? ' warn' : '') },
+          h('span', null, t('高亮标记')),
+          h('span', { className: 'ws-audit-count' }, audit.highlights),
+        ),
+        h('div', { className: 'ws-audit-row' + (audit.missingCaptions > 0 ? ' warn' : '') },
+          h('span', null, t('缺图注')),
+          h('span', { className: 'ws-audit-count' }, audit.missingCaptions),
+        ),
+        h('div', { className: 'ws-audit-row' + (audit.headingSkips > 0 ? ' warn' : '') },
+          h('span', null, t('标题层级跳级')),
+          h('span', { className: 'ws-audit-count' }, audit.headingSkips),
+        ),
+      ),
+      h('p', { className: 'ws-hint' }, t('图注即图片说明（alt），标题层级跳级需要手动调整。')),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('字号与节奏')), h('button', { type: 'button', className: 'ws-link', onClick: reset }, t('恢复默认'))),
@@ -6092,11 +6403,13 @@ const STUDIO_CSS = `
 .ws-theme{display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--ws-border);border-radius:9px;background:var(--ws-bg);cursor:pointer;text-align:left;font:inherit}
 .ws-theme:hover{border-color:var(--ws-border2)}
 .ws-theme.on{border-color:var(--ws-brand);box-shadow:0 0 0 1px var(--ws-brand) inset}
-.ws-theme-swatch{display:flex;gap:3px;align-items:flex-end;height:26px;padding:5px 6px;border-radius:6px;border:1px solid transparent}
-.ws-theme-swatch i{display:block;height:14px;border-radius:2px}
-.ws-theme-swatch i:nth-child(1){flex:2;height:8px}
-.ws-theme-swatch i:nth-child(2){flex:1;height:14px}
-.ws-theme-swatch i:nth-child(3){flex:1.4;height:5px}
+.ws-theme-mini{position:relative;display:flex;flex-direction:column;gap:4px;height:82px;padding:9px 9px 8px;border:1px solid;border-radius:7px;overflow:hidden}
+.ws-theme-mini-title{font-size:13px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:20px}
+.ws-theme-mini-tag{position:absolute;top:8px;right:8px;font-size:8px;line-height:1;padding:2px 4px;border:1px solid;border-radius:99px;opacity:.9}
+.ws-theme-mini-rule{width:26px;height:2px;border-radius:2px;margin-top:2px}
+.ws-theme-mini-line{height:3px;border-radius:2px;opacity:.36;width:88%}
+.ws-theme-mini-line.short{width:62%;opacity:.24}
+.ws-theme-mini-quote{margin-top:auto;font-size:8.5px;line-height:1.4;padding-left:6px;border-left:2px solid;opacity:.78;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ws-theme-meta{display:flex;flex-direction:column;gap:1px;min-width:0}
 .ws-theme-name{font-size:12.5px;font-weight:600;color:var(--ws-text)}
 .ws-theme-tag{font-size:10.5px;color:var(--ws-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -6143,6 +6456,20 @@ const STUDIO_CSS = `
 .ws-error-text{color:var(--ws-danger)}
 .ws-cover{width:100%;aspect-ratio:900/383;border-radius:8px;object-fit:cover;display:block;border:1px solid var(--ws-border)}
 .ws-cover-empty{display:flex;align-items:center;justify-content:center;background:var(--ws-surface2);color:var(--ws-muted);font-size:11.5px}
+.ws-diff-card{display:flex;flex-direction:column;gap:6px;padding:9px;border:1px solid var(--ws-border);border-radius:10px;background:var(--ws-surface2)}
+.ws-diff-head{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600}
+.ws-diff-head .ws-badge{margin-left:auto}
+.ws-diff-lines{display:flex;flex-direction:column;gap:2px;max-height:190px;overflow:auto;background:var(--ws-bg);border:1px solid var(--ws-border);border-radius:7px;padding:5px}
+.ws-diff-line{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.55;padding:1px 4px;border-radius:3px;white-space:pre-wrap;word-break:break-word;color:var(--ws-muted)}
+.ws-diff-line.add{background:color-mix(in srgb,var(--ws-success) 12%,transparent);color:var(--ws-success)}
+.ws-diff-line.remove{background:color-mix(in srgb,var(--ws-danger) 10%,transparent);color:var(--ws-danger)}
+.ws-diff-more{font-size:11px;color:var(--ws-muted);padding:2px 4px}
+.ws-audit-list{display:flex;flex-direction:column;gap:4px}
+.ws-audit-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ws-muted);min-height:22px}
+.ws-audit-row.warn{color:var(--ws-text)}
+.ws-audit-count{min-width:22px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ws-muted)}
+.ws-audit-row.warn .ws-audit-count{color:var(--ws-danger)}
+.ws-audit-row .ws-link{margin-left:auto}
 .ws-preflight-list{display:flex;flex-direction:column;gap:5px}
 .ws-preflight-row{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ws-muted)}
 .ws-preflight-dot{width:6px;height:6px;border-radius:50%;background:var(--ws-success);flex:none}
