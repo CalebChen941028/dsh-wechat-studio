@@ -36,7 +36,8 @@ function AiSection(props) {
   const [phase, setPhase] = React.useState('')
   const [chunked, setChunked] = React.useState(false)
   const [pending, setPending] = React.useState(null)
-  const [scopeSelection, setScopeSelection] = React.useState(true)
+  const [scopeMode, setScopeMode] = React.useState('selection')
+  const [stylePreset, setStylePreset] = React.useState('')
   const abortRef = React.useRef(null)
   const listRef = React.useRef(null)
   const inputRef = React.useRef(null)
@@ -50,9 +51,29 @@ function AiSection(props) {
   const selectedEntry = selectedBlock !== null ? sourceBlocks[selectedBlock] : undefined
   const canScope = selectedEntry !== undefined && ['paragraph', 'heading', 'quote', 'list'].includes(selectedEntry.type)
   React.useEffect(() => {
-    if (canScope) setScopeSelection(true)
+    if (canScope) setScopeMode('selection')
   }, [selectedBlock, canScope])
-  const scopeBlock = canScope && scopeSelection ? selectedEntry : null
+  const sectionRange = (() => {
+    if (!canScope) return [0, -1]
+    let start = selectedBlock
+    if (sourceBlocks[selectedBlock].type !== 'heading') {
+      while (start > 0 && sourceBlocks[start].type !== 'heading') start -= 1
+    }
+    let end = start + 1
+    while (end < sourceBlocks.length && sourceBlocks[end].type !== 'heading') end += 1
+    return [start, end - 1]
+  })()
+  const effectiveScope = !canScope || scopeMode === 'document'
+    ? null
+    : scopeMode === 'section' ? sectionRange : [selectedBlock, selectedBlock]
+  const scopeLines = effectiveScope === null ? null : doc.text.split('\n').slice(
+    sourceBlocks[effectiveScope[0]].lines[0],
+    sourceBlocks[effectiveScope[1]].lines[1] + 1,
+  )
+  const scopeText = scopeLines === null ? '' : scopeLines.join('\n')
+  const styleInstruction = stylePreset === 'concise' ? '语气更克制，删掉套话与重复。'
+    : stylePreset === 'spoken' ? '语气更口语，像在跟朋友说话。'
+      : stylePreset === 'shorter' ? '尽量压缩篇幅，保留信息，不删事实。' : ''
 
   const send = async (override) => {
     const instruction = String(override ?? input).trim()
@@ -64,8 +85,6 @@ function AiSection(props) {
     }
     setInput('')
     const sentText = doc.text
-    const scopeLines = scopeBlock === null ? null : doc.text.split('\n').slice(scopeBlock.lines[0], scopeBlock.lines[1] + 1)
-    const scopeText = scopeLines === null ? '' : scopeLines.join('\n')
     setMessages(list => [...list, { role: 'user', content: instruction }])
     setBusy(true)
     setProgress(0)
@@ -81,7 +100,7 @@ function AiSection(props) {
         for (let index = 0; index < chunks.length; index += 1) {
           setPhase(t('第 {index}/{total} 段改写中', { index: index + 1, total: chunks.length }))
           const part = await callHost('aiEdit', {
-            instruction: `${instruction}\n\n（这是全文第 ${index + 1}/${chunks.length} 段。只改写这一段，保持 Markdown 结构；不要输出 design；不要添加原文没有的事实。）`,
+            instruction: `${instruction}\n\n${styleInstruction}\n\n（这是全文第 ${index + 1}/${chunks.length} 段。只改写这一段，保持 Markdown 结构；不要输出 design；不要添加原文没有的事实。）`,
             text: chunks[index],
             title: doc.meta.title,
             design: doc.design,
@@ -98,9 +117,11 @@ function AiSection(props) {
         setPhase(t('模型生成中'))
         const controller = typeof AbortController === 'function' ? new AbortController() : null
         abortRef.current = controller
-        const effectiveInstruction = scopeLines === null
-          ? instruction
-          : `${instruction}\n\n（只改写下面这一段，不要改其他段落；保持 Markdown 结构；不要输出 design 和 meta。）`
+        const effectiveInstruction = [
+          instruction,
+          styleInstruction,
+          scopeLines === null ? '' : '（只改写下面这部分，不要改其他段落；保持 Markdown 结构；不要输出 design 和 meta。）',
+        ].filter(Boolean).join('\n\n')
         value = await callHostStream('aiEditStream', {
           instruction: effectiveInstruction,
           text: scopeLines === null ? doc.text : scopeText,
@@ -121,9 +142,9 @@ function AiSection(props) {
         if (!typedMeanwhile) {
           const currentLines = current.text.split('\n')
           nextText = [
-            ...currentLines.slice(0, scopeBlock.lines[0]),
+            ...currentLines.slice(0, sourceBlocks[effectiveScope[0]].lines[0]),
             ...value.text.trim().split('\n'),
-            ...currentLines.slice(scopeBlock.lines[1] + 1),
+            ...currentLines.slice(sourceBlocks[effectiveScope[1]].lines[1] + 1),
           ].join('\n')
         }
       } else if (typeof value.text === 'string' && value.text.trim() !== '' && value.text !== current.text && !typedMeanwhile) {
@@ -159,7 +180,7 @@ function AiSection(props) {
           text: nextText,
           design: nextDesign,
           meta: nextMeta,
-          reply: scopeLines === null ? (value.reply || t('已修改')) : (value.reply ? `${t('已改写选中段落')}。${value.reply}` : t('已改写选中段落')),
+          reply: scopeLines === null ? (value.reply || t('已修改')) : (value.reply ? `${scopeMode === 'section' ? t('已改写本节') : t('已改写选中段落')}。${value.reply}` : (scopeMode === 'section' ? t('已改写本节') : t('已改写选中段落'))),
           model: value.model?.model ?? '',
           parseError: value.parseError === true,
           changes,
@@ -294,13 +315,28 @@ function AiSection(props) {
         ),
       )
       : null,
-    canScope
+    canScope || stylePreset !== ''
       ? h('div', { className: 'ws-chat-compose-option' },
+        canScope
+          ? h('div', { className: 'ws-scope-row' },
+            h('span', { className: 'ws-hint' }, `${t('当前选中')}：${selectedEntry.text.slice(0, 20)}${selectedEntry.text.length > 20 ? '…' : ''}`),
+            h('button', { type: 'button', className: 'ws-chip' + (scopeMode === 'selection' ? ' on' : ''), onClick: () => setScopeMode('selection') }, t('选中段')),
+            h('button', { type: 'button', className: 'ws-chip' + (scopeMode === 'section' ? ' on' : ''), onClick: () => setScopeMode('section') }, t('本节')),
+            h('button', { type: 'button', className: 'ws-chip' + (scopeMode === 'document' ? ' on' : ''), onClick: () => setScopeMode('document') }, t('整篇')),
+          )
+          : null,
         h('div', { className: 'ws-scope-row' },
-          h('span', { className: 'ws-hint' }, `${t('当前选中')}：${selectedEntry.text.slice(0, 24)}${selectedEntry.text.length > 24 ? '…' : ''}`),
-          h('button', { type: 'button', className: 'ws-chip' + (scopeSelection ? ' on' : ''), onClick: () => setScopeSelection(true) }, t('只改选中段')),
-          h('button', { type: 'button', className: 'ws-chip' + (!scopeSelection ? ' on' : ''), onClick: () => setScopeSelection(false) }, t('改整篇')),
+          h('span', { className: 'ws-hint' }, t('语气')),
+          [['', t('原样')], ['concise', t('更克制')], ['spoken', t('更口语')], ['shorter', t('更短')]].map(([id, label]) => h('button', {
+            key: id || 'default',
+            type: 'button',
+            className: 'ws-chip' + (stylePreset === id ? ' on' : ''),
+            onClick: () => setStylePreset(id),
+          }, label)),
         ),
+        h('p', { className: 'ws-hint' }, t('预估约 {tokens} tokens（按字符粗算）', {
+          tokens: Math.ceil(((scopeLines === null ? doc.text.length : scopeText.length) + input.length) / 2),
+        })),
       )
       : null,
     doc.text.length > LONG_TEXT_CHUNK_THRESHOLD
@@ -848,12 +884,14 @@ function PublishSection(props) {
   const [confirmPublish, setConfirmPublish] = React.useState(false)
   const [coverBusy, setCoverBusy] = React.useState(false)
   const [bundleIds, setBundleIds] = React.useState([])
-  const [draftBox, setDraftBox] = React.useState({ phase: 'idle', items: [], error: '' })
+  const [draftBox, setDraftBox] = React.useState({ phase: 'idle', items: [], total: 0, offset: 0, error: '' })
+  const [draftQuery, setDraftQuery] = React.useState('')
   const [draftBusy, setDraftBusy] = React.useState(false)
   const [deleteArm, setDeleteArm] = React.useState('')
   const [importingDraft, setImportingDraft] = React.useState('')
   const [snapshots, setSnapshots] = React.useState([])
   const [snapshotBusy, setSnapshotBusy] = React.useState(false)
+  const [compareSnapshot, setCompareSnapshot] = React.useState(null)
   const [networkState, setNetworkState] = React.useState({ phase: 'loading', mode: 'system', proxyUrl: '', error: '' })
   const [networkMode, setNetworkMode] = React.useState('system')
   const [networkProxy, setNetworkProxy] = React.useState('')
@@ -882,6 +920,7 @@ function PublishSection(props) {
   const coverInputRef = React.useRef(null)
   const title = (doc.meta.title.trim() || parsed.title || '').trim()
   const savedMediaId = typeof doc.meta.draftMediaId === 'string' ? doc.meta.draftMediaId.trim() : ''
+  const savedArticleCount = Number(doc.meta.draftArticleCount) || 0
   const author = doc.meta.author.trim()
   const digest = doc.meta.digest.trim() || deriveDigest(parsed.blocks)
   const coverDataUrl = doc.meta.coverDataUrl || ''
@@ -909,6 +948,7 @@ function PublishSection(props) {
       design: snapshot.design,
       meta: { ...current.meta, ...snapshot.meta },
     }))
+    setCompareSnapshot(null)
     toast(t('已恢复快照'))
   }
 
@@ -1090,13 +1130,19 @@ function PublishSection(props) {
     }
   }
 
-  const loadDrafts = async () => {
+  const loadDrafts = async (offset = 0) => {
     setDraftBusy(true)
     try {
-      const value = await callHost('listDrafts', { count: 10 })
-      setDraftBox({ phase: 'ready', items: Array.isArray(value.items) ? value.items : [], error: '' })
+      const value = await callHost('listDrafts', { count: 10, offset })
+      setDraftBox({
+        phase: 'ready',
+        items: Array.isArray(value.items) ? value.items : [],
+        total: Number(value.totalCount) || 0,
+        offset,
+        error: '',
+      })
     } catch (failure) {
-      setDraftBox({ phase: 'error', items: [], error: failure.message || t('读取草稿箱失败') })
+      setDraftBox({ phase: 'error', items: [], total: 0, offset, error: failure.message || t('读取草稿箱失败') })
     } finally {
       setDraftBusy(false)
     }
@@ -1113,7 +1159,7 @@ function PublishSection(props) {
     setDeleteArm('')
     try {
       await callHost('deleteDraft', { mediaId })
-      setDraftBox(current => ({ ...current, items: current.items.filter(item => item.mediaId !== mediaId) }))
+      setDraftBox(current => ({ ...current, items: current.items.filter(item => item.mediaId !== mediaId), total: Math.max(0, current.total - 1) }))
       toast(t('草稿已删除'))
     } catch (failure) {
       toast(failure.message || t('删除失败'), 'error')
@@ -1252,20 +1298,31 @@ function PublishSection(props) {
 
       if (mode === 'update') {
         if (savedMediaId === '') throw new Error(t('当前草稿还没有关联公众号草稿，请先另存为新草稿'))
-        if (preparedArticles.length !== 1) throw new Error(t('覆盖更新只支持单篇文章；多图文请另存为新草稿'))
+        if (savedArticleCount > 0 && savedArticleCount !== preparedArticles.length) {
+          throw new Error(t('合集篇数从 {old} 篇变成 {next} 篇，无法覆盖更新；请另存为新草稿', { old: savedArticleCount, next: preparedArticles.length }))
+        }
         push(t('更新公众号草稿'), 'running')
-        const updated = await callHost('updateDraft', { mediaId: savedMediaId, articles: preparedArticles }, { timeoutMs: 120000 })
-        const warnings = Array.isArray(updated.warnings) ? updated.warnings : []
-        setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done', detail: warnings.join('；') || updated.mediaId } : step)))
-        setResult({ kind: 'draft', mediaId: updated.mediaId, warnings, count: 1, updated: true })
-        toast(t('已更新公众号草稿'), 'success')
+        try {
+          const updated = await callHost('updateDraft', { mediaId: savedMediaId, articles: preparedArticles }, { timeoutMs: 120000 })
+          const warnings = Array.isArray(updated.warnings) ? updated.warnings : []
+          setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done', detail: warnings.join('；') || updated.mediaId } : step)))
+          setResult({ kind: 'draft', mediaId: updated.mediaId, warnings, count: preparedArticles.length, updated: true })
+          store.updateMeta({ draftArticleCount: preparedArticles.length })
+          toast(t('已更新公众号草稿'), 'success')
+        } catch (failure) {
+          if (failure?.code === 'invalid-media') {
+            store.updateMeta({ draftMediaId: '', draftArticleCount: 0 })
+            throw new Error(t('关联的公众号草稿已失效，已解除关联；请点「保存到草稿箱」重新建立。'))
+          }
+          throw failure
+        }
         return
       }
       push(`写入公众号草稿箱${preparedArticles.length > 1 ? `（${preparedArticles.length} 篇）` : ''}`, 'running')
       const draft = await callHost('createDraft', { articles: preparedArticles }, { timeoutMs: 120000 })
       const warnings = Array.isArray(draft.warnings) ? draft.warnings : []
       setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done', detail: warnings.join('；') || draft.mediaId } : step)))
-      if (preparedArticles.length === 1 && typeof draft.mediaId === 'string') store.updateMeta({ draftMediaId: draft.mediaId })
+      if (typeof draft.mediaId === 'string') store.updateMeta({ draftMediaId: draft.mediaId, draftArticleCount: preparedArticles.length })
       setResult({ kind: 'draft', mediaId: draft.mediaId, warnings, count: preparedArticles.length, updated: false })
 
       if (mode === 'publish') {
@@ -1473,11 +1530,25 @@ function PublishSection(props) {
         : h('div', { className: 'ws-snapshot-list' },
           snapshots.map(snapshot => {
             const reason = snapshot.reason === 'before-ai' ? t('AI 修改前') : snapshot.reason === 'before-publish' ? t('发布前') : snapshot.reason === 'before-restore' ? t('恢复前') : t('手动')
-            return h('div', { key: snapshot.id, className: 'ws-snapshot-row' },
-              h('span', { className: 'ws-snapshot-time' }, new Date(snapshot.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })),
-              h('span', { className: 'ws-snapshot-reason' }, reason),
-              h('span', { className: 'ws-snapshot-chars' }, `${snapshot.text.length} ${t('字')}`),
-              h('button', { type: 'button', className: 'ws-link', onClick: () => restoreSnapshot(snapshot) }, t('恢复')),
+            return h(React.Fragment, { key: snapshot.id },
+              h('div', { className: 'ws-snapshot-row' },
+                h('span', { className: 'ws-snapshot-time' }, new Date(snapshot.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })),
+                h('span', { className: 'ws-snapshot-reason' }, reason),
+                h('span', { className: 'ws-snapshot-chars' }, `${snapshot.text.length} ${t('字')}`),
+                h('button', { type: 'button', className: 'ws-link', onClick: () => setCompareSnapshot(value => value?.id === snapshot.id ? null : snapshot) }, t('对比')),
+                h('button', { type: 'button', className: 'ws-link', onClick: () => restoreSnapshot(snapshot) }, t('恢复')),
+              ),
+              compareSnapshot?.id === snapshot.id
+                ? h('div', { className: 'ws-snapshot-diff' },
+                  h('p', { className: 'ws-hint' }, t('当前正文 → 快照；绿色为快照新增，红色为当前有而快照没有。')),
+                  h('div', { className: 'ws-diff-lines' },
+                    diffTextLines(doc.text, snapshot.text).filter(item => item.type !== 'same').slice(0, 24).map((item, index) => h('div', {
+                      key: index,
+                      className: 'ws-diff-line ' + item.type,
+                    }, `${item.type === 'add' ? '+' : '-'} ${item.text.length > 90 ? `${item.text.slice(0, 90)}…` : item.text || ' '}`)),
+                  ),
+                )
+                : null,
             )
           }),
         ),
@@ -1518,16 +1589,25 @@ function PublishSection(props) {
         : h(Button, { icon: 'send', variant: 'solid', disabled: busy || hostStatus.phase === 'error', onClick: () => setConfirmPublish(true) }, t('直接发布')),
     ),
     savedMediaId !== ''
-      ? h('p', { className: 'ws-hint' }, t('这篇已关联公众号草稿；更新会覆盖后台那一篇。'))
+      ? h('p', { className: 'ws-hint' }, savedArticleCount > 0 ? t('已关联公众号草稿（{count} 篇）；更新会覆盖后台对应文章。', { count: savedArticleCount }) : t('这篇已关联公众号草稿；更新会覆盖后台那一篇。'))
       : null,
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },
         h('span', null, t('公众号草稿箱')),
-        h('button', { type: 'button', className: 'ws-link', onClick: loadDrafts, disabled: draftBusy || hostStatus.configured !== true }, draftBusy ? t('读取中…') : t('读取最近 10 篇')),
+        h('button', { type: 'button', className: 'ws-link', onClick: () => loadDrafts(draftBox.offset), disabled: draftBusy || hostStatus.configured !== true }, draftBusy ? t('读取中…') : t('刷新草稿箱')),
       ),
+      h('input', {
+        className: 'ws-input ws-draft-search',
+        value: draftQuery,
+        placeholder: t('在已加载的草稿里搜索标题'),
+        onChange: event => setDraftQuery(event.target.value),
+      }),
       draftBox.phase === 'error' ? h('p', { className: 'ws-hint ws-error-text' }, draftBox.error) : null,
       draftBox.phase === 'ready' && draftBox.items.length === 0 ? h('p', { className: 'ws-hint' }, t('草稿箱是空的。')) : null,
-      draftBox.items.map(item => h('div', { key: item.mediaId, className: 'ws-draft-row' },
+      draftBox.phase === 'ready' && draftBox.items.length > 0 && draftBox.items.filter(item => item.title.toLowerCase().includes(draftQuery.trim().toLowerCase())).length === 0
+        ? h('p', { className: 'ws-hint' }, t('当前页没有匹配标题。'))
+        : null,
+      draftBox.items.filter(item => draftQuery.trim() === '' || item.title.toLowerCase().includes(draftQuery.trim().toLowerCase())).map(item => h('div', { key: item.mediaId, className: 'ws-draft-row' },
         h('div', { className: 'ws-draft-main' },
           h('span', { className: 'ws-draft-title' }, item.title === '' ? t('（无标题）') : item.title),
           h('span', { className: 'ws-draft-meta' }, item.updateTime > 0 ? new Date(item.updateTime * 1000).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : t('时间未知')),
@@ -1537,6 +1617,17 @@ function PublishSection(props) {
           h('button', { type: 'button', className: 'ws-link danger', onClick: () => removeDraft(item.mediaId) }, deleteArm === item.mediaId ? t('确认删除') : t('删除')),
         ),
       )),
+      draftBox.phase === 'ready' && draftBox.total > 0
+        ? h('div', { className: 'ws-draft-pager' },
+          h('button', { type: 'button', className: 'ws-link', disabled: draftBusy || draftBox.offset <= 0, onClick: () => loadDrafts(Math.max(0, draftBox.offset - 10)) }, t('上一页')),
+          h('span', { className: 'ws-hint' }, t('{from}–{to} / 共 {total} 篇', {
+            from: draftBox.offset + 1,
+            to: Math.min(draftBox.offset + 10, draftBox.total),
+            total: draftBox.total,
+          })),
+          h('button', { type: 'button', className: 'ws-link', disabled: draftBusy || draftBox.offset + 10 >= draftBox.total, onClick: () => loadDrafts(draftBox.offset + 10) }, t('下一页')),
+        )
+        : null,
       h('p', { className: 'ws-hint' }, t('删除会直接移除公众号后台的草稿，不影响已发布的文章。')),
     ),
     steps.length > 0

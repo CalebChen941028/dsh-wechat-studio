@@ -548,6 +548,63 @@ const UI_EN = {
   '远程图片暂时只能换图，不能直接裁剪': 'Remote images can only be replaced, not cropped here',
   '当前环境无法处理图片': 'This environment cannot process images',
 
+  '合集篇数从 {old} 篇变成 {next} 篇，无法覆盖更新；请另存为新草稿': 'The bundle changed from {old} to {next} articles; save it as a new draft instead',
+  '关联的公众号草稿已失效，已解除关联；请点「保存到草稿箱」重新建立。': 'The linked WeChat draft no longer exists; the link was cleared. Save it as a new draft.',
+  '已关联公众号草稿（{count} 篇）；更新会覆盖后台对应文章。': 'Linked to a WeChat draft ({count} articles); updating overwrites those articles.',
+
+  '选中段': 'Selected block',
+  '本节': 'This section',
+  '整篇': 'Whole article',
+  '语气': 'Tone',
+  '原样': 'As is',
+  '更克制': 'More restrained',
+  '更口语': 'More spoken',
+  '更短': 'Shorter',
+  '已改写本节': 'Section rewritten',
+  '预估约 {tokens} tokens（按字符粗算）': '~{tokens} tokens (rough character estimate)',
+
+  '对比': 'Compare',
+  '当前正文 → 快照；绿色为快照新增，红色为当前有而快照没有。': 'Current text → snapshot; green is added by the snapshot, red exists only now.',
+
+  '第一次用？先看这几条': 'First time? Start with these',
+  '使用提示与快捷键': 'Help and shortcuts',
+  '编辑器写 Markdown，中间实时预览，右侧调主题与发布。下面是最容易漏掉的用法。': 'Write Markdown on the left, preview in the middle, tune theme and publish on the right. These are the easy-to-miss controls.',
+  '这些操作在界面里没有全部写出来，需要时回来查。': 'Not every control is visible; come back here when needed.',
+  '加粗 / 高亮': 'Bold / highlight',
+  '标题层级': 'Heading level',
+  '无序 / 有序列表': 'Bullet / numbered list',
+  '链接 / 查找替换': 'Link / find and replace',
+  '控制改写范围': 'Limit the rewrite scope',
+  '语气预设': 'Tone presets',
+  '先看 diff 再落盘': 'Review the diff before applying',
+  '生成中可中止': 'Cancel while generating',
+  '覆盖已关联的公众号草稿': 'Overwrite the linked WeChat draft',
+  '合集篇数变化时使用': 'Use when the bundle size changes',
+  'AI 前/发布前自动保存': 'Auto-saved before AI and publishing',
+  '自动解除关联，重新保存': 'Link clears; save again',
+  '调整顺序': 'Reorder blocks',
+  '复制块后继续改': 'Duplicate and keep editing',
+  '图注 / 裁剪': 'Caption / crop',
+  '收藏与最近筛选': 'Favorites and recent filter',
+  '开始使用': 'Start',
+  '知道了': 'Got it',
+
+  '刷新草稿箱': 'Refresh drafts',
+  '在已加载的草稿里搜索标题': 'Search loaded drafts by title',
+  '当前页没有匹配标题。': 'No matching title on this page.',
+  '上一页': 'Previous',
+  '下一页': 'Next',
+  '{from}–{to} / 共 {total} 篇': '{from}–{to} of {total}',
+
+  '只支持 http/https 图片地址': 'Only http/https image URLs are supported',
+  '不允许读取本机或内网地址': 'Local and private addresses are not allowed',
+  '这个地址返回的不是图片': 'That URL did not return an image',
+  '远程图片超过 8MB，先压缩或换一张': 'Remote image exceeds 8MB; compress or replace it',
+
+  '另一个窗口更新了草稿；直接覆盖会丢掉这边的修改。': 'Another window updated this draft; overwriting will discard edits here.',
+  '载入另一窗口版本': 'Load the other version',
+  '继续用当前版本': 'Keep this version',
+
 }
 
 

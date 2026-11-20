@@ -8,6 +8,7 @@
 const PANEL_ID = 'wechat-studio'
 const STORAGE_KEY = 'dsh.wechat-studio.docs.v1'
 const ACTIVE_KEY = 'dsh.wechat-studio.active.v1'
+const HELP_SEEN_KEY = 'dsh.wechat-studio.helpSeen.v1'
 const APPEARANCE_KEY = 'dsh.wechat-studio.appearance.v1'
 const LONG_TEXT_CHUNK_THRESHOLD = 7000
 const DEVICE_KEY = 'dsh.wechat-studio.device.v1'
@@ -140,7 +141,7 @@ function createDocument(seedText, design, meta) {
     id: docId(),
     text,
     design: composed,
-    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', coverLayout: 'left', draftMediaId: '', needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
+    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', coverLayout: 'left', draftMediaId: '', draftArticleCount: 0, needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }
@@ -214,6 +215,11 @@ function useDocumentStore() {
   const [persistError, setPersistError] = React.useState(false)
   const [hydrated, setHydrated] = React.useState(false)
   const [storageMode, setStorageMode] = React.useState('local')
+  const [remoteNotice, setRemoteNotice] = React.useState(null)
+  const channelRef = React.useRef(null)
+  const tabIdRef = React.useRef(`tab-${Math.random().toString(36).slice(2, 9)}`)
+  const docsRef = React.useRef(docs)
+  docsRef.current = docs
   const lastPushRef = React.useRef({ key: '', at: 0 })
 
   const doc = React.useMemo(
@@ -293,6 +299,41 @@ function useDocumentStore() {
     }, 350)
     return () => clearTimeout(timer)
   }, [docs, activeId, hydrated, storageMode])
+
+  React.useEffect(() => {
+    if (typeof BroadcastChannel !== 'function') return undefined
+    const channel = new BroadcastChannel('dsh.wechat-studio.docs.v1')
+    channelRef.current = channel
+    channel.onmessage = (event) => {
+      const data = event.data
+      if (!data || data.type !== 'docs' || data.sourceId === tabIdRef.current || !Array.isArray(data.docs)) return
+      const local = new Map(docsRef.current.map(entry => [entry.id, entry]))
+      const newer = data.docs.some(entry => {
+        const current = local.get(entry.id)
+        return current === undefined || (Number(entry.updatedAt) || 0) > (Number(current.updatedAt) || 0)
+      })
+      if (newer) setRemoteNotice({ docs: data.docs, activeId: data.activeId })
+    }
+    return () => { channel.close(); channelRef.current = null }
+  }, [])
+
+  React.useEffect(() => {
+    if (!hydrated || channelRef.current === null) return undefined
+    const timer = setTimeout(() => {
+      try {
+        channelRef.current?.postMessage({ type: 'docs', docs: serializeDocs(docs), activeId, sourceId: tabIdRef.current })
+      } catch { /* oversized or closed */ }
+    }, 900)
+    return () => clearTimeout(timer)
+  }, [docs, activeId, hydrated])
+
+  const acceptRemote = React.useCallback(() => {
+    const notice = remoteNotice
+    if (!notice) return
+    setDocs(notice.docs)
+    if (notice.docs.some(entry => entry.id === notice.activeId)) setActiveId(notice.activeId)
+    setRemoteNotice(null)
+  }, [remoteNotice])
 
   const updateDoc = React.useCallback((updater, options = {}) => {
     const current = docRef.current
@@ -374,6 +415,7 @@ function useDocumentStore() {
   return {
     docs, doc, activeId, updateDoc, updateDesign, updateMeta,
     undo, redo, canUndo: past.length > 0, canRedo: future.length > 0, persistError,
+    remoteNotice, acceptRemote, dismissRemote: () => setRemoteNotice(null),
     historyTexts: () => [...pastRef.current, ...futureRef.current].map(entry => entry.text),
     selectDoc, addDoc, removeDoc,
     getDoc: () => docRef.current,
@@ -408,6 +450,8 @@ function StudioPanel(props) {
   const [imageReady, setImageReady] = React.useState(false)
   const [imageVersion, setImageVersion] = React.useState(0)
   const [snapshotVersion, setSnapshotVersion] = React.useState(0)
+  const [helpOpen, setHelpOpen] = React.useState(() => { try { return localStorage.getItem(HELP_SEEN_KEY) !== '1' } catch { return false } })
+  const [helpFirstRun, setHelpFirstRun] = React.useState(() => { try { return localStorage.getItem(HELP_SEEN_KEY) !== '1' } catch { return false } })
   const bumpImages = React.useCallback(() => setImageVersion(value => value + 1), [])
   React.useEffect(() => {
     let cancelled = false
@@ -727,6 +771,11 @@ function StudioPanel(props) {
     if (narrow) setNarrowView('design')
     else setRightOpen(true)
   }
+  const closeHelp = () => {
+    setHelpOpen(false)
+    try { localStorage.setItem(HELP_SEEN_KEY, '1') } catch { /* private mode */ }
+  }
+
   const closeDesign = () => {
     if (narrow) setNarrowView('preview')
     else setRightOpen(false)
@@ -751,8 +800,15 @@ function StudioPanel(props) {
     h(TopBar, {
       store, design, features, narrow, compact, narrowView, setNarrowView, rightOpen, setRightOpen,
       onCompose: runCompose, onReshuffle: reshuffle, onCopy: copyArticle, onOpenDesign: openDesign,
-      onImportDocument: importDocument, refining, toast, appearance, setAppearance,
+      onImportDocument: importDocument, refining, toast, appearance, setAppearance, onHelp: () => { setHelpFirstRun(false); setHelpOpen(true) },
     }),
+    store.remoteNotice
+      ? h('div', { className: 'ws-remote-banner' },
+        h('span', null, t('另一个窗口更新了草稿；直接覆盖会丢掉这边的修改。')),
+        h('button', { type: 'button', className: 'ws-link', onClick: store.acceptRemote }, t('载入另一窗口版本')),
+        h('button', { type: 'button', className: 'ws-link', onClick: store.dismissRemote }, t('继续用当前版本')),
+      )
+      : null,
     h('div', { className: 'ws-body' },
       h(DocRail, {
         store, parsed, features, textareaRef, toast, narrow, selectedBlock, setSelectedBlock,
@@ -772,6 +828,7 @@ function StudioPanel(props) {
         takeSnapshot, snapshotVersion,
       }),
     ),
+    helpOpen ? h(HelpDialog, { firstRun: helpFirstRun, onClose: closeHelp }) : null,
     refining
       ? h('div', { className: 'ws-refining' },
         h('span', { className: 'ws-typing-dot' }),
@@ -781,6 +838,62 @@ function StudioPanel(props) {
       )
       : null,
     h(ToastStack, { toasts }),
+  )
+}
+
+function HelpDialog({ firstRun, onClose }) {
+  React.useEffect(() => {
+    const onKeyDown = (event) => { if (event.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+  const sections = [
+    ['快捷键', [
+      ['⌘B / ⌘⇧H', '加粗 / 高亮'],
+      ['⌘1 / ⌘2 / ⌘3', '标题层级'],
+      ['⌘⇧7 / ⌘⇧8', '无序 / 有序列表'],
+      ['⌘K / ⌘F', '链接 / 查找替换'],
+    ]],
+    ['AI 修改', [
+      ['选中段 / 本节 / 整篇', '控制改写范围'],
+      ['更克制 / 更口语 / 更短', '语气预设'],
+      ['应用修改', '先看 diff 再落盘'],
+      ['取消', '生成中可中止'],
+    ]],
+    ['发布', [
+      ['更新当前草稿', '覆盖已关联的公众号草稿'],
+      ['另存新草稿', '合集篇数变化时使用'],
+      ['版本快照', 'AI 前/发布前自动保存'],
+      ['草稿失效', '自动解除关联，重新保存'],
+    ]],
+    ['编辑', [
+      ['拖拽段落', '调整顺序'],
+      ['复制这一段', '复制块后继续改'],
+      ['图片工具', '图注 / 裁剪'],
+      ['主题收藏', '收藏与最近筛选'],
+    ]],
+  ]
+  return h('div', { className: 'ws-modal-scrim', onClick: event => { if (event.target === event.currentTarget) onClose() } },
+    h('div', { className: 'ws-modal', role: 'dialog', 'aria-modal': 'true' },
+      h('div', { className: 'ws-modal-head' },
+        h(Icon, { name: 'help', size: 16 }),
+        h('strong', null, firstRun ? t('第一次用？先看这几条') : t('使用提示与快捷键')),
+        h(IconButton, { icon: 'close', title: t('关闭'), onClick: onClose }),
+      ),
+      h('p', { className: 'ws-hint' }, firstRun ? t('编辑器写 Markdown，中间实时预览，右侧调主题与发布。下面是最容易漏掉的用法。') : t('这些操作在界面里没有全部写出来，需要时回来查。')),
+      h('div', { className: 'ws-help-grid' },
+        sections.map(([title, rows]) => h('div', { className: 'ws-help-section', key: title },
+          h('h4', null, t(title)),
+          rows.map(([key, text]) => h('div', { className: 'ws-help-row', key: key },
+            h('span', { className: 'ws-help-key' }, key),
+            h('span', null, t(text)),
+          )),
+        )),
+      ),
+      h('div', { className: 'ws-modal-actions' },
+        h(Button, { variant: 'primary', onClick: onClose }, firstRun ? t('开始使用') : t('知道了')),
+      ),
+    ),
   )
 }
 

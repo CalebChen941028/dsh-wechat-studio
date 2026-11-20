@@ -207,7 +207,7 @@ test('发布面板：读取草稿箱并导入为本地草稿', async () => {
     assert.ok(container.querySelector('.ws-preflight'), 'publish preflight renders')
     assert.ok([...container.querySelectorAll('button')].some(button => button.textContent.includes('获取出口 IP')))
 
-    const loadButton = [...container.querySelectorAll('button')].find(button => button.textContent.includes('读取最近'))
+    const loadButton = [...container.querySelectorAll('button')].find(button => button.textContent.includes('刷新草稿箱'))
     assert.ok(loadButton, 'draft box load button renders')
     loadButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await new Promise(resolve => setTimeout(resolve, 200))

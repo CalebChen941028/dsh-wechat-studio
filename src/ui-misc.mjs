@@ -37,6 +37,7 @@ const ICON_PATHS = {
   panel: 'M4 4h16v16H4z M15 4v16',
   more: 'M6 12h.01 M12 12h.01 M18 12h.01',
   search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z M15.5 15.5L21 21',
+  help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9.5 9a2.5 2.5 0 1 1 3.6 2.3c-.7.4-1.1 1-1.1 1.8 M12 17h.01',
   chevron: 'M6 9l6 6 6-6',
   doc: 'M6 3h8l4 4v14H6z M14 3v4h4',
   key: 'M14 7a4 4 0 1 0-3.5 4L4 17v3h3v-2h2v-2h2l2-2a4 4 0 0 0 4-4z',
@@ -323,6 +324,11 @@ const STUDIO_CSS = `
 .ws-audit-count{min-width:22px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ws-muted)}
 .ws-audit-row.warn .ws-audit-count{color:var(--ws-danger)}
 .ws-audit-row .ws-link{margin-left:auto}
+.ws-draft-search{height:28px;font-size:12px;margin:0 0 6px}
+.ws-draft-pager{display:flex;align-items:center;gap:8px;justify-content:space-between;padding-top:4px}
+.ws-draft-pager .ws-hint{flex:1;text-align:center;margin:0}
+.ws-snapshot-diff{padding:4px 0 7px;border-bottom:1px solid var(--ws-border)}
+.ws-snapshot-diff .ws-hint{margin:0 0 4px}
 .ws-snapshot-list{display:flex;flex-direction:column;gap:3px}
 .ws-snapshot-row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ws-muted);min-height:24px}
 .ws-snapshot-time{font-variant-numeric:tabular-nums}
@@ -578,6 +584,17 @@ const STUDIO_CSS = `
 .ws-root[data-skin="dark"] .ws-toasts .ws-toast{background:#222329;color:#f2f2f4}
 .ws-root[data-skin="sand"] .ws-toasts .ws-toast{background:#3a2f24;color:#fdf6ec}
 .ws-root[data-skin="dark"] .ws-btn.solid{box-shadow:0 8px 20px rgba(0,0,0,.5)}
+.ws-modal-scrim{position:absolute;inset:0;background:rgba(17,17,17,.32);z-index:80;display:flex;align-items:center;justify-content:center;padding:24px;border-radius:inherit}
+.ws-modal{width:min(580px,100%);max-height:calc(100% - 32px);overflow:auto;background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:14px;box-shadow:0 24px 80px rgba(0,0,0,.28);padding:16px;display:flex;flex-direction:column;gap:12px}
+.ws-modal-head{display:flex;align-items:center;gap:8px}
+.ws-modal-head strong{font-size:14px;color:var(--ws-text);flex:1}
+.ws-help-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ws-help-section{border:1px solid var(--ws-border);border-radius:9px;padding:9px;background:var(--ws-surface2)}
+.ws-help-section h4{margin:0 0 6px;font-size:12px;color:var(--ws-text)}
+.ws-help-row{display:flex;gap:8px;font-size:11.5px;line-height:1.55;color:var(--ws-muted)}
+.ws-help-key{flex:none;min-width:62px;color:var(--ws-text);font-family:ui-monospace,Menlo,monospace;font-size:11px}
+.ws-modal-actions{display:flex;justify-content:flex-end;gap:8px}
+@media (max-width: 700px){.ws-help-grid{grid-template-columns:1fr}}
 @media (max-width: 1000px){
   .ws-root{padding:8px;gap:8px}
   .ws-top{height:52px;border-radius:16px}

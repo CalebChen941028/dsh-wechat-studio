@@ -631,25 +631,34 @@ test('listDrafts：读取草稿箱并映射标题与时间', async () => {
   assert.equal(body.no_content, 0)
 })
 
-test('updateDraft：覆盖更新单篇草稿并保留 mediaId', async () => {
+test('updateDraft：按后台篇数覆盖更新，篇数变化时拒绝', async () => {
   const { service, calls } = makeService({
     routes: [
       ['/cgi-bin/token', () => jsonResponse({ access_token: 'TOKEN-1', expires_in: 7200 })],
+      ['/cgi-bin/draft/get', () => jsonResponse({ news_item: [{ title: '旧标题' }, { title: '第二篇' }] })],
       ['/cgi-bin/draft/update', () => jsonResponse({ errcode: 0, errmsg: 'ok' })],
     ],
   })
-  const result = await service.updateDraft({ mediaId: 'DRAFT-1', articles: [draftPayload()] })
+  const result = await service.updateDraft({ mediaId: 'DRAFT-1', articles: [draftPayload(), draftPayload()] })
   assert.equal(result.mediaId, 'DRAFT-1')
   assert.equal(result.updated, true)
-  const request = calls.find(call => call.url.includes('/cgi-bin/draft/update'))
-  const body = JSON.parse(request.init.body)
-  assert.equal(body.media_id, 'DRAFT-1')
-  assert.equal(body.index, 0)
-  assert.equal(body.articles.title, '一篇文章的标题')
+  assert.equal(result.count, 2)
+  const updates = calls.filter(call => call.url.includes('/cgi-bin/draft/update'))
+  assert.equal(updates.length, 2)
+  assert.equal(JSON.parse(updates[0].init.body).index, 0)
+  assert.equal(JSON.parse(updates[1].init.body).index, 1)
   await assert.rejects(() => service.updateDraft({ articles: [draftPayload()] }), error => error.code === 'media-required')
+
+  const mismatch = makeService({
+    routes: [
+      ['/cgi-bin/token', () => jsonResponse({ access_token: 'TOKEN-1', expires_in: 7200 })],
+      ['/cgi-bin/draft/get', () => jsonResponse({ news_item: [{ title: '只有一篇' }] })],
+      ['/cgi-bin/draft/update', () => jsonResponse({ errcode: 0, errmsg: 'ok' })],
+    ],
+  })
   await assert.rejects(
-    () => service.updateDraft({ mediaId: 'DRAFT-1', articles: [draftPayload(), draftPayload()] }),
-    error => error.code === 'update-single-only',
+    () => mismatch.service.updateDraft({ mediaId: 'DRAFT-1', articles: [draftPayload(), draftPayload()] }),
+    error => error.code === 'update-count-mismatch',
   )
 })
 
@@ -1172,4 +1181,11 @@ test('probeWechatEgress：token 获取成功时视为已白名单', async () => 
   const result = await service.probeWechatEgress({ samples: 2 })
   assert.equal(result.whitelisted, true)
   assert.deepEqual(result.ips, [])
+})
+
+test('fetchRemoteImage：拒绝非 HTTP 与本机/内网地址', async () => {
+  const { service } = makeService({ routes: [] })
+  await assert.rejects(() => service.fetchRemoteImage({ url: 'ftp://example.com/a.png' }), error => error.code === 'image-url-invalid')
+  await assert.rejects(() => service.fetchRemoteImage({ url: 'http://127.0.0.1/a.png' }), error => error.code === 'image-url-invalid')
+  await assert.rejects(() => service.fetchRemoteImage({ url: 'http://192.168.1.2/a.png' }), error => error.code === 'image-url-invalid')
 })

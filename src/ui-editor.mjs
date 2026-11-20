@@ -1,5 +1,5 @@
 function TopBar(props) {
-  const { store, design, features, narrow, compact, narrowView, setNarrowView, rightOpen, setRightOpen, onCompose, onReshuffle, onCopy, onOpenDesign, onImportDocument, refining, toast, appearance, setAppearance } = props
+  const { store, design, features, narrow, compact, narrowView, setNarrowView, rightOpen, setRightOpen, onCompose, onReshuffle, onCopy, onOpenDesign, onImportDocument, refining, toast, appearance, setAppearance, onHelp } = props
   const [menuOpen, setMenuOpen] = React.useState(false)
   const [appearanceOpen, setAppearanceOpen] = React.useState(false)
   React.useEffect(() => {
@@ -87,7 +87,10 @@ function TopBar(props) {
     h(Button, { icon: 'send', variant: 'solid', onClick: () => onOpenDesign('publish') }, t('发布')),
     narrow
       ? null
-      : h(IconButton, { icon: 'panel', title: rightOpen ? t('收起设计面板') : t('展开设计面板'), onClick: () => setRightOpen(value => !value) }),
+      : rightOpen
+        ? h(IconButton, { icon: 'panel', title: t('收起设计面板'), onClick: () => setRightOpen(false) })
+        : h(Button, { icon: 'panel', onClick: () => setRightOpen(true), title: t('展开主题与发布面板') }, t('展开设计')),
+    h(IconButton, { icon: 'help', title: t('使用提示与快捷键'), onClick: onHelp }),
     h('div', { className: 'ws-menu-anchor' },
       h(IconButton, { icon: 'palette', title: t('外观与主题'), onClick: () => { setAppearanceOpen(value => !value); setMenuOpen(false) } }),
       appearanceOpen
@@ -704,8 +707,11 @@ function PreviewStage(props) {
     if (!block || block.type !== 'image') return
     setCropBusy(true)
     try {
-      const source = expandImageRefs(block.src)
-      if (!source.startsWith('data:')) throw new Error(t('远程图片暂时只能换图，不能直接裁剪'))
+      let source = expandImageRefs(block.src)
+      if (!source.startsWith('data:')) {
+        const fetched = await callHost('fetchRemoteImage', { url: source }, { timeoutMs: 30000 })
+        source = fetched.dataUrl
+      }
       const image = await loadImage(source)
       const targetRatio = Number(ratio)
       let sourceWidth = image.width

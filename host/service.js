@@ -532,6 +532,45 @@ export function createStudioService({ ctx, fetchImpl = fetch, importUndici } = {
       }
     },
 
+    /**
+     * 取回一张远程图片，供预览里裁剪；只允许 http/https 公网地址。
+     * @param {{ url?: string }} payload 图片地址。
+     * @returns {Promise<{ dataUrl: string, mime: string }>} 图片 data URL。
+     */
+    async fetchRemoteImage(payload = {}) {
+      const raw = typeof payload?.url === 'string' ? payload.url.trim() : ''
+      let url
+      try {
+        url = new URL(raw)
+      } catch {
+        throw new StudioError('image-url-invalid', '图片地址不合法')
+      }
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        throw new StudioError('image-url-invalid', '只支持 http/https 图片地址')
+      }
+      const host = url.hostname.toLowerCase()
+      const privateHost = host === 'localhost' || host.endsWith('.local')
+        || /^127\./.test(host) || /^10\./.test(host)
+        || /^192\.168\./.test(host) || /^169\.254\./.test(host)
+        || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+        || host === '::1' || host === '[::1]'
+      if (privateHost) throw new StudioError('image-url-invalid', '不允许读取本机或内网地址')
+      let response
+      try {
+        response = await networkFetch(url.toString(), { redirect: 'follow' })
+      } catch (error) {
+        throw new StudioError('image-fetch-failed', `图片下载失败：${error instanceof Error ? error.message : String(error)}`)
+      }
+      if (!response.ok) throw new StudioError('image-fetch-failed', `图片下载失败（HTTP ${response.status}）`)
+      const mime = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
+      if (!mime.startsWith('image/')) throw new StudioError('image-fetch-failed', '这个地址返回的不是图片')
+      const declared = Number(response.headers.get('content-length') ?? 0)
+      if (declared > 8 * 1024 * 1024) throw new StudioError('image-too-large', '远程图片超过 8MB，先压缩或换一张')
+      const buffer = Buffer.from(await response.arrayBuffer())
+      if (buffer.length > 8 * 1024 * 1024) throw new StudioError('image-too-large', '远程图片超过 8MB，先压缩或换一张')
+      return { dataUrl: `data:${mime};base64,${buffer.toString('base64')}`, mime }
+    },
+
     /** 保存出站网络设置；只写本机凭据库，不写浏览器存储。 */
     async saveNetwork(payload = {}) {
       const current = await readNetworkSettings()
@@ -759,21 +798,36 @@ export function createStudioService({ ctx, fetchImpl = fetch, importUndici } = {
       })
     },
 
-    /** 覆盖更新一篇已有草稿；多图文需要另存为新草稿。 */
+    /** 覆盖更新一篇已有草稿；多图文按原篇数逐篇更新，篇数变化时要求另存。 */
     async updateDraft(payload = {}) {
       const account = await readAccount({ required: true })
       const mediaId = typeof payload?.mediaId === 'string' ? payload.mediaId.trim() : ''
       if (mediaId === '') throw new StudioError('media-required', '缺少草稿 mediaId，无法更新')
       const rawArticles = Array.isArray(payload?.articles) ? payload.articles : [payload]
-      if (rawArticles.length !== 1) {
-        throw new StudioError('update-single-only', '覆盖更新只支持单篇文章；多图文请另存为新草稿')
-      }
+      if (rawArticles.length === 0) throw new StudioError('articles-required', '草稿里至少需要一篇文章')
+      if (rawArticles.length > 8) throw new StudioError('too-many-articles', '一篇草稿最多 8 篇文章，请分两次保存')
       const warnings = []
-      const normalized = normalizeDraftArticle(rawArticles[0], 0, 1)
-      warnings.push(...normalized.warnings)
+      const total = rawArticles.length
+      const articles = rawArticles.map((raw, index) => {
+        const normalized = normalizeDraftArticle(raw, index, total)
+        warnings.push(...normalized.warnings)
+        return normalized.article
+      })
       return wechatCall(async () => {
-        await withToken(account, (token) => client.updateDraft({ accessToken: token, mediaId, article: normalized.article }))
-        return { mediaId, warnings, count: 1, updated: true }
+        return withToken(account, async (token) => {
+          const existing = await client.getDraft({ accessToken: token, mediaId })
+          const existingCount = Array.isArray(existing.items) ? existing.items.length : 0
+          if (existingCount !== total) {
+            throw new StudioError(
+              'update-count-mismatch',
+              `后台草稿有 ${existingCount} 篇，本地合集有 ${total} 篇；篇数变化无法覆盖，请另存为新草稿`,
+            )
+          }
+          for (let index = 0; index < articles.length; index += 1) {
+            await client.updateDraft({ accessToken: token, mediaId, index, article: articles[index] })
+          }
+          return { mediaId, warnings, count: total, updated: true }
+        })
       })
     },
 

@@ -30,6 +30,7 @@ const KNOWN_ACTIONS = new Set([
   'networkStatus',
   'saveNetwork',
   'probeNetwork',
+  'fetchRemoteImage',
   'probeWechatEgress',
   'uploadImages',
   'importImages',
