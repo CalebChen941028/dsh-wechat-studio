@@ -1639,6 +1639,49 @@ function replaceImageSource(text, lineIndex, src) {
   return lines.join('\n')
 }
 
+/**
+ * Extract a small palette from RGBA pixels, used by the reference-image theme DNA.
+ * @param {Uint8ClampedArray|number[]} pixels RGBA pixel buffer.
+ * @returns {{background: string, accent: string, dark: boolean, palette: string[]}}
+ */
+function paletteFromPixels(pixels) {
+  const counts = new Map()
+  for (let index = 0; index + 3 < pixels.length; index += 4) {
+    const alpha = pixels[index + 3]
+    if (alpha < 160) continue
+    const r = pixels[index]
+    const g = pixels[index + 1]
+    const b = pixels[index + 2]
+    const key = `${r >> 4},${g >> 4},${b >> 4}`
+    const entry = counts.get(key) ?? { r: 0, g: 0, b: 0, n: 0 }
+    entry.r += r; entry.g += g; entry.b += b; entry.n += 1
+    counts.set(key, entry)
+  }
+  const sorted = [...counts.values()].map(entry => ({
+    r: Math.round(entry.r / entry.n),
+    g: Math.round(entry.g / entry.n),
+    b: Math.round(entry.b / entry.n),
+    n: entry.n,
+  })).sort((a, b) => b.n - a.n)
+  const toHex = (color) => `#${[color.r, color.g, color.b].map(value => value.toString(16).padStart(2, '0')).join('')}`
+  const luminance = (color) => (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 255
+  const saturation = (color) => {
+    const max = Math.max(color.r, color.g, color.b)
+    const min = Math.min(color.r, color.g, color.b)
+    return max === 0 ? 0 : (max - min) / max
+  }
+  const background = sorted.length > 0 ? toHex(sorted[0]) : '#FBF8F1'
+  const accentColor = sorted.find(color => saturation(color) > 0.24 && Math.abs(luminance(color) - luminance(sorted[0])) > 0.08)
+    ?? sorted.find(color => saturation(color) > 0.18)
+    ?? null
+  return {
+    background,
+    accent: accentColor === null ? '' : toHex(accentColor),
+    dark: sorted.length > 0 ? luminance(sorted[0]) < 0.45 : false,
+    palette: sorted.slice(0, 5).map(toHex),
+  }
+}
+
 /** Stable short hash for a block's text, used for AI provenance and locks. */
 function hashBlock(text) {
   const value = String(text ?? '').replace(/\s+/g, ' ').trim()
@@ -1648,6 +1691,15 @@ function hashBlock(text) {
     hash = Math.imul(hash, 16777619)
   }
   return (hash >>> 0).toString(36)
+}
+
+/** Replace every literal occurrence of `find`; returns the new text and count. */
+function replaceAllOccurrences(text, find, replacement) {
+  const source = String(text ?? '')
+  const needle = String(find ?? '')
+  if (needle === '') return { text: source, count: 0 }
+  const count = source.split(needle).length - 1
+  return { text: source.split(needle).join(String(replacement ?? '')), count }
 }
 
 /**
@@ -4956,10 +5008,10 @@ function DocRail(props) {
   }
   const replaceAll = () => {
     if (findText === '') return
-    const count = doc.text.split(findText).length - 1
-    if (count === 0) { toast(t('没有找到匹配内容'), 'error'); return }
+    const result = replaceAllOccurrences(doc.text, findText, replaceText)
+    if (result.count === 0) { toast(t('没有找到匹配内容'), 'error'); return }
     store.updateDoc(current => ({ ...current, text: current.text.split(findText).join(replaceText) }), { coalesce: 'replace' })
-    toast(t('已替换 {count} 处', { count }))
+    toast(t('已替换 {count} 处', { count: result.count }))
   }
 
   const words = features.chars
@@ -5571,7 +5623,7 @@ function SurfacePreview({ surface, title, digest, cover, account, date }) {
     return h('div', { className: 'ws-surface ws-surface-feed' },
       h('div', { className: 'ws-surface-top' }, h('strong', null, t('订阅号消息')), h('span', null, '···')),
       h('div', { className: 'ws-feed-card' },
-        coverNode,
+        h('div', { className: 'ws-feed-cover' }, coverNode, h('span', { className: 'ws-safe-guide', 'aria-hidden': 'true' })),
         h('div', { className: 'ws-feed-text' },
           h('div', { className: 'ws-feed-title' }, title),
           h('div', { className: 'ws-feed-digest' }, digest || t('摘要会显示在这里')),
@@ -6041,7 +6093,7 @@ function AiSection(props) {
         ),
       )
       : null,
-    canScope || stylePreset !== ''
+    canScope || stylePreset !== '' || doc.text.trim() !== ''
       ? h('div', { className: 'ws-chat-compose-option' },
         canScope
           ? h('div', { className: 'ws-scope-row' },
@@ -6168,43 +6220,7 @@ function extractDnaPalette(dataUrl) {
     const context = canvas.getContext('2d', { willReadFrequently: true })
     if (context === null) throw new Error(t('当前环境无法读取参考图'))
     context.drawImage(image, 0, 0, size, size)
-    const pixels = context.getImageData(0, 0, size, size).data
-    const counts = new Map()
-    for (let index = 0; index < pixels.length; index += 4) {
-      const alpha = pixels[index + 3]
-      if (alpha < 160) continue
-      const r = pixels[index]
-      const g = pixels[index + 1]
-      const b = pixels[index + 2]
-      const key = `${r >> 4},${g >> 4},${b >> 4}`
-      const entry = counts.get(key) ?? { r: 0, g: 0, b: 0, n: 0 }
-      entry.r += r; entry.g += g; entry.b += b; entry.n += 1
-      counts.set(key, entry)
-    }
-    const sorted = [...counts.values()].map(entry => ({
-      r: Math.round(entry.r / entry.n),
-      g: Math.round(entry.g / entry.n),
-      b: Math.round(entry.b / entry.n),
-      n: entry.n,
-    })).sort((a, b) => b.n - a.n)
-    const toHex = (color) => `#${[color.r, color.g, color.b].map(value => value.toString(16).padStart(2, '0')).join('')}`
-    const background = sorted.length > 0 ? toHex(sorted[0]) : '#FBF8F1'
-    const luminance = (color) => (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 255
-    const saturation = (color) => {
-      const max = Math.max(color.r, color.g, color.b)
-      const min = Math.min(color.r, color.g, color.b)
-      return max === 0 ? 0 : (max - min) / max
-    }
-    const accentColor = sorted.find(color => saturation(color) > 0.24 && Math.abs(luminance(color) - luminance(sorted[0])) > 0.08)
-      ?? sorted.find(color => saturation(color) > 0.18)
-      ?? null
-    const accent = accentColor === null ? '' : toHex(accentColor)
-    return {
-      background,
-      accent,
-      dark: luminance(sorted[0] ?? { r: 255, g: 255, b: 255 }) < 0.45,
-      palette: sorted.slice(0, 5).map(toHex),
-    }
+    return paletteFromPixels(context.getImageData(0, 0, size, size).data)
   })
 }
 
@@ -6927,7 +6943,7 @@ function PublishSection(props) {
 
   const regenerateCover = () => {
     try {
-      store.updateMeta({ coverDataUrl: renderCover({ title, design }), coverCustom: false })
+      store.updateMeta({ coverDataUrl: renderCover({ title, design, layout: coverLayout }), coverCustom: false })
       toast('已按新主题重绘封面')
     } catch (failure) {
       toast(failure.message || t('封面生成失败'), 'error')
@@ -8427,6 +8443,9 @@ const STUDIO_CSS = `
 .ws-surface-top strong{font-size:14px;color:#1f1f1f}
 .ws-surface-cover{width:100%;height:150px;object-fit:cover;display:block;border-radius:8px;background:#e9e9e9}
 .ws-surface-cover.empty{display:flex;align-items:center;justify-content:center;font-size:11px;color:#999}
+.ws-feed-cover{position:relative;border-radius:8px;overflow:hidden}
+.ws-feed-cover .ws-surface-cover{border-radius:0}
+.ws-safe-guide{position:absolute;inset:10px;border:1px dashed rgba(255,255,255,.55);border-radius:4px;pointer-events:none;box-shadow:0 0 0 999px rgba(0,0,0,.04) inset}
 .ws-feed-card{background:#fff;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
 .ws-feed-text{display:flex;flex-direction:column;gap:4px}
 .ws-feed-title{font-size:15px;line-height:1.45;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}

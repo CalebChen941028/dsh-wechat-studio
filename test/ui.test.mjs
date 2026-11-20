@@ -206,6 +206,7 @@ test('发布面板：读取草稿箱并导入为本地草稿', async () => {
     assert.ok(container.querySelector('.ws-egress-row'), 'egress IP card renders')
     assert.ok(container.querySelector('.ws-preflight'), 'publish preflight renders')
     assert.ok([...container.querySelectorAll('button')].some(button => button.textContent.includes('获取出口 IP')))
+    assert.ok(['左对齐', '居中', '底部', '极简'].every(label => [...container.querySelectorAll('button')].some(button => button.textContent.trim() === label)), 'cover layouts render')
 
     const loadButton = [...container.querySelectorAll('button')].find(button => button.textContent.includes('刷新草稿箱'))
     assert.ok(loadButton, 'draft box load button renders')
@@ -385,6 +386,207 @@ test('预览里可以锁定段落，AI 范围提示锁定', async () => {
     aiTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await new Promise(resolve => setTimeout(resolve, 120))
     assert.ok(container.textContent.includes('锁定'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+const scopeSeed = [{
+  id: 'doc-scope',
+  text: '# 标题\n\n第一段原文。\n\n第二段原文。',
+  design: { themeId: 'column', variantId: 'essay', overrides: {} },
+  meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false },
+  createdAt: 1,
+  updatedAt: 1,
+}]
+
+test('AI 只把选中的段落发给模型并只改这一段', async () => {
+  let seenText = ''
+  const fetchImpl = async (url, init) => {
+    const body = init === undefined ? {} : JSON.parse(init.body)
+    if (body.action === 'aiEditStream') {
+      seenText = body.text
+      const payload = JSON.stringify({ type: 'done', value: { reply: '已改写', text: '第一段已改写。' } })
+      return new Response(`data: ${payload}\n\n`, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    }
+    const value = body.action === 'networkStatus' ? { mode: 'system', proxyUrl: '', configured: false } : { configured: false }
+    return { ok: true, status: 200, async json() { return { ok: true, value } } }
+  }
+  const { dom, window, container, root } = await mountPanel({ fetchImpl, seedDocs: scopeSeed })
+  try {
+    const block = [...container.querySelectorAll('.ws-block')].find(node => node.textContent.includes('第一段原文'))
+    assert.ok(block)
+    block.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    const aiTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === 'AI')
+    aiTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    const suggestion = container.querySelector('.ws-chat-empty .ws-chip')
+    suggestion.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 350))
+    assert.equal(seenText, '第一段原文。')
+    assert.ok(container.querySelector('.ws-diff-card'))
+    const apply = [...container.querySelectorAll('.ws-diff-card button')].find(button => button.textContent.trim() === '应用修改')
+    apply.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 220))
+    const value = container.querySelector('.ws-editor').value
+    assert.match(value, /第一段已改写/)
+    assert.match(value, /第二段原文/)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('锁定段落后 AI 不再发送请求', async () => {
+  let aiCalls = 0
+  const fetchImpl = async (url, init) => {
+    const body = init === undefined ? {} : JSON.parse(init.body)
+    if (body.action === 'aiEditStream') aiCalls += 1
+    const value = body.action === 'networkStatus' ? { mode: 'system', proxyUrl: '', configured: false } : { configured: false }
+    return { ok: true, status: 200, async json() { return { ok: true, value } } }
+  }
+  const { dom, window, container, root } = await mountPanel({ fetchImpl, seedDocs: scopeSeed })
+  try {
+    const lock = [...container.querySelectorAll('button')].find(button => button.getAttribute('title') === '锁定这一段')
+    lock.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 150))
+    const block = [...container.querySelectorAll('.ws-block')].find(node => node.textContent.includes('第一段原文'))
+    block.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    const aiTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === 'AI')
+    aiTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    const suggestion = container.querySelector('.ws-chat-empty .ws-chip')
+    suggestion.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 250))
+    assert.equal(aiCalls, 0)
+    assert.ok(container.textContent.includes('锁定'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('草稿箱分页会带 offset 并翻到第二页', async () => {
+  const offsets = []
+  const fetchImpl = async (url, init) => {
+    const body = init === undefined ? {} : JSON.parse(init.body)
+    let value = null
+    if (body.action === 'status') value = { configured: true, phase: 'ready', appIdPreview: 'wx123', message: '' }
+    if (body.action === 'listDrafts') {
+      offsets.push(body.offset)
+      const start = Number(body.offset) || 0
+      const items = Array.from({ length: start === 0 ? 10 : 2 }, (_, index) => ({ mediaId: `D${start + index}`, title: `草稿${start + index + 1}`, digest: '', updateTime: 1700000000 }))
+      value = { totalCount: 12, items }
+    }
+    return { ok: true, status: 200, async json() { return { ok: true, value } } }
+  }
+  const { dom, window, container, root } = await mountPanel({ fetchImpl })
+  try {
+    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '发布')
+    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 150))
+    const refresh = [...container.querySelectorAll('button')].find(button => button.textContent.includes('刷新草稿箱'))
+    refresh.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 250))
+    assert.deepEqual(offsets, [0])
+    assert.ok(container.textContent.includes('1–10 / 共 12 篇'))
+    const next = [...container.querySelectorAll('button')].find(button => button.textContent.trim() === '下一页')
+    next.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 250))
+    assert.deepEqual(offsets, [0, 10])
+    assert.ok(container.textContent.includes('草稿11'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('帮助弹层首次显示并可再次打开', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    assert.ok(container.querySelector('.ws-modal'), 'first-run help opens')
+    const start = [...container.querySelectorAll('.ws-modal button')].find(button => button.textContent.trim() === '开始使用')
+    start.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.equal(container.querySelector('.ws-modal'), null)
+    const helpButton = [...container.querySelectorAll('button')].find(button => button.getAttribute('title') === '使用提示与快捷键')
+    helpButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.ok(container.querySelector('.ws-modal'))
+    assert.ok(container.textContent.includes('使用提示与快捷键'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('主题卡显示 13 个实测保真分', async () => {
+  const { dom, container, root } = await mountPanel()
+  try {
+    assert.equal(container.querySelectorAll('.ws-theme-fidelity').length, 13)
+    assert.ok(container.querySelector('.ws-theme-fidelity').textContent.includes('实测'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('关联草稿失效时自动解除关联并提示重新保存', async () => {
+  let uploads = 0
+  const fetchImpl = async (url, init) => {
+    const body = init === undefined ? {} : JSON.parse(init.body)
+    if (body.action === 'status') {
+      return { ok: true, status: 200, async json() { return { ok: true, value: { configured: true, phase: 'ready', appIdPreview: 'wx123', message: '' } } } }
+    }
+    if (body.action === 'uploadCover') {
+      uploads += 1
+      return { ok: true, status: 200, async json() { return { ok: true, value: { mediaId: 'COVER-1' } } } }
+    }
+    if (body.action === 'updateDraft') {
+      return { ok: true, status: 200, async json() { return { ok: false, code: 'invalid-media', message: '草稿不存在' } } }
+    }
+    return { ok: true, status: 200, async json() { return { ok: true, value: { configured: true } } } }
+  }
+  const seed = [{
+    id: 'doc-stale',
+    text: '# 标题\n\n正文内容。',
+    design: { themeId: 'column', variantId: 'essay', overrides: {} },
+    meta: {
+      title: '标题', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+      coverCustom: true, draftMediaId: 'DRAFT-1', draftArticleCount: 1,
+      needOpenComment: false, onlyFansCanComment: false,
+    },
+    createdAt: 1,
+    updatedAt: 1,
+  }]
+  const { dom, window, container, root } = await mountPanel({ fetchImpl, seedDocs: seed })
+  try {
+    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '发布')
+    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 180))
+    const update = [...container.querySelectorAll('button')].find(button => button.textContent.trim() === '更新当前草稿')
+    assert.ok(update, 'update button appears for linked draft')
+    update.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 450))
+    assert.equal(uploads, 1)
+    assert.ok([...container.querySelectorAll('button')].some(button => button.textContent.trim() === '保存到草稿箱'), 'association cleared')
+    assert.ok(container.textContent.includes('失效') || container.textContent.includes('解除'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('分发镜的搜一搜场景渲染结果卡', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const search = [...container.querySelectorAll('.ws-surface-switch button')].find(button => button.textContent.trim() === '搜一搜')
+    search.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.ok(container.querySelector('.ws-search-hit-title'))
   } finally {
     root.unmount()
     dom.window.close()

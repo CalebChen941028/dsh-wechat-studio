@@ -630,6 +630,9 @@ const STUDIO_CSS = `
 .ws-surface-top strong{font-size:14px;color:#1f1f1f}
 .ws-surface-cover{width:100%;height:150px;object-fit:cover;display:block;border-radius:8px;background:#e9e9e9}
 .ws-surface-cover.empty{display:flex;align-items:center;justify-content:center;font-size:11px;color:#999}
+.ws-feed-cover{position:relative;border-radius:8px;overflow:hidden}
+.ws-feed-cover .ws-surface-cover{border-radius:0}
+.ws-safe-guide{position:absolute;inset:10px;border:1px dashed rgba(255,255,255,.55);border-radius:4px;pointer-events:none;box-shadow:0 0 0 999px rgba(0,0,0,.04) inset}
 .ws-feed-card{background:#fff;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
 .ws-feed-text{display:flex;flex-direction:column;gap:4px}
 .ws-feed-title{font-size:15px;line-height:1.45;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}

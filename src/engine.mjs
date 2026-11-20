@@ -605,6 +605,49 @@ export function replaceImageSource(text, lineIndex, src) {
   return lines.join('\n')
 }
 
+/**
+ * Extract a small palette from RGBA pixels, used by the reference-image theme DNA.
+ * @param {Uint8ClampedArray|number[]} pixels RGBA pixel buffer.
+ * @returns {{background: string, accent: string, dark: boolean, palette: string[]}}
+ */
+export function paletteFromPixels(pixels) {
+  const counts = new Map()
+  for (let index = 0; index + 3 < pixels.length; index += 4) {
+    const alpha = pixels[index + 3]
+    if (alpha < 160) continue
+    const r = pixels[index]
+    const g = pixels[index + 1]
+    const b = pixels[index + 2]
+    const key = `${r >> 4},${g >> 4},${b >> 4}`
+    const entry = counts.get(key) ?? { r: 0, g: 0, b: 0, n: 0 }
+    entry.r += r; entry.g += g; entry.b += b; entry.n += 1
+    counts.set(key, entry)
+  }
+  const sorted = [...counts.values()].map(entry => ({
+    r: Math.round(entry.r / entry.n),
+    g: Math.round(entry.g / entry.n),
+    b: Math.round(entry.b / entry.n),
+    n: entry.n,
+  })).sort((a, b) => b.n - a.n)
+  const toHex = (color) => `#${[color.r, color.g, color.b].map(value => value.toString(16).padStart(2, '0')).join('')}`
+  const luminance = (color) => (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 255
+  const saturation = (color) => {
+    const max = Math.max(color.r, color.g, color.b)
+    const min = Math.min(color.r, color.g, color.b)
+    return max === 0 ? 0 : (max - min) / max
+  }
+  const background = sorted.length > 0 ? toHex(sorted[0]) : '#FBF8F1'
+  const accentColor = sorted.find(color => saturation(color) > 0.24 && Math.abs(luminance(color) - luminance(sorted[0])) > 0.08)
+    ?? sorted.find(color => saturation(color) > 0.18)
+    ?? null
+  return {
+    background,
+    accent: accentColor === null ? '' : toHex(accentColor),
+    dark: sorted.length > 0 ? luminance(sorted[0]) < 0.45 : false,
+    palette: sorted.slice(0, 5).map(toHex),
+  }
+}
+
 /** Stable short hash for a block's text, used for AI provenance and locks. */
 export function hashBlock(text) {
   const value = String(text ?? '').replace(/\s+/g, ' ').trim()
@@ -614,6 +657,15 @@ export function hashBlock(text) {
     hash = Math.imul(hash, 16777619)
   }
   return (hash >>> 0).toString(36)
+}
+
+/** Replace every literal occurrence of `find`; returns the new text and count. */
+export function replaceAllOccurrences(text, find, replacement) {
+  const source = String(text ?? '')
+  const needle = String(find ?? '')
+  if (needle === '') return { text: source, count: 0 }
+  const count = source.split(needle).length - 1
+  return { text: source.split(needle).join(String(replacement ?? '')), count }
 }
 
 /**

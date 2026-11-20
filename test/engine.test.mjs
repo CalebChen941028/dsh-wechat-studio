@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import {
   parseArticle, parseInline, plainText, detectTopic, measure, composeDesign,
   autoCompose, rankThemes, nextVariant, mixHex, readableOn, splitMarkdownChunks,
-  auditTypography, splitLongParagraphs, normalizeCjkPunctuation, tidyMarkdown, diffTextLines, replaceImageCaption, replaceImageSource, hashBlock,
+  auditTypography, splitLongParagraphs, normalizeCjkPunctuation, tidyMarkdown, diffTextLines, replaceImageCaption, replaceImageSource, hashBlock, paletteFromPixels, replaceAllOccurrences,
 } from '../src/engine.mjs'
 import { THEMES } from '../src/themes.mjs'
 import {
@@ -404,4 +404,26 @@ test('replaceImageSource 只换图片地址并保留说明', () => {
 test('hashBlock 对空白不敏感且稳定', () => {
   assert.equal(hashBlock('一段  文字'), hashBlock('一段 文字'))
   assert.notEqual(hashBlock('一段文字'), hashBlock('另一段文字'))
+})
+
+
+test('paletteFromPixels 取主背景和高饱和强调色', () => {
+  const pixels = []
+  const push = (r, g, b, n) => { for (let i = 0; i < n; i += 1) pixels.push(r, g, b, 255) }
+  push(245, 241, 232, 600)
+  push(192, 57, 43, 250)
+  push(32, 32, 32, 150)
+  const palette = paletteFromPixels(pixels)
+  assert.match(palette.background, /^#[0-9a-f]{6}$/)
+  assert.match(palette.accent, /^#[0-9a-f]{6}$/)
+  assert.equal(palette.dark, false)
+  assert.ok(palette.palette.length >= 2)
+})
+
+
+test('replaceAllOccurrences 替换全部并返回数量', () => {
+  const result = replaceAllOccurrences('苹果和苹果。', '苹果', '橙子')
+  assert.equal(result.text, '橙子和橙子。')
+  assert.equal(result.count, 2)
+  assert.deepEqual(replaceAllOccurrences('abc', '', 'x'), { text: 'abc', count: 0 })
 })

@@ -334,7 +334,7 @@ function AiSection(props) {
         ),
       )
       : null,
-    canScope || stylePreset !== ''
+    canScope || stylePreset !== '' || doc.text.trim() !== ''
       ? h('div', { className: 'ws-chat-compose-option' },
         canScope
           ? h('div', { className: 'ws-scope-row' },
@@ -461,43 +461,7 @@ function extractDnaPalette(dataUrl) {
     const context = canvas.getContext('2d', { willReadFrequently: true })
     if (context === null) throw new Error(t('当前环境无法读取参考图'))
     context.drawImage(image, 0, 0, size, size)
-    const pixels = context.getImageData(0, 0, size, size).data
-    const counts = new Map()
-    for (let index = 0; index < pixels.length; index += 4) {
-      const alpha = pixels[index + 3]
-      if (alpha < 160) continue
-      const r = pixels[index]
-      const g = pixels[index + 1]
-      const b = pixels[index + 2]
-      const key = `${r >> 4},${g >> 4},${b >> 4}`
-      const entry = counts.get(key) ?? { r: 0, g: 0, b: 0, n: 0 }
-      entry.r += r; entry.g += g; entry.b += b; entry.n += 1
-      counts.set(key, entry)
-    }
-    const sorted = [...counts.values()].map(entry => ({
-      r: Math.round(entry.r / entry.n),
-      g: Math.round(entry.g / entry.n),
-      b: Math.round(entry.b / entry.n),
-      n: entry.n,
-    })).sort((a, b) => b.n - a.n)
-    const toHex = (color) => `#${[color.r, color.g, color.b].map(value => value.toString(16).padStart(2, '0')).join('')}`
-    const background = sorted.length > 0 ? toHex(sorted[0]) : '#FBF8F1'
-    const luminance = (color) => (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 255
-    const saturation = (color) => {
-      const max = Math.max(color.r, color.g, color.b)
-      const min = Math.min(color.r, color.g, color.b)
-      return max === 0 ? 0 : (max - min) / max
-    }
-    const accentColor = sorted.find(color => saturation(color) > 0.24 && Math.abs(luminance(color) - luminance(sorted[0])) > 0.08)
-      ?? sorted.find(color => saturation(color) > 0.18)
-      ?? null
-    const accent = accentColor === null ? '' : toHex(accentColor)
-    return {
-      background,
-      accent,
-      dark: luminance(sorted[0] ?? { r: 255, g: 255, b: 255 }) < 0.45,
-      palette: sorted.slice(0, 5).map(toHex),
-    }
+    return paletteFromPixels(context.getImageData(0, 0, size, size).data)
   })
 }
 
@@ -1220,7 +1184,7 @@ function PublishSection(props) {
 
   const regenerateCover = () => {
     try {
-      store.updateMeta({ coverDataUrl: renderCover({ title, design }), coverCustom: false })
+      store.updateMeta({ coverDataUrl: renderCover({ title, design, layout: coverLayout }), coverCustom: false })
       toast('已按新主题重绘封面')
     } catch (failure) {
       toast(failure.message || t('封面生成失败'), 'error')

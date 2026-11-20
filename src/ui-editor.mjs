@@ -334,10 +334,10 @@ function DocRail(props) {
   }
   const replaceAll = () => {
     if (findText === '') return
-    const count = doc.text.split(findText).length - 1
-    if (count === 0) { toast(t('没有找到匹配内容'), 'error'); return }
+    const result = replaceAllOccurrences(doc.text, findText, replaceText)
+    if (result.count === 0) { toast(t('没有找到匹配内容'), 'error'); return }
     store.updateDoc(current => ({ ...current, text: current.text.split(findText).join(replaceText) }), { coalesce: 'replace' })
-    toast(t('已替换 {count} 处', { count }))
+    toast(t('已替换 {count} 处', { count: result.count }))
   }
 
   const words = features.chars
@@ -949,7 +949,7 @@ function SurfacePreview({ surface, title, digest, cover, account, date }) {
     return h('div', { className: 'ws-surface ws-surface-feed' },
       h('div', { className: 'ws-surface-top' }, h('strong', null, t('订阅号消息')), h('span', null, '···')),
       h('div', { className: 'ws-feed-card' },
-        coverNode,
+        h('div', { className: 'ws-feed-cover' }, coverNode, h('span', { className: 'ws-safe-guide', 'aria-hidden': 'true' })),
         h('div', { className: 'ws-feed-text' },
           h('div', { className: 'ws-feed-title' }, title),
           h('div', { className: 'ws-feed-digest' }, digest || t('摘要会显示在这里')),
