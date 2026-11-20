@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 
 import { JSDOM } from 'jsdom'
+import { IDBFactory } from 'fake-indexeddb'
+import { saveDocsToDb, saveSnapshot, appendLedgerEvent } from '../src/docdb.mjs'
 import React from 'react'
 import ReactDOMClient from 'react-dom/client'
 
@@ -11,7 +13,7 @@ const { createRoot } = ReactDOMClient
 const h = React.createElement
 
 /** Mount the generated client bundle in jsdom and return the container. */
-async function mountPanel({ width = 1280, language = '', fetchImpl = null, seedDocs = null } = {}) {
+async function mountPanel({ width = 1280, language = '', fetchImpl = null, seedDocs = null, idbFactory = null } = {}) {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
     url: 'http://127.0.0.1:52889/',
     pretendToBeVisual: true,
@@ -40,6 +42,7 @@ async function mountPanel({ width = 1280, language = '', fetchImpl = null, seedD
     clearInterval,
     Blob,
     Response,
+    indexedDB: idbFactory ?? undefined,
     AbortController,
     AbortSignal,
     URL,
@@ -783,5 +786,75 @@ test('标题过长时信息流显示截断警告', async () => {
   } finally {
     root.unmount()
     dom.window.close()
+  }
+})
+
+test('排版体检可以拆分长段落并统一半角标点', async () => {
+  const seed = [{
+    id: 'doc-audit',
+    text: `# 标题\n\n${'这是一个需要拆分的很长段落。'.repeat(16)}\n\n你好,世界!`,
+    design: { themeId: 'column', variantId: 'essay', overrides: {} },
+    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false },
+    createdAt: 1,
+    updatedAt: 1,
+  }]
+  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
+  try {
+    const typeTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '排版')
+    typeTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 150))
+    const beforeLines = container.querySelector('.ws-editor').value.split('\n').length
+    const split = [...container.querySelectorAll('.ws-audit-row button')].find(button => button.textContent.trim() === '拆分')
+    assert.ok(split, 'long paragraph fix button renders')
+    split.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 180))
+    assert.ok(container.querySelector('.ws-editor').value.split('\n').length > beforeLines)
+    const punct = [...container.querySelectorAll('.ws-audit-row button')].find(button => button.textContent.trim() === '统一')
+    punct.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 180))
+    const value = container.querySelector('.ws-editor').value
+    assert.match(value, /你好，世界！/)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+
+test('快照 diff、恢复与发布对账单在真实 IndexedDB 下工作', async () => {
+  const factory = new IDBFactory()
+  globalThis.indexedDB = factory
+  const seed = [{
+    id: 'doc-idb',
+    text: '# 新标题\n\n新正文。',
+    design: { themeId: 'column', variantId: 'essay', overrides: {} },
+    meta: { title: '新标题', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false },
+    createdAt: 1,
+    updatedAt: 1,
+  }]
+  assert.equal(await saveDocsToDb(seed), true)
+  assert.equal(await saveSnapshot({ docId: 'doc-idb', text: '# 旧标题\n\n旧正文。', reason: 'before-ai', design: seed[0].design, meta: seed[0].meta }), true)
+  assert.equal(await appendLedgerEvent({ docId: 'doc-idb', type: 'draft', text: '# 旧标题\n\n旧正文。', mediaId: 'DRAFT-LEDGER', title: '旧标题', theme: '专栏 · 随笔', design: seed[0].design, meta: seed[0].meta }), true)
+
+  const { dom, window, container, root } = await mountPanel({ seedDocs: seed, idbFactory: factory })
+  try {
+    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '发布')
+    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 300))
+    assert.ok(container.querySelector('.ws-ledger-row'), 'ledger event renders')
+    assert.ok(container.querySelector('.ws-snapshot-row'), 'snapshot row renders')
+    const compare = [...container.querySelectorAll('.ws-snapshot-row button')].find(button => button.textContent.trim() === '对比')
+    assert.ok(compare)
+    compare.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 160))
+    assert.ok(container.querySelector('.ws-snapshot-diff'))
+    const restore = [...container.querySelectorAll('.ws-snapshot-row button')].find(button => button.textContent.trim() === '恢复')
+    restore.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 220))
+    assert.match(container.querySelector('.ws-editor').value, /旧正文/)
+  } finally {
+    root.unmount()
+    dom.window.close()
+    globalThis.indexedDB = undefined
   }
 })
