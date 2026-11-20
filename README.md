@@ -91,6 +91,14 @@ WX_APPID=... WX_SECRET=... WX_COVER_PATH=/path/cover.png npm run e2e:wechat
 
 会为 4 套代表主题各建一篇测试草稿，读回 HTML 比对后全部删除，并删除临时封面素材；不会提交发布，也不在 CI 里运行。
 
+## 真实发布回归（仅测试公众号）
+
+```bash
+WX_APPID=... WX_SECRET=... WX_COVER_PATH=/path/cover.png WX_ALLOW_PUBLISH=1 npm run e2e:publish
+```
+
+会建一篇临时草稿、提交 `freepublish/submit`、轮询状态、读取 `article_id` 后删除刚发布的文章。**这会真实通知关注者**，只应在测试公众号上运行；默认不带 `WX_ALLOW_PUBLISH=1` 会直接拒绝执行。
+
 ## 开发
 
 ```

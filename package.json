@@ -44,7 +44,8 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test test/*.test.mjs",
-    "e2e:wechat": "node scripts/wechat-fidelity.mjs"
+    "e2e:wechat": "node scripts/wechat-fidelity.mjs",
+    "e2e:publish": "node scripts/wechat-publish-e2e.mjs"
   },
   "devDependencies": {
     "@napi-rs/canvas": "^1.1.1",
