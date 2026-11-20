@@ -352,3 +352,41 @@ test('主题可以收藏并筛选', async () => {
     dom.window.close()
   }
 })
+
+test('分发镜可以切到信息流与分享卡', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const feed = [...container.querySelectorAll('.ws-surface-switch button')].find(button => button.textContent.trim() === '信息流')
+    assert.ok(feed)
+    feed.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.ok(container.querySelector('.ws-feed-card'))
+    assert.ok(container.querySelector('.ws-feed-title'))
+
+    const share = [...container.querySelectorAll('.ws-surface-switch button')].find(button => button.textContent.trim() === '分享卡')
+    share.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.ok(container.querySelector('.ws-share-card'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('预览里可以锁定段落，AI 范围提示锁定', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const lock = [...container.querySelectorAll('button')].find(button => button.getAttribute('title') === '锁定这一段')
+    assert.ok(lock)
+    lock.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.ok(container.querySelector('.ws-block.locked'))
+    const aiTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === 'AI')
+    aiTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.ok(container.textContent.includes('锁定'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})

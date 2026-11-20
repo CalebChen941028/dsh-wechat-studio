@@ -22,6 +22,7 @@ A DeepSeek Harness (DSH) sidebar bundle for turning Markdown into WeChat Officia
   - `bridge.mjs` — host calls, clipboard, image compression.
   - `docdb.mjs` — IndexedDB persistence for draft bodies and version snapshots, with a localStorage fallback.
   - `scripts/wechat-fidelity.mjs` — opt-in real-account fidelity check; creates and deletes temporary drafts.
+  - `fidelity.mjs` — results of that check, shown as measured scores in the theme library and publish preflight.
   - `i18n.mjs` — gettext-style UI copy: Chinese source strings, English catalog, language from explicit override, DSH locale, then document `lang`.
   - `host/network.js` — outbound network settings: system fetch or one fixed HTTP(S) proxy for WeChat API calls; the proxy URL lives in the credential store and passwords are redacted in responses.
   - `images.mjs` — image registry: editor text keeps `wsimg://id` refs, data URLs live in IndexedDB, refs are expanded before parsing/rendering/publishing.

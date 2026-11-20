@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import {
   parseArticle, parseInline, plainText, detectTopic, measure, composeDesign,
   autoCompose, rankThemes, nextVariant, mixHex, readableOn, splitMarkdownChunks,
-  auditTypography, splitLongParagraphs, normalizeCjkPunctuation, tidyMarkdown, diffTextLines, replaceImageCaption, replaceImageSource,
+  auditTypography, splitLongParagraphs, normalizeCjkPunctuation, tidyMarkdown, diffTextLines, replaceImageCaption, replaceImageSource, hashBlock,
 } from '../src/engine.mjs'
 import { THEMES } from '../src/themes.mjs'
 import {
@@ -398,4 +398,10 @@ test('replaceImageSource 只换图片地址并保留说明', () => {
   const source = '![旧图注](https://example.com/a.png)'
   const next = replaceImageSource(source, 0, 'https://example.com/b.png')
   assert.equal(next, '![旧图注](https://example.com/b.png)')
+})
+
+
+test('hashBlock 对空白不敏感且稳定', () => {
+  assert.equal(hashBlock('一段  文字'), hashBlock('一段 文字'))
+  assert.notEqual(hashBlock('一段文字'), hashBlock('另一段文字'))
 })

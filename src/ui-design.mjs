@@ -71,6 +71,10 @@ function AiSection(props) {
     sourceBlocks[effectiveScope[1]].lines[1] + 1,
   )
   const scopeText = scopeLines === null ? '' : scopeLines.join('\n')
+  const lockedHashes = Array.isArray(doc.meta.lockedHashes) ? doc.meta.lockedHashes : []
+  const isLockedBlock = (block) => lockedHashes.includes(hashBlock(block.text))
+  const scopeLocked = effectiveScope !== null && sourceBlocks.slice(effectiveScope[0], effectiveScope[1] + 1).some(isLockedBlock)
+  const documentLocked = sourceBlocks.some(isLockedBlock)
   const styleInstruction = stylePreset === 'concise' ? '语气更克制，删掉套话与重复。'
     : stylePreset === 'spoken' ? '语气更口语，像在跟朋友说话。'
       : stylePreset === 'shorter' ? '尽量压缩篇幅，保留信息，不删事实。' : ''
@@ -83,6 +87,8 @@ function AiSection(props) {
       toast('编辑区还是空的，先写点内容', 'error')
       return
     }
+    if (scopeLocked) { toast(t('改写范围里有锁定段落，先在预览里解锁')); return }
+    if (effectiveScope === null && documentLocked) { toast(t('全文里有锁定段落，先解锁或只改选中段/本节')); return }
     setInput('')
     const sentText = doc.text
     setMessages(list => [...list, { role: 'user', content: instruction }])
@@ -218,6 +224,19 @@ function AiSection(props) {
     }
     if (pending.design !== undefined) { patch.design = pending.design; applied.push(t('版式')) }
     if (pending.meta !== undefined) { patch.meta = { ...current.meta, ...pending.meta }; applied.push(t('标题/摘要')) }
+    if (patch.text !== undefined) {
+      const beforeBlocks = parseArticle(current.text).blocks
+      const afterBlocks = parseArticle(patch.text).blocks
+      const beforeHashes = new Set(beforeBlocks.map(block => hashBlock(block.text)))
+      const afterHashes = new Set(afterBlocks.map(block => hashBlock(block.text)))
+      const changed = afterBlocks.map(block => hashBlock(block.text)).filter(hash => !beforeHashes.has(hash))
+      const known = Array.isArray(current.meta.aiHashes) ? current.meta.aiHashes : []
+      patch.meta = {
+        ...current.meta,
+        ...(patch.meta ?? {}),
+        aiHashes: [...new Set([...known, ...changed])].filter(hash => afterHashes.has(hash)),
+      }
+    }
     if (Object.keys(patch).length > 0) store.updateDoc(state => ({ ...state, ...patch }))
     setMessages(list => [...list, {
       role: 'assistant',
@@ -334,6 +353,9 @@ function AiSection(props) {
             onClick: () => setStylePreset(id),
           }, label)),
         ),
+        scopeLocked || (effectiveScope === null && documentLocked)
+          ? h('p', { className: 'ws-hint ws-error-text' }, scopeLocked ? t('范围里有锁定段落；先在预览里解锁') : t('全文有锁定段落；先解锁或只改选中段/本节'))
+          : null,
         h('p', { className: 'ws-hint' }, t('预估约 {tokens} tokens（按字符粗算）', {
           tokens: Math.ceil(((scopeLines === null ? doc.text.length : scopeText.length) + input.length) / 2),
         })),
@@ -409,6 +431,7 @@ function ThemeMiniPreview({ theme }) {
 
 const THEME_FAVORITES_KEY = 'dsh.wechat-studio.themeFavorites.v1'
 const THEME_RECENT_KEY = 'dsh.wechat-studio.themeRecent.v1'
+const THEME_DNA_KEY = 'dsh.wechat-studio.themeDna.v1'
 
 function loadThemeList(key) {
   try {
@@ -419,11 +442,124 @@ function loadThemeList(key) {
   }
 }
 
+function loadDnaPresets() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(THEME_DNA_KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter(item => item && typeof item.id === 'string' && item.overrides) : []
+  } catch {
+    return []
+  }
+}
+
+/** Extract a background/accent palette from a reference screenshot. */
+function extractDnaPalette(dataUrl) {
+  return loadImage(dataUrl).then(image => {
+    const canvas = document.createElement('canvas')
+    const size = 96
+    canvas.width = size
+    canvas.height = size
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    if (context === null) throw new Error(t('当前环境无法读取参考图'))
+    context.drawImage(image, 0, 0, size, size)
+    const pixels = context.getImageData(0, 0, size, size).data
+    const counts = new Map()
+    for (let index = 0; index < pixels.length; index += 4) {
+      const alpha = pixels[index + 3]
+      if (alpha < 160) continue
+      const r = pixels[index]
+      const g = pixels[index + 1]
+      const b = pixels[index + 2]
+      const key = `${r >> 4},${g >> 4},${b >> 4}`
+      const entry = counts.get(key) ?? { r: 0, g: 0, b: 0, n: 0 }
+      entry.r += r; entry.g += g; entry.b += b; entry.n += 1
+      counts.set(key, entry)
+    }
+    const sorted = [...counts.values()].map(entry => ({
+      r: Math.round(entry.r / entry.n),
+      g: Math.round(entry.g / entry.n),
+      b: Math.round(entry.b / entry.n),
+      n: entry.n,
+    })).sort((a, b) => b.n - a.n)
+    const toHex = (color) => `#${[color.r, color.g, color.b].map(value => value.toString(16).padStart(2, '0')).join('')}`
+    const background = sorted.length > 0 ? toHex(sorted[0]) : '#FBF8F1'
+    const luminance = (color) => (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 255
+    const saturation = (color) => {
+      const max = Math.max(color.r, color.g, color.b)
+      const min = Math.min(color.r, color.g, color.b)
+      return max === 0 ? 0 : (max - min) / max
+    }
+    const accentColor = sorted.find(color => saturation(color) > 0.24 && Math.abs(luminance(color) - luminance(sorted[0])) > 0.08)
+      ?? sorted.find(color => saturation(color) > 0.18)
+      ?? null
+    const accent = accentColor === null ? '' : toHex(accentColor)
+    return {
+      background,
+      accent,
+      dark: luminance(sorted[0] ?? { r: 255, g: 255, b: 255 }) < 0.45,
+      palette: sorted.slice(0, 5).map(toHex),
+    }
+  })
+}
+
 function ThemeSection(props) {
   const { store, design, analysis, doc, toast, autoRefine, setAutoRefine, refining, onRefineNow } = props
   const [filter, setFilter] = React.useState('all')
   const [favorites, setFavorites] = React.useState(() => loadThemeList(THEME_FAVORITES_KEY))
   const [recent, setRecent] = React.useState(() => loadThemeList(THEME_RECENT_KEY))
+  const [dna, setDna] = React.useState(null)
+  const [dnaCandidates, setDnaCandidates] = React.useState([])
+  const [dnaName, setDnaName] = React.useState('')
+  const [dnaPresets, setDnaPresets] = React.useState(() => loadDnaPresets())
+  const [dnaBusy, setDnaBusy] = React.useState(false)
+  const dnaInputRef = React.useRef(null)
+  const saveDnaPreset = (candidate) => {
+    const preset = {
+      id: `dna-${Date.now().toString(36)}`,
+      name: dnaName.trim() || `${t('参考图')} ${dnaPresets.length + 1}`,
+      overrides: candidate.overrides,
+    }
+    setDnaPresets((list) => {
+      const next = [preset, ...list].slice(0, 12)
+      try { localStorage.setItem(THEME_DNA_KEY, JSON.stringify(next)) } catch { /* private mode */ }
+      return next
+    })
+    setDnaName('')
+    toast(t('已存为我的版式'), 'success')
+  }
+  const removeDnaPreset = (id) => {
+    setDnaPresets((list) => {
+      const next = list.filter(item => item.id !== id)
+      try { localStorage.setItem(THEME_DNA_KEY, JSON.stringify(next)) } catch { /* private mode */ }
+      return next
+    })
+  }
+  const applyDnaOverrides = (overrides) => {
+    store.updateDesign(current => ({ ...current, overrides: { ...(current.overrides ?? {}), ...overrides } }))
+  }
+  const readDnaFile = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setDnaBusy(true)
+    try {
+      const dataUrl = await readFileAsDataUrl(file)
+      const palette = await extractDnaPalette(dataUrl)
+      const baseBackground = palette.background
+      const accent = palette.accent === '' ? activeTheme.palette.accent : palette.accent
+      const candidates = [
+        { id: 'source', label: t('参考原色'), overrides: { accent, bg: baseBackground } },
+        { id: 'deep', label: t('深色纸面'), overrides: { accent, bg: palette.dark ? baseBackground : mixHex(accent, '#111111', 0.72) } },
+        { id: 'warm', label: t('低饱和'), overrides: { accent: mixHex(accent, baseBackground, 0.32), bg: baseBackground } },
+      ]
+      setDna({ ...palette, accent })
+      setDnaCandidates(candidates)
+      toast(t('已从参考图提取配色，挑一个配方试试'), 'success')
+    } catch (failure) {
+      toast(failure.message || t('参考图读取失败'), 'error')
+    } finally {
+      setDnaBusy(false)
+    }
+  }
   const activeTheme = THEMES.find(theme => theme.id === design.themeId) ?? THEMES[0]
   const toggleFavorite = (themeId) => {
     setFavorites((list) => {
@@ -519,6 +655,9 @@ function ThemeSection(props) {
               }, favorites.includes(theme.id) ? '★' : '☆'),
             ),
             h('span', { className: 'ws-theme-tag' }, theme.tagline.slice(0, 14)),
+            fidelityFor(theme.id) !== null
+              ? h('span', { className: 'ws-theme-fidelity', title: t('真实账号实测：{date}', { date: fidelityFor(theme.id).testedAt.slice(0, 10) }) }, `${t('实测')} ${fidelityFor(theme.id).score}`)
+              : null,
           ),
           )),
         ),
@@ -546,6 +685,50 @@ function ThemeSection(props) {
         )),
       ),
       h('p', { className: 'ws-hint' }, activeTheme.tagline),
+    ),
+    h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' },
+        h('span', null, t('版式 DNA')),
+        h('button', { type: 'button', className: 'ws-link', onClick: () => dnaInputRef.current?.click(), disabled: dnaBusy }, dnaBusy ? t('提取中…') : t('从参考图提取')),
+      ),
+      h('input', {
+        ref: dnaInputRef,
+        type: 'file',
+        accept: 'image/*',
+        style: { display: 'none' },
+        onChange: readDnaFile,
+      }),
+      h('p', { className: 'ws-hint' }, t('传一张喜欢的文章截图，提取纸色、强调色和明暗，生成三个可套用的配方。')),
+      dnaCandidates.length > 0
+        ? h('div', { className: 'ws-dna-candidates' },
+          dnaCandidates.map(candidate => h('div', {
+            key: candidate.id,
+            role: 'button',
+            tabIndex: 0,
+            className: 'ws-dna-card',
+            onClick: () => applyDnaOverrides(candidate.overrides),
+            onKeyDown: event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); applyDnaOverrides(candidate.overrides) } },
+          },
+          h('span', { className: 'ws-dna-swatch', style: { background: candidate.overrides.bg, borderColor: candidate.overrides.accent } },
+            h('i', { style: { background: candidate.overrides.accent } }),
+          ),
+          h('span', { className: 'ws-dna-name' }, candidate.label),
+          h('span', { className: 'ws-dna-actions' },
+            h('button', { type: 'button', className: 'ws-link', onClick: event => { event.stopPropagation(); saveDnaPreset(candidate) } }, t('存为我的版式')),
+          ),
+          )),
+          h('input', { className: 'ws-input ws-dna-name-input', value: dnaName, placeholder: t('给这套版式起个名字（可选）'), onChange: event => setDnaName(event.target.value) }),
+        )
+        : null,
+      dnaPresets.length > 0
+        ? h('div', { className: 'ws-dna-presets' },
+          dnaPresets.map(preset => h('div', { key: preset.id, className: 'ws-dna-preset' },
+            h('span', { className: 'ws-dna-preset-name' }, preset.name),
+            h('button', { type: 'button', className: 'ws-link', onClick: () => applyDnaOverrides(preset.overrides) }, t('套用')),
+            h('button', { type: 'button', className: 'ws-link danger', onClick: () => removeDnaPreset(preset.id) }, t('删除')),
+          )),
+        )
+        : null,
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('主色'))),
@@ -892,6 +1075,9 @@ function PublishSection(props) {
   const [snapshots, setSnapshots] = React.useState([])
   const [snapshotBusy, setSnapshotBusy] = React.useState(false)
   const [compareSnapshot, setCompareSnapshot] = React.useState(null)
+  const [ledger, setLedger] = React.useState([])
+  const [ledgerVersion, setLedgerVersion] = React.useState(0)
+  const [compareLedger, setCompareLedger] = React.useState(null)
   const [networkState, setNetworkState] = React.useState({ phase: 'loading', mode: 'system', proxyUrl: '', error: '' })
   const [networkMode, setNetworkMode] = React.useState('system')
   const [networkProxy, setNetworkProxy] = React.useState('')
@@ -930,6 +1116,26 @@ function PublishSection(props) {
     try { setSnapshots(await listSnapshots(doc.id, 8)) } catch { setSnapshots([]) }
   }, [doc.id])
   React.useEffect(() => { refreshSnapshots() }, [refreshSnapshots, snapshotVersion])
+  React.useEffect(() => {
+    let cancelled = false
+    listLedgerEvents(doc.id, 20).then(items => { if (!cancelled) setLedger(items) }).catch(() => { if (!cancelled) setLedger([]) })
+    return () => { cancelled = true }
+  }, [doc.id, ledgerVersion])
+  const recordLedger = async (type, extra = {}) => {
+    const current = store.getDoc()
+    if (!current) return
+    await appendLedgerEvent({
+      docId: current.id,
+      type,
+      title: current.meta.title.trim() || parsed.title || '',
+      theme: `${design.themeName} · ${design.variantName}`,
+      text: current.text,
+      design: current.design,
+      meta: current.meta,
+      ...extra,
+    })
+    setLedgerVersion(value => value + 1)
+  }
   const saveManualSnapshot = async () => {
     if (typeof takeSnapshot !== 'function') return
     setSnapshotBusy(true)
@@ -950,6 +1156,18 @@ function PublishSection(props) {
     }))
     setCompareSnapshot(null)
     toast(t('已恢复快照'))
+  }
+
+  const ledgerLabel = (type) => type === 'published' ? t('已发布') : type === 'updated' ? t('草稿更新') : t('草稿保存')
+  const restoreLedger = (event) => {
+    store.updateDoc(current => ({
+      ...current,
+      text: event.text,
+      design: event.design,
+      meta: { ...current.meta, ...event.meta },
+    }))
+    setCompareLedger(null)
+    toast(t('已恢复到这条发布记录'))
   }
 
   const previewHtmlLength = React.useMemo(() => serializeNodes(article.nodes).length, [article])
@@ -978,11 +1196,15 @@ function PublishSection(props) {
     const htmlLength = previewHtmlLength
     if (htmlLength > 950 * 1024) push('error', t('正文 HTML 超过 950KB，删掉图片或缩短正文'), formatSize(htmlLength))
     else if (htmlLength > 800 * 1024) push('warn', t('正文 HTML 约 {size}，接近微信上限', { size: formatSize(htmlLength) }), '')
+    const measured = fidelityFor(doc.design.themeId)
+    if (measured === null) push('warn', t('这个主题还没有真实账号实测'), '')
+    else if (measured.ok) push('ok', t('主题实测保真 {score}', { score: measured.score }), `${measured.testedAt.slice(0, 10)} · ${t('真实草稿读回')}`)
+    else push('warn', t('主题实测保真 {score}', { score: measured.score }), t('有样式在微信端被清洗'))
     if (coverDataUrl !== '' || doc.meta.coverCustom === true) push('ok', t('封面已就绪'), '')
     else push('warn', t('封面还在生成'), t('等封面出现或手动上传'))
     if (bundleIds.length > 0) push('ok', t('合集共 {count} 篇', { count: bundleIds.length + 1 }), t('保存时会逐篇上传'))
     return checks
-  }, [previewHtmlLength, article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length])
+  }, [previewHtmlLength, article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length, doc.design.themeId])
 
   React.useEffect(() => {
     // Keep the generated cover in step with the current theme; a cover the user
@@ -1308,6 +1530,7 @@ function PublishSection(props) {
           setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done', detail: warnings.join('；') || updated.mediaId } : step)))
           setResult({ kind: 'draft', mediaId: updated.mediaId, warnings, count: preparedArticles.length, updated: true })
           store.updateMeta({ draftArticleCount: preparedArticles.length })
+          await recordLedger('updated', { mediaId: updated.mediaId, count: preparedArticles.length })
           toast(t('已更新公众号草稿'), 'success')
         } catch (failure) {
           if (failure?.code === 'invalid-media') {
@@ -1322,7 +1545,10 @@ function PublishSection(props) {
       const draft = await callHost('createDraft', { articles: preparedArticles }, { timeoutMs: 120000 })
       const warnings = Array.isArray(draft.warnings) ? draft.warnings : []
       setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done', detail: warnings.join('；') || draft.mediaId } : step)))
-      if (typeof draft.mediaId === 'string') store.updateMeta({ draftMediaId: draft.mediaId, draftArticleCount: preparedArticles.length })
+      if (typeof draft.mediaId === 'string') {
+        store.updateMeta({ draftMediaId: draft.mediaId, draftArticleCount: preparedArticles.length })
+        await recordLedger('draft', { mediaId: draft.mediaId, count: preparedArticles.length })
+      }
       setResult({ kind: 'draft', mediaId: draft.mediaId, warnings, count: preparedArticles.length, updated: false })
 
       if (mode === 'publish') {
@@ -1519,6 +1745,47 @@ function PublishSection(props) {
         h(Button, { onClick: () => coverInputRef.current?.click(), disabled: coverBusy }, coverBusy ? t('处理中…') : t('上传图片')),
         h('input', { ref: coverInputRef, type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: uploadCoverFile }),
       ),
+    ),
+    h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' },
+        h('span', null, t('发布对账单')),
+        h('span', { className: 'ws-group-note' }, ledger.length === 0 ? t('还没有发布记录') : t('最近 {count} 条', { count: ledger.length })),
+      ),
+      ledger.length === 0
+        ? h('p', { className: 'ws-hint' }, t('保存草稿或发布后，这里会记录每一版与当前正文的差异。'))
+        : (() => {
+          const latest = ledger[0]
+          const drift = latest.text === '' ? null : diffTextLines(doc.text, latest.text)
+          const added = drift === null ? 0 : drift.filter(item => item.type === 'add').length
+          const removed = drift === null ? 0 : drift.filter(item => item.type === 'remove').length
+          const currentTheme = `${design.themeName} · ${design.variantName}`
+          return h('div', { className: 'ws-ledger' },
+            h('div', { className: 'ws-ledger-summary' },
+              h('strong', null, t('当前与「{type}」的差异', { type: ledgerLabel(latest.type) })),
+              h('span', null, t('新增 {added} 行 · 删除 {removed} 行', { added, removed })),
+              latest.theme !== '' && latest.theme !== currentTheme ? h('span', null, t('主题已从 {old} 改为 {now}', { old: latest.theme, now: currentTheme })) : null,
+            ),
+            ledger.map(event => h(React.Fragment, { key: event.id },
+              h('div', { className: 'ws-ledger-row' },
+                h('span', { className: 'ws-ledger-time' }, new Date(event.at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })),
+                h('span', { className: 'ws-ledger-type' }, ledgerLabel(event.type)),
+                h('span', { className: 'ws-ledger-media' }, event.mediaId === '' ? event.publishId.slice(-8) : event.mediaId.slice(-8)),
+                h('button', { type: 'button', className: 'ws-link', onClick: () => setCompareLedger(value => value?.id === event.id ? null : event) }, t('对比')),
+                h('button', { type: 'button', className: 'ws-link', onClick: () => restoreLedger(event) }, t('恢复')),
+              ),
+              compareLedger?.id === event.id
+                ? h('div', { className: 'ws-snapshot-diff' },
+                  h('div', { className: 'ws-diff-lines' },
+                    diffTextLines(doc.text, event.text).filter(item => item.type !== 'same').slice(0, 24).map((item, index) => h('div', {
+                      key: index,
+                      className: 'ws-diff-line ' + item.type,
+                    }, `${item.type === 'add' ? '+' : '-'} ${item.text.length > 90 ? `${item.text.slice(0, 90)}…` : item.text || ' '}`)),
+                  ),
+                )
+                : null,
+            )),
+          )
+        })(),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },

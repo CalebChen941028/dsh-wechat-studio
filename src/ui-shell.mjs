@@ -141,7 +141,7 @@ function createDocument(seedText, design, meta) {
     id: docId(),
     text,
     design: composed,
-    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', coverLayout: 'left', draftMediaId: '', draftArticleCount: 0, needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
+    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', coverLayout: 'left', draftMediaId: '', draftArticleCount: 0, aiHashes: [], lockedHashes: [], needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }
@@ -871,6 +871,7 @@ function HelpDialog({ firstRun, onClose }) {
       ['复制这一段', '复制块后继续改'],
       ['图片工具', '图注 / 裁剪'],
       ['主题收藏', '收藏与最近筛选'],
+      ['段落锁', '锁定后 AI 不会改'],
     ]],
   ]
   return h('div', { className: 'ws-modal-scrim', onClick: event => { if (event.target === event.currentTarget) onClose() } },

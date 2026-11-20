@@ -9,6 +9,7 @@
 const DOC_DB_NAME = 'dsh-wechat-studio-docs'
 const DOC_STORE_NAME = 'state'
 const DOC_SNAPSHOT_STORE = 'snapshots'
+const DOC_LEDGER_STORE = 'ledger'
 const DOC_ROW_ID = 'docs'
 
 let docDbPromise
@@ -27,11 +28,12 @@ function openDocDb() {
   docDbPromise = new Promise((resolve) => {
     if (!hasDocIndexedDb()) { resolve(null); return }
     let request
-    try { request = indexedDB.open(DOC_DB_NAME, 2) } catch { resolve(null); return }
+    try { request = indexedDB.open(DOC_DB_NAME, 3) } catch { resolve(null); return }
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(DOC_STORE_NAME)) db.createObjectStore(DOC_STORE_NAME, { keyPath: 'id' })
       if (!db.objectStoreNames.contains(DOC_SNAPSHOT_STORE)) db.createObjectStore(DOC_SNAPSHOT_STORE, { keyPath: 'id' })
+      if (!db.objectStoreNames.contains(DOC_LEDGER_STORE)) db.createObjectStore(DOC_LEDGER_STORE, { keyPath: 'id' })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => resolve(null)
@@ -130,4 +132,45 @@ export async function clearSnapshots(docId) {
   await withDocStore('readwrite', store => {
     for (const item of all) if (item.docId === docId) store.delete(item.id)
   }, DOC_SNAPSHOT_STORE)
+}
+
+
+/** Append one publish-ledger event; keeps the newest 40 per document. */
+export async function appendLedgerEvent(event) {
+  if (event === null || typeof event !== 'object' || typeof event.docId !== 'string') return false
+  const entry = {
+    id: `ledger-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    docId: event.docId,
+    type: typeof event.type === 'string' ? event.type : 'draft',
+    at: Date.now(),
+    title: typeof event.title === 'string' ? event.title : '',
+    theme: typeof event.theme === 'string' ? event.theme : '',
+    mediaId: typeof event.mediaId === 'string' ? event.mediaId : '',
+    publishId: typeof event.publishId === 'string' ? event.publishId : '',
+    status: typeof event.status === 'string' ? event.status : '',
+    count: Number(event.count) || 0,
+    text: typeof event.text === 'string' ? event.text : '',
+    design: event.design ?? {},
+    meta: event.meta ?? {},
+  }
+  const saved = await withDocStore('readwrite', store => store.put(entry), DOC_LEDGER_STORE)
+  if (saved === null || saved === undefined) return false
+  const all = await withDocStore('readonly', store => store.getAll(), DOC_LEDGER_STORE)
+  if (Array.isArray(all)) {
+    const mine = all.filter(item => item.docId === entry.docId).sort((a, b) => b.at - a.at)
+    const stale = mine.slice(40)
+    if (stale.length > 0) {
+      await withDocStore('readwrite', store => {
+        for (const item of stale) store.delete(item.id)
+      }, DOC_LEDGER_STORE)
+    }
+  }
+  return true
+}
+
+/** List recent ledger events for one document, newest first. */
+export async function listLedgerEvents(docId, limit = 20) {
+  const all = await withDocStore('readonly', store => store.getAll(), DOC_LEDGER_STORE)
+  if (!Array.isArray(all)) return []
+  return all.filter(item => item.docId === docId).sort((a, b) => b.at - a.at).slice(0, limit)
 }

@@ -632,7 +632,7 @@ function WechatActionGlyph({ kind }) {
 
 /** The native-looking WeChat article chrome around the rendered body. */
 function WechatPhoneChrome(props) {
-  const { children, brand, source, empty, device = 'iphone' } = props
+  const { children, brand, source, empty, device = 'iphone', surface = 'article' } = props
   const android = device === 'android'
   const clock = useClockText()
   return h('div', { className: 'ws-phone' + (android ? ' ws-phone-android' : '') },
@@ -653,18 +653,18 @@ function WechatPhoneChrome(props) {
         h('span', { className: 'ws-nav-brand' }, brand),
         h('span', { className: 'ws-nav-more' }, h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'currentColor', 'aria-hidden': 'true' }, h('circle', { cx: 5, cy: 12, r: 1.7 }), h('circle', { cx: 12, cy: 12, r: 1.7 }), h('circle', { cx: 19, cy: 12, r: 1.7 }))),
       ),
-      h('div', { className: 'ws-phone-scroll' },
+      h('div', { className: 'ws-phone-scroll' + (surface === 'article' ? '' : ' ws-phone-surface') },
         empty ? h('div', { className: 'ws-empty' }, t('把文案粘到左侧，或上传 .md / .docx 文档，这里会实时出现公众号版式。也可以点下方「插入图片」放一张插图。')) : children,
-        !empty && source !== ''
+        surface === 'article' && !empty && source !== ''
           ? h('div', { className: 'ws-read-original' }, t('阅读原文'), h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M9 5l7 7-7 7' })))
           : null,
       ),
-      h('div', { className: 'ws-wechat-actions' },
+      surface === 'article' ? h('div', { className: 'ws-wechat-actions' },
         h('span', { className: 'ws-comment-pill' }, t('写留言')),
         h('span', { className: 'ws-action-icon', title: t('分享') }, h(WechatActionGlyph, { kind: 'share' })),
         h('span', { className: 'ws-action-icon', title: t('在看') }, h(WechatActionGlyph, { kind: 'wow' })),
         h('span', { className: 'ws-action-icon', title: t('赞') }, h(WechatActionGlyph, { kind: 'like' })),
-      ),
+      ) : null,
       h('div', { className: 'ws-home-indicator' }, h('i')),
     ),
   )
@@ -682,6 +682,15 @@ function PreviewStage(props) {
     }
   }, [selectedBlock])
   const [dragIndex, setDragIndex] = React.useState(null)
+  const [surface, setSurface] = React.useState('article')
+  const aiHashes = Array.isArray(doc.meta.aiHashes) ? doc.meta.aiHashes : []
+  const lockedHashes = Array.isArray(doc.meta.lockedHashes) ? doc.meta.lockedHashes : []
+  const toggleLock = (block) => {
+    const hash = hashBlock(block.text)
+    const isLocked = lockedHashes.includes(hash)
+    store.updateMeta({ lockedHashes: isLocked ? lockedHashes.filter(item => item !== hash) : [...lockedHashes, hash] })
+    toast(isLocked ? t('已解锁这一段') : t('已锁定这一段，AI 不会再改'))
+  }
   const [cropBlock, setCropBlock] = React.useState(null)
   const [cropBusy, setCropBusy] = React.useState(false)
   const [captionBlock, setCaptionBlock] = React.useState(null)
@@ -867,15 +876,29 @@ function PreviewStage(props) {
 
   const brand = (doc.meta.brand ?? '').trim() || t('公众号')
   const source = (doc.meta.sourceUrl ?? '').trim()
+  const surfaceTitle = doc.meta.title.trim() || parsed.title || t('未命名文章')
+  const firstParagraph = parsed.blocks.find(block => block.type === 'paragraph')
+  const surfaceDigest = doc.meta.digest.trim() || (firstParagraph === undefined ? '' : firstParagraph.text.replace(/\s+/g, ' ').trim().slice(0, 80))
+  const surfaceCover = doc.meta.coverDataUrl || ''
+  const surfaceAccount = brand
+  const surfaceWarnings = []
+  if (surface !== 'article') {
+    if (surfaceCover === '') surfaceWarnings.push(t('还没有封面，信息流和分享卡会是空图'))
+    if (surfaceTitle.length > 36) surfaceWarnings.push(t('标题约 {count} 字，信息流会被截到两行', { count: surfaceTitle.length }))
+    else if (surfaceTitle.length > 18) surfaceWarnings.push(t('标题约 {count} 字，信息流会显示两行', { count: surfaceTitle.length }))
+    if (surfaceDigest.length > 54 && surface !== 'feed') surfaceWarnings.push(t('摘要约 {count} 字，分享卡和搜索结果会截断', { count: surfaceDigest.length }))
+  }
+  const surfaceBrand = surface === 'feed' ? t('订阅号消息') : surface === 'share' ? t('文件传输助手') : surface === 'search' ? t('搜一搜') : brand
 
   return h('section', { className: 'ws-mid' },
     h('div', { className: 'ws-stage' },
-      h(WechatPhoneChrome, { brand, source, empty: doc.text.trim() === '', device },
-        h(ArticleBody, {
+      h(WechatPhoneChrome, { brand: surfaceBrand, source: surface === 'article' ? source : '', empty: doc.text.trim() === '' && surface === 'article', device, surface },
+        surface === 'article' ? h(ArticleBody, {
           root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel,
           captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption,
           dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage,
-        }),
+          aiHashes, lockedHashes, toggleLock,
+        }) : h(SurfacePreview, { surface, title: surfaceTitle, digest: surfaceDigest, cover: surfaceCover, account: surfaceAccount, date }),
       ),
       h('input', {
         ref: previewImageRef,
@@ -893,6 +916,14 @@ function PreviewStage(props) {
         },
       }),
       h('div', { className: 'ws-stage-bar' },
+        h('div', { className: 'ws-surface-switch' },
+          [['article', t('文章')], ['feed', t('信息流')], ['share', t('分享卡')], ['search', t('搜一搜')]].map(([id, label]) => h('button', {
+            key: id,
+            type: 'button',
+            className: 'ws-device-btn' + (surface === id ? ' on' : ''),
+            onClick: () => setSurface(id),
+          }, label)),
+        ),
         h('button', { type: 'button', className: 'ws-mini-btn', onClick: () => previewImageRef.current?.click() }, t('插入图片')),
         h('div', { className: 'ws-device-switch' },
           h('button', { type: 'button', className: 'ws-device-btn' + (device !== 'android' ? ' on' : ''), onClick: () => setDevice('iphone') }, 'iPhone'),
@@ -903,12 +934,66 @@ function PreviewStage(props) {
         h('span', { className: 'ws-stage-chip' }, `边距 ${design.layout.paddingX}px`),
         h('span', { className: 'ws-stage-note' }, t('悬停段落可上移、下移或删除')),
       ),
+      surfaceWarnings.length > 0
+        ? h('div', { className: 'ws-surface-hints' }, surfaceWarnings.map((warning, index) => h('span', { key: index }, warning)))
+        : null,
+    ),
+  )
+}
+
+function SurfacePreview({ surface, title, digest, cover, account, date }) {
+  const coverNode = cover === ''
+    ? h('div', { className: 'ws-surface-cover empty' }, t('封面生成中…'))
+    : h('img', { className: 'ws-surface-cover', src: cover, alt: '' })
+  if (surface === 'feed') {
+    return h('div', { className: 'ws-surface ws-surface-feed' },
+      h('div', { className: 'ws-surface-top' }, h('strong', null, t('订阅号消息')), h('span', null, '···')),
+      h('div', { className: 'ws-feed-card' },
+        coverNode,
+        h('div', { className: 'ws-feed-text' },
+          h('div', { className: 'ws-feed-title' }, title),
+          h('div', { className: 'ws-feed-digest' }, digest || t('摘要会显示在这里')),
+          h('div', { className: 'ws-feed-meta' }, account, ' · ', date),
+        ),
+      ),
+      h('div', { className: 'ws-feed-row' },
+        h('div', { className: 'ws-feed-thumb' }), h('div', { className: 'ws-feed-skeleton' }, h('i'), h('i')),
+      ),
+      h('div', { className: 'ws-feed-row' },
+        h('div', { className: 'ws-feed-thumb' }), h('div', { className: 'ws-feed-skeleton' }, h('i'), h('i')),
+      ),
+    )
+  }
+  if (surface === 'share') {
+    return h('div', { className: 'ws-surface ws-surface-share' },
+      h('div', { className: 'ws-chat-stamp' }, date),
+      h('div', { className: 'ws-share-card' },
+        h('div', { className: 'ws-share-cover' }, coverNode),
+        h('div', { className: 'ws-share-copy' },
+          h('div', { className: 'ws-share-title' }, title),
+          h('div', { className: 'ws-share-digest' }, digest || t('摘要会显示在这里')),
+          h('div', { className: 'ws-share-meta' }, account),
+        ),
+      ),
+      h('div', { className: 'ws-chat-tip' }, t('分享给朋友时显示的卡片')),
+    )
+  }
+  return h('div', { className: 'ws-surface ws-surface-search' },
+    h('div', { className: 'ws-searchbar-mock' }, h('span', null, t('搜索文章')), h('i')),
+    h('div', { className: 'ws-search-hit' },
+      h('div', { className: 'ws-search-hit-title' }, title),
+      h('div', { className: 'ws-search-hit-digest' }, digest || t('摘要会显示在这里')),
+      h('div', { className: 'ws-search-hit-meta' }, account, ' · ', date),
+    ),
+    h('div', { className: 'ws-search-hit muted' },
+      h('div', { className: 'ws-search-hit-title' }, t('相关文章标题占位')),
+      h('div', { className: 'ws-search-hit-meta' }, account),
     ),
   )
 }
 
 function ArticleBody(props) {
-  const { root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption, dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage } = props
+  const { root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption, dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage, aiHashes, lockedHashes, toggleLock } = props
   const [hovered, setHovered] = React.useState(null)
   const children = root.children
 
@@ -921,9 +1006,12 @@ function ArticleBody(props) {
     const content = nodesToReact([child], h)
     if (!block) return h('div', { key: index, className: 'ws-block' }, content)
     const isSelected = selectedBlock === blockIndex
+    const blockHash = hashBlock(block.text)
+    const isAi = aiHashes.includes(blockHash)
+    const isLocked = lockedHashes.includes(blockHash)
     return h('div', {
       key: index,
-      className: 'ws-block' + (isSelected ? ' selected' : '') + (hovered === blockIndex ? ' hovered' : '') + (dragIndex === blockIndex ? ' dragging' : ''),
+      className: 'ws-block' + (isSelected ? ' selected' : '') + (hovered === blockIndex ? ' hovered' : '') + (dragIndex === blockIndex ? ' dragging' : '') + (isAi ? ' ai' : '') + (isLocked ? ' locked' : ''),
       'data-block': blockIndex,
       draggable: true,
       onDragStart: () => setDragIndex(blockIndex),
@@ -934,7 +1022,8 @@ function ArticleBody(props) {
       onMouseLeave: () => setHovered(value => (value === blockIndex ? null : value)),
       onClick: () => setSelectedBlock(isSelected ? null : blockIndex),
     },
-    isSelected ? h('div', { className: 'ws-block-tag' }, blockLabel(block)) : null,
+    isSelected ? h('div', { className: 'ws-block-tag' }, `${isLocked ? `${t('锁定')} · ` : ''}${isAi ? `${t('AI 改写')} · ` : ''}${blockLabel(block)}`) : null,
+    (isAi || isLocked) ? h('span', { className: 'ws-block-origin' }, isLocked ? t('锁定') : t('AI 改写')) : null,
     content,
     cropBlock === blockIndex && block.type === 'image'
       ? h('div', { className: 'ws-caption-editor', onClick: event => event.stopPropagation() },
@@ -971,6 +1060,7 @@ function ArticleBody(props) {
       block.type === 'image' ? h('button', { type: 'button', title: t('裁剪图片'), onClick: event => { event.stopPropagation(); setCropBlock(blockIndex) } }, h(Icon, { name: 'image', size: 12 })) : null,
       block.type === 'image' ? h('button', { type: 'button', title: t('编辑图注'), onClick: event => { event.stopPropagation(); startCaption(blockIndex) } }, h(Icon, { name: 'pen', size: 12 })) : null,
       block.type === 'image' ? h('button', { type: 'button', title: t('替换图片'), onClick: event => { event.stopPropagation(); replaceImage(blockIndex) } }, h(Icon, { name: 'image', size: 12 })) : null,
+      h('button', { type: 'button', title: isLocked ? t('解锁这一段') : t('锁定这一段'), onClick: event => { event.stopPropagation(); toggleLock(block) } }, h(Icon, { name: isLocked ? 'unlock' : 'lock', size: 12 })),
       h('button', { type: 'button', title: t('复制这一段'), onClick: event => { event.stopPropagation(); duplicateBlock(blockIndex) } }, h(Icon, { name: 'copy', size: 12 })),
       h('button', { type: 'button', title: t('上移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, -1) } }, h(Icon, { name: 'arrowUp', size: 12 })),
       h('button', { type: 'button', title: t('下移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, 1) } }, h(Icon, { name: 'arrowDown', size: 12 })),

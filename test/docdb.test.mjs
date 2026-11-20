@@ -5,7 +5,7 @@ import { indexedDB as fakeIndexedDB } from 'fake-indexeddb'
 
 globalThis.indexedDB = fakeIndexedDB
 
-const { saveDocsToDb, loadDocsFromDb, saveSnapshot, listSnapshots, clearSnapshots } = await import('../src/docdb.mjs')
+const { saveDocsToDb, loadDocsFromDb, saveSnapshot, listSnapshots, clearSnapshots, appendLedgerEvent, listLedgerEvents } = await import('../src/docdb.mjs')
 
 test('saveDocsToDb / loadDocsFromDb 保留顺序与长正文', async () => {
   const longText = '长文正文。'.repeat(12000)
@@ -39,4 +39,17 @@ test('saveSnapshot / listSnapshots / clearSnapshots 按文档保存版本', asyn
   await clearSnapshots('doc-a')
   assert.deepEqual(await listSnapshots('doc-a'), [])
   assert.equal((await listSnapshots('doc-b')).length, 1)
+})
+
+
+test('appendLedgerEvent / listLedgerEvents 保留发布事件', async () => {
+  await appendLedgerEvent({ docId: 'doc-a', type: 'draft', text: '第一版', mediaId: 'M1', title: '标题' })
+  await new Promise(resolve => setTimeout(resolve, 5))
+  await appendLedgerEvent({ docId: 'doc-a', type: 'published', text: '第二版', publishId: 'P1', title: '标题2' })
+  await appendLedgerEvent({ docId: 'doc-b', type: 'draft', text: '别的文档' })
+  const list = await listLedgerEvents('doc-a')
+  assert.equal(list.length, 2)
+  assert.equal(list[0].type, 'published')
+  assert.equal(list[0].publishId, 'P1')
+  assert.equal(list[0].text, '第二版')
 })

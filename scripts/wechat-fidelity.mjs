@@ -9,8 +9,9 @@
  * Not part of CI: this writes to the real Official Account for a few seconds.
  */
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { parseArticle, composeDesign } from '../src/engine.mjs'
+import { THEMES } from '../src/themes.mjs'
 import { buildArticle, serializeNodes } from '../src/render.mjs'
 
 const BASE = 'https://api.weixin.qq.com'
@@ -18,12 +19,15 @@ const APPID = process.env.WX_APPID ?? ''
 const SECRET = process.env.WX_SECRET ?? ''
 const COVER_PATH = process.env.WX_COVER_PATH ?? ''
 const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)
-const THEMES = [
+const LEAN_THEMES = [
   ['column', 'essay'],
   ['ink', 'index'],
   ['pine', 'clean'],
   ['magazine', 'cover'],
 ]
+const SUITE = process.env.WX_FIDELITY_ALL === '1'
+  ? THEMES.map(theme => [theme.id, theme.variants[0].id])
+  : LEAN_THEMES
 
 if (APPID === '' || SECRET === '') {
   console.error('设置 WX_APPID / WX_SECRET 后再运行：npm run e2e:wechat')
@@ -113,7 +117,7 @@ const imageUrl = await uploadContentImage(token)
 const created = []
 const report = []
 try {
-  for (const [themeId, variantId] of THEMES) {
+  for (const [themeId, variantId] of SUITE) {
     const html = themeHtml(themeId, variantId, imageUrl)
     const title = `DSH 保真回归 ${stamp} ${themeId}`
     const createdDraft = check(await request(`${BASE}/cgi-bin/draft/add?access_token=${token}`, {
@@ -138,5 +142,7 @@ try {
   }
   try { await request(`${BASE}/cgi-bin/material/del_material?access_token=${token}`, { media_id: coverId }) } catch { /* best effort */ }
 }
-console.log(JSON.stringify({ ok: report.every(item => item.ok), report }, null, 2))
+const summary = { generatedAt: new Date().toISOString(), suite: process.env.WX_FIDELITY_ALL === '1' ? 'all' : 'sample', ok: report.every(item => item.ok), report }
+if (typeof process.env.WX_FIDELITY_OUT === 'string' && process.env.WX_FIDELITY_OUT !== '') writeFileSync(process.env.WX_FIDELITY_OUT, JSON.stringify(summary, null, 2))
+console.log(JSON.stringify(summary, null, 2))
 if (!report.every(item => item.ok)) process.exitCode = 1

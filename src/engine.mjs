@@ -605,6 +605,17 @@ export function replaceImageSource(text, lineIndex, src) {
   return lines.join('\n')
 }
 
+/** Stable short hash for a block's text, used for AI provenance and locks. */
+export function hashBlock(text) {
+  const value = String(text ?? '').replace(/\s+/g, ' ').trim()
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
+}
+
 /**
  * Replace the caption/alt text of one Markdown image line.
  * @param {string} text Markdown source.
