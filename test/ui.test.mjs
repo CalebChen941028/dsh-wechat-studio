@@ -40,6 +40,8 @@ async function mountPanel({ width = 1280, language = '', fetchImpl = null, seedD
     clearInterval,
     Blob,
     Response,
+    AbortController,
+    AbortSignal,
     URL,
     TextDecoder,
     TextEncoder,
@@ -587,6 +589,40 @@ test('分发镜的搜一搜场景渲染结果卡', async () => {
     search.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await new Promise(resolve => setTimeout(resolve, 120))
     assert.ok(container.querySelector('.ws-search-hit-title'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('AI 流式生成可以取消', async () => {
+  const fetchImpl = async (url, init) => {
+    const body = init === undefined ? {} : JSON.parse(init.body)
+    if (body.action === 'aiEditStream') {
+      return new Promise((resolve, reject) => {
+        const signal = init?.signal
+        const abort = () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+        if (signal?.aborted) abort()
+        else signal?.addEventListener?.('abort', abort)
+      })
+    }
+    const value = body.action === 'networkStatus' ? { mode: 'system', proxyUrl: '', configured: false } : { configured: false }
+    return { ok: true, status: 200, async json() { return { ok: true, value } } }
+  }
+  const { dom, window, container, root } = await mountPanel({ fetchImpl })
+  try {
+    const aiTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === 'AI')
+    aiTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    const suggestion = container.querySelector('.ws-chat-empty .ws-chip')
+    suggestion.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 180))
+    const cancel = [...container.querySelectorAll('button')].find(button => button.textContent.trim() === '取消')
+    assert.ok(cancel, 'cancel button appears while streaming')
+    cancel.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 300))
+    assert.equal([...container.querySelectorAll('button')].some(button => button.textContent.trim() === '取消'), false)
+    assert.ok(container.textContent.includes('已取消'))
   } finally {
     root.unmount()
     dom.window.close()
