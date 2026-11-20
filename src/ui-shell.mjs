@@ -140,7 +140,7 @@ function createDocument(seedText, design, meta) {
     id: docId(),
     text,
     design: composed,
-    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
+    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', coverLayout: 'left', draftMediaId: '', needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }
@@ -407,6 +407,7 @@ function StudioPanel(props) {
   const [hostStatus, setHostStatus] = React.useState({ phase: 'loading', configured: false, appIdPreview: null, message: '' })
   const [imageReady, setImageReady] = React.useState(false)
   const [imageVersion, setImageVersion] = React.useState(0)
+  const [snapshotVersion, setSnapshotVersion] = React.useState(0)
   const bumpImages = React.useCallback(() => setImageVersion(value => value + 1), [])
   React.useEffect(() => {
     let cancelled = false
@@ -522,7 +523,7 @@ function StudioPanel(props) {
   )
 
   const scrollEditorToBlock = React.useCallback((index, shouldFocus) => {
-    const block = parsed.blocks[index]
+    const block = parsed.blocks.filter(entry => entry.type !== 'title')[index]
     const element = textareaRef.current
     if (block === undefined || element === null) return
     const lines = doc.text.split('\n')
@@ -544,6 +545,22 @@ function StudioPanel(props) {
     })
   }, [parsed.blocks, doc.text])
 
+  const takeSnapshot = React.useCallback(async (reason = 'manual', announce = false) => {
+    const current = store.getDoc()
+    if (!current) return false
+    const clean = serializeDocs([current])[0]
+    const saved = await saveSnapshot({
+      docId: current.id,
+      text: clean.text,
+      design: clean.design,
+      meta: clean.meta,
+      reason,
+    })
+    if (saved) setSnapshotVersion(value => value + 1)
+    if (announce) toast(saved ? t('已保存快照') : t('快照保存失败'), saved ? 'success' : 'error')
+    return saved
+  }, [store, toast])
+
   const goToBlock = React.useCallback((index) => {
     setSelectedBlock(index)
     scrollEditorToBlock(index, true)
@@ -552,9 +569,10 @@ function StudioPanel(props) {
   const syncBlockFromCaret = React.useCallback((event) => {
     const element = event.currentTarget
     const line = element.value.slice(0, element.selectionStart).split('\n').length - 1
+    const blocks = parsed.blocks.filter(entry => entry.type !== 'title')
     let found = -1
-    for (let index = 0; index < parsed.blocks.length; index += 1) {
-      const block = parsed.blocks[index]
+    for (let index = 0; index < blocks.length; index += 1) {
+      const block = blocks[index]
       const first = block.lines?.[0] ?? -1
       const last = block.lines?.[1] ?? first
       if (first <= line && line <= last) { found = index; break }
@@ -748,9 +766,10 @@ function StudioPanel(props) {
       }),
       compact && !narrow && rightOpen ? h('div', { className: 'ws-scrim', onClick: () => setRightOpen(false) }) : null,
       h(DesignPanel, {
-        store, design, doc, analysis, features, hostStatus, setHostStatus, tab, setTab, toast, parsed, article,
+        store, design, doc, analysis, features, hostStatus, setHostStatus, tab, setTab, toast, parsed, article, selectedBlock,
         narrow, compact, showClose: narrow || compact, onClose: closeDesign,
         autoRefine, setAutoRefine, refining, onRefineNow: () => refineWithAi(true),
+        takeSnapshot, snapshotVersion,
       }),
     ),
     refining

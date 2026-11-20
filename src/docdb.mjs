@@ -8,6 +8,7 @@
 
 const DOC_DB_NAME = 'dsh-wechat-studio-docs'
 const DOC_STORE_NAME = 'state'
+const DOC_SNAPSHOT_STORE = 'snapshots'
 const DOC_ROW_ID = 'docs'
 
 let docDbPromise
@@ -26,10 +27,11 @@ function openDocDb() {
   docDbPromise = new Promise((resolve) => {
     if (!hasDocIndexedDb()) { resolve(null); return }
     let request
-    try { request = indexedDB.open(DOC_DB_NAME, 1) } catch { resolve(null); return }
+    try { request = indexedDB.open(DOC_DB_NAME, 2) } catch { resolve(null); return }
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(DOC_STORE_NAME)) db.createObjectStore(DOC_STORE_NAME, { keyPath: 'id' })
+      if (!db.objectStoreNames.contains(DOC_SNAPSHOT_STORE)) db.createObjectStore(DOC_SNAPSHOT_STORE, { keyPath: 'id' })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => resolve(null)
@@ -38,13 +40,13 @@ function openDocDb() {
   return docDbPromise
 }
 
-function withDocStore(mode, run) {
+function withDocStore(mode, run, storeName = DOC_STORE_NAME) {
   return openDocDb().then(db => {
     if (db === null) return null
     return new Promise((resolve) => {
       try {
-        const tx = db.transaction(DOC_STORE_NAME, mode)
-        const request = run(tx.objectStore(DOC_STORE_NAME))
+        const tx = db.transaction(storeName, mode)
+        const request = run(tx.objectStore(storeName))
         let result = null
         if (request !== undefined && request !== null) {
           request.onsuccess = () => { result = request.result }
@@ -81,4 +83,51 @@ export async function saveDocsToDb(items) {
 /** Remove the stored draft array (not used by normal flows). */
 export async function clearDocsDb() {
   await withDocStore('readwrite', store => store.delete(DOC_ROW_ID))
+}
+
+
+/** Save one version snapshot for a document; keeps the newest 20 per doc. */
+export async function saveSnapshot(snapshot) {
+  if (snapshot === null || typeof snapshot !== 'object' || typeof snapshot.docId !== 'string') return false
+  const entry = {
+    id: `snap-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    docId: snapshot.docId,
+    createdAt: Date.now(),
+    reason: typeof snapshot.reason === 'string' ? snapshot.reason : 'manual',
+    text: typeof snapshot.text === 'string' ? snapshot.text : '',
+    design: snapshot.design ?? {},
+    meta: snapshot.meta ?? {},
+  }
+  const saved = await withDocStore('readwrite', store => store.put(entry), DOC_SNAPSHOT_STORE)
+  if (saved === null || saved === undefined) return false
+  const all = await withDocStore('readonly', store => store.getAll(), DOC_SNAPSHOT_STORE)
+  if (Array.isArray(all)) {
+    const mine = all.filter(item => item.docId === entry.docId).sort((a, b) => b.createdAt - a.createdAt)
+    const stale = mine.slice(20)
+    if (stale.length > 0) {
+      await withDocStore('readwrite', store => {
+        for (const item of stale) store.delete(item.id)
+      }, DOC_SNAPSHOT_STORE)
+    }
+  }
+  return true
+}
+
+/** List recent snapshots for one document, newest first. */
+export async function listSnapshots(docId, limit = 8) {
+  const all = await withDocStore('readonly', store => store.getAll(), DOC_SNAPSHOT_STORE)
+  if (!Array.isArray(all)) return []
+  return all
+    .filter(item => item.docId === docId)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, limit)
+}
+
+/** Delete all snapshots for one document. */
+export async function clearSnapshots(docId) {
+  const all = await withDocStore('readonly', store => store.getAll(), DOC_SNAPSHOT_STORE)
+  if (!Array.isArray(all)) return
+  await withDocStore('readwrite', store => {
+    for (const item of all) if (item.docId === docId) store.delete(item.id)
+  }, DOC_SNAPSHOT_STORE)
 }

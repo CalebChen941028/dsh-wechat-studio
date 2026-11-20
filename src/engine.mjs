@@ -589,6 +589,23 @@ export function tidyMarkdown(text) {
 }
 
 /**
+ * Replace the source URL of one Markdown image line.
+ * @param {string} text Markdown source.
+ * @param {number} lineIndex zero-based line.
+ * @param {string} src new image source.
+ * @returns {string} updated source; unchanged when the line is not an image.
+ */
+export function replaceImageSource(text, lineIndex, src) {
+  const lines = String(text ?? '').split('\n')
+  const line = lines[lineIndex]
+  if (typeof line !== 'string') return text
+  const match = /^(\s*!\[[^\]]*\]\()([^)]*)(\)\s*)$/.exec(line)
+  if (!match) return text
+  lines[lineIndex] = `${match[1]}${String(src ?? '').replace(/[)\n\r]/g, '')}${match[3]}`
+  return lines.join('\n')
+}
+
+/**
  * Replace the caption/alt text of one Markdown image line.
  * @param {string} text Markdown source.
  * @param {number} lineIndex zero-based line to edit.

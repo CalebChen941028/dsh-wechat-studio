@@ -318,3 +318,37 @@ test('图片图注可以独立编辑并写回 Markdown', async () => {
     dom.window.close()
   }
 })
+
+test('⌘B 会给选中文字加粗', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const editor = container.querySelector('.ws-editor')
+    editor.focus()
+    editor.setSelectionRange(0, 6)
+    editor.dispatchEvent(new window.KeyboardEvent('keydown', {
+      key: 'b', code: 'KeyB', metaKey: true, bubbles: true, cancelable: true,
+    }))
+    await new Promise(resolve => setTimeout(resolve, 150))
+    assert.match(editor.value, /^\*\*# 我为什么\*\*/)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('主题可以收藏并筛选', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const star = container.querySelector('.ws-theme-fav')
+    assert.ok(star)
+    star.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 100))
+    const favoriteFilter = [...container.querySelectorAll('.ws-theme-filter .ws-chip')].find(button => button.textContent.trim() === '收藏')
+    favoriteFilter.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.equal(container.querySelectorAll('.ws-theme').length, 1)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})

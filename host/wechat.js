@@ -353,6 +353,30 @@ export function createWechatClient({ fetchImpl = fetch, timeoutMs = DEFAULT_TIME
     },
 
     /**
+     * 覆盖更新一篇已有草稿里的单篇文章。
+     * @param {{ accessToken: string, mediaId: string, index?: number, article: object }} input 草稿 id、文章下标与内容。
+     * @returns {Promise<{ mediaId: string }>} 草稿 media_id。
+     */
+    async updateDraft({ accessToken, mediaId, index = 0, article } = {}) {
+      const endpoint = 'cgi-bin/draft/update'
+      requireToken(accessToken, endpoint)
+      if (typeof mediaId !== 'string' || mediaId === '') {
+        throw new WechatApiError({ errcode: null, errmsg: '缺少草稿 media_id', endpoint, kind: 'response' })
+      }
+      if (article === undefined || article === null || typeof article !== 'object') {
+        throw new WechatApiError({ errcode: null, errmsg: '缺少文章内容', endpoint, kind: 'response' })
+      }
+      await call({
+        url: withAccessToken(`${WECHAT_API_BASE}/${endpoint}`, accessToken),
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ media_id: mediaId, index: Math.max(0, Math.trunc(Number(index) || 0)), articles: article }),
+        endpoint,
+      })
+      return { mediaId }
+    },
+
+    /**
      * 读取公众号草稿箱。
      * @param {{ accessToken: string, offset?: number, count?: number }} input 分页参数。
      * @returns {Promise<{ totalCount: number, items: Array<object> }>} 草稿摘要。

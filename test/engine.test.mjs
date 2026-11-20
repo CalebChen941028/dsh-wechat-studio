@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import {
   parseArticle, parseInline, plainText, detectTopic, measure, composeDesign,
   autoCompose, rankThemes, nextVariant, mixHex, readableOn, splitMarkdownChunks,
-  auditTypography, splitLongParagraphs, normalizeCjkPunctuation, tidyMarkdown, diffTextLines, replaceImageCaption,
+  auditTypography, splitLongParagraphs, normalizeCjkPunctuation, tidyMarkdown, diffTextLines, replaceImageCaption, replaceImageSource,
 } from '../src/engine.mjs'
 import { THEMES } from '../src/themes.mjs'
 import {
@@ -391,4 +391,11 @@ test('replaceImageCaption 只改图片说明，不动地址', () => {
   const next = replaceImageCaption(source, 2, '新的图注')
   assert.match(next, /!\[新的图注\]\(https:\/\/example\.com\/a\.png\)/)
   assert.equal(replaceImageCaption(next, 0, 'x'), next)
+})
+
+
+test('replaceImageSource 只换图片地址并保留说明', () => {
+  const source = '![旧图注](https://example.com/a.png)'
+  const next = replaceImageSource(source, 0, 'https://example.com/b.png')
+  assert.equal(next, '![旧图注](https://example.com/b.png)')
 })

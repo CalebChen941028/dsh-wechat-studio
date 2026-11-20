@@ -176,6 +176,10 @@ function DocRail(props) {
     return () => document.removeEventListener('mousedown', onPointerDown, true)
   }, [docMenu])
   const [dragging, setDragging] = React.useState(false)
+  const [formats, setFormats] = React.useState({ heading: 0, list: '', quote: false, bold: false, highlight: false })
+  const [searchOpen, setSearchOpen] = React.useState(false)
+  const [findText, setFindText] = React.useState('')
+  const [replaceText, setReplaceText] = React.useState('')
   const uploadRef = React.useRef(null)
   const imageRef = React.useRef(null)
 
@@ -242,20 +246,112 @@ function DocRail(props) {
     })
   }
 
+  const transformLines = (transform) => {
+    const element = textareaRef.current
+    if (!element) return
+    const value = doc.text
+    const startLine = value.lastIndexOf('\n', Math.max(0, element.selectionStart - 1)) + 1
+    let endLine = value.indexOf('\n', element.selectionEnd)
+    if (endLine === -1) endLine = value.length
+    const before = value.slice(0, startLine)
+    const block = value.slice(startLine, endLine)
+    const after = value.slice(endLine)
+    const lines = block.split('\n').map(transform)
+    const next = before + lines.join('\n') + after
+    store.updateDoc(current => ({ ...current, text: next }), { coalesce: 'insert' })
+    requestAnimationFrame(() => {
+      element.focus()
+      element.selectionStart = startLine
+      element.selectionEnd = startLine + lines.join('\n').length
+    })
+  }
+
+  const toggleHeading = (level) => {
+    transformLines((line) => {
+      const plain = line.replace(/^#{1,6}\s+/, '')
+      const already = new RegExp(`^${'#'.repeat(level)}\s`).test(line)
+      return already ? plain : `${'#'.repeat(level)} ${plain}`
+    })
+  }
+
+  const toggleList = (ordered) => {
+    transformLines((line) => {
+      const plain = line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '')
+      const alreadyOrdered = /^\s*\d+[.)]\s/.test(line)
+      const alreadyBullet = /^\s*[-*+]\s/.test(line)
+      if (ordered && alreadyOrdered) return plain
+      if (!ordered && alreadyBullet) return plain
+      return `${ordered ? '1.' : '-'} ${plain}`
+    })
+  }
+
+  const handleEditorSelect = (event) => {
+    if (typeof onEditorCaret === 'function') onEditorCaret(event)
+    const element = event.currentTarget
+    const value = element.value
+    const start = element.selectionStart
+    const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+    let lineEnd = value.indexOf('\n', start)
+    if (lineEnd === -1) lineEnd = value.length
+    const line = value.slice(lineStart, lineEnd)
+    const heading = (line.match(/^(#{1,6})\s/) ?? [])[1]?.length ?? 0
+    const list = /^\s*\d+[.)]\s/.test(line) ? 'ol' : /^\s*[-*+]\s/.test(line) ? 'ul' : ''
+    const quote = /^\s*>/.test(line)
+    const before = value.slice(0, start)
+    const after = value.slice(element.selectionEnd)
+    const bold = (before.match(/\*\*/g) ?? []).length % 2 === 1 && after.includes('**')
+    const highlight = (before.match(/==/g) ?? []).length % 2 === 1 && after.includes('==')
+    setFormats({ heading, list, quote, bold, highlight })
+  }
+
+  const findNext = () => {
+    if (findText === '') return
+    const element = textareaRef.current
+    if (!element) return
+    let index = doc.text.indexOf(findText, element.selectionEnd)
+    if (index === -1) index = doc.text.indexOf(findText)
+    if (index === -1) { toast(t('没有找到匹配内容'), 'error'); return }
+    element.focus()
+    element.setSelectionRange(index, index + findText.length)
+    element.scrollTop = Math.max(0, doc.text.slice(0, index).split('\n').length * 20 - element.clientHeight / 3)
+  }
+  const replaceOne = () => {
+    if (findText === '') return
+    const element = textareaRef.current
+    if (element && doc.text.slice(element.selectionStart, element.selectionEnd) === findText) {
+      const next = doc.text.slice(0, element.selectionStart) + replaceText + doc.text.slice(element.selectionEnd)
+      store.updateDoc(current => ({ ...current, text: next }), { coalesce: 'replace' })
+      requestAnimationFrame(() => {
+        const at = element.selectionStart
+        element.setSelectionRange(at, at + replaceText.length)
+      })
+      return
+    }
+    findNext()
+  }
+  const replaceAll = () => {
+    if (findText === '') return
+    const count = doc.text.split(findText).length - 1
+    if (count === 0) { toast(t('没有找到匹配内容'), 'error'); return }
+    store.updateDoc(current => ({ ...current, text: current.text.split(findText).join(replaceText) }), { coalesce: 'replace' })
+    toast(t('已替换 {count} 处', { count }))
+  }
+
   const words = features.chars
   const outline = parsed.blocks
+    .filter(block => block.type !== 'title')
     .map((block, index) => ({ block, index }))
-    .filter(entry => entry.block.type === 'title' || entry.block.type === 'heading')
+    .filter(entry => entry.block.type === 'heading')
   const toolbar = [
-    { label: 'H2', title: t('小节标题'), run: () => insertBlock(t('## 小节标题')) },
-    { label: 'H3', title: t('小标题'), run: () => insertBlock(t('### 小标题')) },
-    { label: '“', title: t('引用'), run: () => insertBlock(t('> 写一句值得被记住的话')) },
-    { label: '•', title: t('无序列表'), run: () => insertBlock('- 第一点\n- 第二点\n- 第三点') },
-    { label: '1.', title: t('有序列表'), run: () => insertBlock('1. 第一步\n2. 第二步\n3. 第三步') },
+    { label: 'H2', title: `${t('小节标题')} (⌘2)`, run: () => toggleHeading(2), format: 'h2' },
+    { label: 'H3', title: `${t('小标题')} (⌘3)`, run: () => toggleHeading(3), format: 'h3' },
+    { label: '“', title: `${t('引用')} (⌘⇧.)`, run: () => insertBlock(t('> 写一句值得被记住的话')), format: 'quote' },
+    { label: '•', title: `${t('无序列表')} (⌘⇧7)`, run: () => toggleList(false), format: 'ul' },
+    { label: '1.', title: `${t('有序列表')} (⌘⇧8)`, run: () => toggleList(true), format: 'ol' },
     { label: '—', title: t('分割线'), run: () => insertBlock('---') },
     { label: t('图'), title: t('插入本地图片'), run: () => imageRef.current?.click() },
-    { label: 'B', title: t('加粗'), run: () => insert('**', '**', t('加粗文字')) },
-    { label: t('高'), title: t('高亮'), run: () => insert('==', '==', t('高亮文字')) },
+    { label: 'B', title: `${t('加粗')} (⌘B)`, run: () => insert('**', '**', t('加粗文字')), format: 'bold' },
+    { label: t('高'), title: `${t('高亮')} (⌘⇧H)`, run: () => insert('==', '==', t('高亮文字')), format: 'hl' },
     { label: t('码'), title: t('行内代码'), run: () => insert('`', '`', 'code') },
   ]
 
@@ -294,6 +390,7 @@ function DocRail(props) {
           : null,
       ),
       h('div', { className: 'ws-left-actions' },
+        h(IconButton, { icon: 'search', title: t('查找与替换'), onClick: () => setSearchOpen(value => !value) }),
         h(IconButton, { icon: 'chat', title: t('AI 对话修改'), onClick: onOpenAi }),
         h(IconButton, { icon: 'upload', title: t('上传文档（.md / .txt / .docx / .html）'), onClick: () => uploadRef.current?.click() }),
         h(IconButton, { icon: 'plus', title: t('新建草稿'), onClick: () => { store.addDoc(''); setSelectedBlock(null); toast(t('已新建草稿')) } }),
@@ -334,6 +431,16 @@ function DocRail(props) {
       value: doc.meta.title,
       onChange: event => store.updateMeta({ title: event.target.value }),
     }),
+    searchOpen
+      ? h('div', { className: 'ws-searchbar' },
+        h('input', { className: 'ws-input', value: findText, placeholder: t('查找'), onChange: event => setFindText(event.target.value), onKeyDown: event => { if (event.key === 'Enter') { event.preventDefault(); findNext() } } }),
+        h('input', { className: 'ws-input', value: replaceText, placeholder: t('替换为'), onChange: event => setReplaceText(event.target.value) }),
+        h('button', { type: 'button', className: 'ws-link', onClick: findNext }, t('下一个')),
+        h('button', { type: 'button', className: 'ws-link', onClick: replaceOne }, t('替换')),
+        h('button', { type: 'button', className: 'ws-link', onClick: replaceAll }, t('全部替换')),
+        h('button', { type: 'button', className: 'ws-link', onClick: () => setSearchOpen(false) }, t('关闭')),
+      )
+      : null,
     outline.length > 1
       ? h('div', { className: 'ws-outline' },
         h('span', { className: 'ws-outline-label' }, t('大纲')),
@@ -350,13 +457,23 @@ function DocRail(props) {
       )
       : null,
     h('div', { className: 'ws-toolbar' },
-      toolbar.map(item => h('button', {
-        key: item.label,
-        type: 'button',
-        className: 'ws-tool',
-        title: item.title,
-        onClick: item.run,
-      }, item.label)),
+      toolbar.map(item => {
+        const active = item.format === 'h2' ? formats.heading === 2
+          : item.format === 'h3' ? formats.heading === 3
+            : item.format === 'quote' ? formats.quote
+              : item.format === 'ul' ? formats.list === 'ul'
+                : item.format === 'ol' ? formats.list === 'ol'
+                  : item.format === 'bold' ? formats.bold
+                    : item.format === 'hl' ? formats.highlight
+                      : false
+        return h('button', {
+          key: item.label,
+          type: 'button',
+          className: 'ws-tool' + (active ? ' on' : ''),
+          title: item.title,
+          onClick: item.run,
+        }, item.label)
+      }),
     ),
     h('textarea', {
       ref: textareaRef,
@@ -364,8 +481,8 @@ function DocRail(props) {
       value: doc.text,
       spellCheck: false,
       placeholder: t('把公众号文案粘到这里。支持 Markdown：## 小节、> 引用、- 列表、![图片](url)、--- 分割线、**加粗**、==高亮==。'),
-      onSelect: onEditorCaret,
-      onClick: onEditorCaret,
+      onSelect: handleEditorSelect,
+      onClick: handleEditorSelect,
       onChange: event => store.updateDoc(current => ({
         ...current,
         text: event.target.value,
@@ -407,7 +524,21 @@ function DocRail(props) {
       },
       onKeyDown: event => {
         if (!(event.metaKey || event.ctrlKey)) return
-        if (event.key === 'z' && !event.shiftKey) { event.preventDefault(); store.undo() } else if ((event.key === 'z' && event.shiftKey) || event.key === 'y') { event.preventDefault(); store.redo() }
+        const key = event.key.toLowerCase()
+        if (key === 'z' && !event.shiftKey) { event.preventDefault(); store.undo(); return }
+        if ((key === 'z' && event.shiftKey) || key === 'y') { event.preventDefault(); store.redo(); return }
+        if (event.code === 'KeyF' && !event.shiftKey) { event.preventDefault(); setSearchOpen(true); return }
+        if (event.code === 'KeyB' && !event.shiftKey) { event.preventDefault(); insert('**', '**', t('加粗文字')); return }
+        if (event.code === 'KeyH' && event.shiftKey) { event.preventDefault(); insert('==', '==', t('高亮文字')); return }
+        if (event.code === 'KeyK') { event.preventDefault(); insert('[', '](https://)', t('链接文字')); return }
+        if (event.code === 'Digit1' || event.code === 'Digit2' || event.code === 'Digit3') {
+          if (event.shiftKey) return
+          event.preventDefault()
+          toggleHeading(Number(event.code.slice(-1)))
+          return
+        }
+        if (event.shiftKey && event.code === 'Digit7') { event.preventDefault(); toggleList(false); return }
+        if (event.shiftKey && event.code === 'Digit8') { event.preventDefault(); toggleList(true); return }
       },
     }),
     h('div', { className: 'ws-left-foot' },
@@ -547,6 +678,9 @@ function PreviewStage(props) {
       element.scrollIntoView({ block: 'center', behavior: 'smooth' })
     }
   }, [selectedBlock])
+  const [dragIndex, setDragIndex] = React.useState(null)
+  const [cropBlock, setCropBlock] = React.useState(null)
+  const [cropBusy, setCropBusy] = React.useState(false)
   const [captionBlock, setCaptionBlock] = React.useState(null)
   const [captionDraft, setCaptionDraft] = React.useState('')
   const startCaption = (blockIndex) => {
@@ -565,6 +699,40 @@ function PreviewStage(props) {
     toast(t('图注已更新'))
   }
   const cancelCaption = () => { setCaptionBlock(null); setCaptionDraft('') }
+  const cropImage = async (blockIndex, ratio) => {
+    const block = sourceBlocks[blockIndex]
+    if (!block || block.type !== 'image') return
+    setCropBusy(true)
+    try {
+      const source = expandImageRefs(block.src)
+      if (!source.startsWith('data:')) throw new Error(t('远程图片暂时只能换图，不能直接裁剪'))
+      const image = await loadImage(source)
+      const targetRatio = Number(ratio)
+      let sourceWidth = image.width
+      let sourceHeight = image.height
+      if (sourceWidth / sourceHeight > targetRatio) sourceWidth = Math.round(sourceHeight * targetRatio)
+      else sourceHeight = Math.round(sourceWidth / targetRatio)
+      const sourceX = Math.round((image.width - sourceWidth) / 2)
+      const sourceY = Math.round((image.height - sourceHeight) / 2)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.min(1200, sourceWidth)
+      canvas.height = Math.round(canvas.width / targetRatio)
+      const context = canvas.getContext('2d')
+      if (context === null) throw new Error(t('当前环境无法处理图片'))
+      context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height)
+      const compressed = await compressImage(canvas.toDataURL('image/jpeg', 0.9), 1200)
+      const ref = await materializeImage(compressed.dataUrl, { kind: 'content' })
+      store.updateDoc(current => ({ ...current, text: replaceImageSource(current.text, block.lines[0], ref) }))
+      if (typeof onImagesChanged === 'function') onImagesChanged()
+      setCropBlock(null)
+      toast(t('图片已裁剪'))
+    } catch (error) {
+      toast(error.message || t('图片处理失败'), 'error')
+    } finally {
+      setCropBusy(false)
+    }
+  }
+
   const replaceImage = (blockIndex) => {
     pendingReplaceRef.current = blockIndex
     previewImageRef.current?.click()
@@ -636,6 +804,34 @@ function PreviewStage(props) {
     setCaptionBlock(null)
   }
 
+  const moveBlockTo = (from, to) => {
+    if (from === to || from < 0 || to < 0) return
+    const groups = sourceBlocks.map(block => ({ start: block.lines[0], end: block.lines[1] }))
+    const lines = doc.text.split('\n')
+    const source = groups[from]
+    const target = groups[to]
+    if (!source || !target) return
+    const blockLines = lines.slice(source.start, source.end + 1)
+    const remaining = [...lines.slice(0, source.start), ...lines.slice(source.end + 1)]
+    const shift = to > from ? source.end - source.start + 1 : 0
+    const insertAt = target.start - shift
+    const next = [...remaining.slice(0, insertAt), ...blockLines, ...remaining.slice(insertAt)].join('\n')
+    store.updateDoc(current => ({ ...current, text: next }))
+    setSelectedBlock(to > from ? to : to)
+    setDragIndex(null)
+  }
+
+  const duplicateBlock = (index) => {
+    const block = sourceBlocks[index]
+    if (!block) return
+    const lines = doc.text.split('\n')
+    const copy = lines.slice(block.lines[0], block.lines[1] + 1)
+    const next = [...lines.slice(0, block.lines[1] + 1), ...copy, ...lines.slice(block.lines[1] + 1)].join('\n')
+    store.updateDoc(current => ({ ...current, text: next }))
+    setSelectedBlock(index + 1)
+    toast(t('已复制这一段'))
+  }
+
   const removeBlock = (index) => {
     const groups = sourceBlocks.map(block => ({ start: block.lines[0], end: block.lines[1] }))
     const lines = doc.text.split('\n')
@@ -672,6 +868,7 @@ function PreviewStage(props) {
         h(ArticleBody, {
           root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel,
           captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption,
+          dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage,
         }),
       ),
       h('input', {
@@ -705,7 +902,7 @@ function PreviewStage(props) {
 }
 
 function ArticleBody(props) {
-  const { root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption } = props
+  const { root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption, dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage } = props
   const [hovered, setHovered] = React.useState(null)
   const children = root.children
 
@@ -720,14 +917,32 @@ function ArticleBody(props) {
     const isSelected = selectedBlock === blockIndex
     return h('div', {
       key: index,
-      className: 'ws-block' + (isSelected ? ' selected' : '') + (hovered === blockIndex ? ' hovered' : ''),
+      className: 'ws-block' + (isSelected ? ' selected' : '') + (hovered === blockIndex ? ' hovered' : '') + (dragIndex === blockIndex ? ' dragging' : ''),
       'data-block': blockIndex,
+      draggable: true,
+      onDragStart: () => setDragIndex(blockIndex),
+      onDragEnd: () => setDragIndex(null),
+      onDragOver: event => event.preventDefault(),
+      onDrop: event => { event.preventDefault(); moveBlockTo(dragIndex, blockIndex) },
       onMouseEnter: () => setHovered(blockIndex),
       onMouseLeave: () => setHovered(value => (value === blockIndex ? null : value)),
       onClick: () => setSelectedBlock(isSelected ? null : blockIndex),
     },
     isSelected ? h('div', { className: 'ws-block-tag' }, blockLabel(block)) : null,
     content,
+    cropBlock === blockIndex && block.type === 'image'
+      ? h('div', { className: 'ws-caption-editor', onClick: event => event.stopPropagation() },
+        h('span', { className: 'ws-hint' }, t('裁剪比例')),
+        [['1', '1:1'], ['1.3333', '4:3'], ['1.7778', '16:9']].map(([ratio, label]) => h('button', {
+          key: ratio,
+          type: 'button',
+          className: 'ws-link',
+          disabled: cropBusy,
+          onClick: () => cropImage(blockIndex, ratio),
+        }, label)),
+        h('button', { type: 'button', className: 'ws-link', onClick: () => setCropBlock(null) }, t('取消')),
+      )
+      : null,
     captionBlock === blockIndex && block.type === 'image'
       ? h('div', { className: 'ws-caption-editor', onClick: event => event.stopPropagation() },
         h('input', {
@@ -747,8 +962,10 @@ function ArticleBody(props) {
       )
       : null,
     h('div', { className: 'ws-block-tools' },
+      block.type === 'image' ? h('button', { type: 'button', title: t('裁剪图片'), onClick: event => { event.stopPropagation(); setCropBlock(blockIndex) } }, h(Icon, { name: 'image', size: 12 })) : null,
       block.type === 'image' ? h('button', { type: 'button', title: t('编辑图注'), onClick: event => { event.stopPropagation(); startCaption(blockIndex) } }, h(Icon, { name: 'pen', size: 12 })) : null,
       block.type === 'image' ? h('button', { type: 'button', title: t('替换图片'), onClick: event => { event.stopPropagation(); replaceImage(blockIndex) } }, h(Icon, { name: 'image', size: 12 })) : null,
+      h('button', { type: 'button', title: t('复制这一段'), onClick: event => { event.stopPropagation(); duplicateBlock(blockIndex) } }, h(Icon, { name: 'copy', size: 12 })),
       h('button', { type: 'button', title: t('上移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, -1) } }, h(Icon, { name: 'arrowUp', size: 12 })),
       h('button', { type: 'button', title: t('下移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, 1) } }, h(Icon, { name: 'arrowDown', size: 12 })),
       h('button', { type: 'button', title: t('删除这一段'), onClick: event => { event.stopPropagation(); removeBlock(blockIndex) } }, h(Icon, { name: 'trash', size: 12 })),

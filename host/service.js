@@ -759,6 +759,24 @@ export function createStudioService({ ctx, fetchImpl = fetch, importUndici } = {
       })
     },
 
+    /** 覆盖更新一篇已有草稿；多图文需要另存为新草稿。 */
+    async updateDraft(payload = {}) {
+      const account = await readAccount({ required: true })
+      const mediaId = typeof payload?.mediaId === 'string' ? payload.mediaId.trim() : ''
+      if (mediaId === '') throw new StudioError('media-required', '缺少草稿 mediaId，无法更新')
+      const rawArticles = Array.isArray(payload?.articles) ? payload.articles : [payload]
+      if (rawArticles.length !== 1) {
+        throw new StudioError('update-single-only', '覆盖更新只支持单篇文章；多图文请另存为新草稿')
+      }
+      const warnings = []
+      const normalized = normalizeDraftArticle(rawArticles[0], 0, 1)
+      warnings.push(...normalized.warnings)
+      return wechatCall(async () => {
+        await withToken(account, (token) => client.updateDraft({ accessToken: token, mediaId, article: normalized.article }))
+        return { mediaId, warnings, count: 1, updated: true }
+      })
+    },
+
     /** 读取公众号草稿箱，用于在面板里查看和清理。 */
     async listDrafts(payload = {}) {
       const account = await readAccount({ required: true })

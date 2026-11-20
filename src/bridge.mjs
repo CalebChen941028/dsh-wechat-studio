@@ -65,7 +65,8 @@ export async function callHost(action, payload = {}, options = {}) {
  */
 export async function callHostStream(action, payload = {}, options = {}) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  const controller = typeof AbortController === 'function' ? new AbortController() : undefined
+  const externalSignal = options.signal !== undefined && options.signal !== null && typeof options.signal.aborted === 'boolean' ? options.signal : undefined
+  const controller = externalSignal === undefined && typeof AbortController === 'function' ? new AbortController() : undefined
   const timer = controller === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs)
   let response
   try {
@@ -73,10 +74,11 @@ export async function callHostStream(action, payload = {}, options = {}) {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-wechat-studio': '1', accept: 'text/event-stream' },
       body: JSON.stringify({ action, ...payload }),
-      signal: controller?.signal,
+      signal: externalSignal ?? controller?.signal,
     })
   } catch (error) {
     if (timer !== undefined) clearTimeout(timer)
+    if (externalSignal?.aborted === true) throw bridgeError('cancelled', '已取消')
     if (error && error.name === 'AbortError') throw bridgeError('host-timeout', '模型响应超时，重试或把文章拆短一点')
     throw bridgeError('host-unreachable', '连不上公众号排版服务，确认插件已启用后刷新页面再试')
   }
@@ -123,6 +125,7 @@ export async function callHostStream(action, payload = {}, options = {}) {
       }
     }
   } catch (error) {
+    if (externalSignal?.aborted === true) throw bridgeError('cancelled', '已取消')
     if (error && error.name === 'AbortError') throw bridgeError('host-timeout', '模型响应超时，重试或把文章拆短一点')
     throw error
   } finally {

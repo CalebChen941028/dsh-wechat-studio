@@ -486,6 +486,68 @@ const UI_EN = {
 
   '浏览器存储写入失败，这轮修改只保存在内存里，刷新会丢失。请导出草稿 JSON，或删掉带大图的草稿。': 'Browser storage write failed; this round of edits stays in memory and will be lost on reload. Export the draft JSON or delete drafts with large images.',
 
+  '更新当前草稿': 'Update draft',
+  '另存新草稿': 'Save as new',
+  '更新公众号草稿': 'Update WeChat draft',
+  '已更新公众号草稿': 'WeChat draft updated',
+  '当前草稿还没有关联公众号草稿，请先另存为新草稿': 'This draft is not linked to a WeChat draft yet; save it as new first',
+  '覆盖更新只支持单篇文章；多图文请另存为新草稿': 'Updating in place supports one article; save bundles as new',
+  '这篇已关联公众号草稿；更新会覆盖后台那一篇。': 'This article is linked to a WeChat draft; updating overwrites it.',
+
+  '当前选中': 'Selected',
+  '只改选中段': 'Selected block only',
+  '改整篇': 'Whole article',
+  '已改写选中段落': 'Selected block rewritten',
+  'AI 没有返回选中段落的改写结果': 'The AI returned no rewrite for the selected block',
+
+  '链接文字': 'Link text',
+
+  '历史版本': 'Version history',
+  '保存快照': 'Save snapshot',
+  '保存中…': 'Saving…',
+  '暂无历史版本；AI 修改前和发布前会自动保存快照。': 'No snapshots yet; one is saved before AI edits and publishing.',
+  'AI 修改前': 'Before AI edit',
+  '发布前': 'Before publishing',
+  '恢复前': 'Before restore',
+  '手动': 'Manual',
+  '恢复': 'Restore',
+  '已保存快照': 'Snapshot saved',
+  '快照保存失败': 'Could not save snapshot',
+  '已恢复快照': 'Snapshot restored',
+  '快照存在浏览器 IndexedDB，最多保留最近 20 个版本。': 'Snapshots live in browser IndexedDB; the newest 20 per draft are kept.',
+  '字': 'chars',
+
+  '全部': 'All',
+  '收藏': 'Favorites',
+  '最近': 'Recent',
+  '收藏主题': 'Favorite theme',
+  '取消收藏': 'Remove favorite',
+  '还没有收藏主题；点主题卡上的星标即可收藏。': 'No favorite themes yet; tap the star on a theme card.',
+
+  '底部': 'Bottom',
+  '极简': 'Minimal',
+
+  '已取消': 'Cancelled',
+
+  '复制这一段': 'Duplicate block',
+  '已复制这一段': 'Block duplicated',
+
+  '查找与替换': 'Find and replace',
+  '查找': 'Find',
+  '替换为': 'Replace with',
+  '下一个': 'Next',
+  '替换': 'Replace',
+  '全部替换': 'Replace all',
+  '关闭': 'Close',
+  '没有找到匹配内容': 'No match found',
+  '已替换 {count} 处': 'Replaced {count} occurrence(s)',
+
+  '裁剪图片': 'Crop image',
+  '裁剪比例': 'Crop ratio',
+  '图片已裁剪': 'Image cropped',
+  '远程图片暂时只能换图，不能直接裁剪': 'Remote images can only be replaced, not cropped here',
+  '当前环境无法处理图片': 'This environment cannot process images',
+
 }
 
 

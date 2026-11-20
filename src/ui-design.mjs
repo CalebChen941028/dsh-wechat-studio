@@ -1,5 +1,5 @@
 function DesignPanel(props) {
-  const { store, design, doc, analysis, features, hostStatus, setHostStatus, tab, setTab, toast, parsed, article, showClose, onClose, autoRefine, setAutoRefine, refining, onRefineNow } = props
+  const { store, design, doc, analysis, features, hostStatus, setHostStatus, tab, setTab, toast, parsed, article, selectedBlock, showClose, onClose, autoRefine, setAutoRefine, refining, onRefineNow, takeSnapshot, snapshotVersion } = props
   return h('aside', { className: 'ws-right' },
     h('div', { className: 'ws-tabs' },
       TABS.map(entry => h('button', {
@@ -12,7 +12,7 @@ function DesignPanel(props) {
     ),
     h('div', { className: 'ws-panel' },
       h('div', { className: 'ws-pane' + (tab === 'ai' ? '' : ' ws-pane-hidden') },
-        h(AiSection, { store, design, doc, parsed, hostStatus, toast })),
+        h(AiSection, { store, design, doc, parsed, hostStatus, toast, selectedBlock, takeSnapshot })),
       h('div', { className: 'ws-pane' + (tab === 'theme' ? '' : ' ws-pane-hidden') },
         h(ThemeSection, { store, design, analysis, doc, toast, autoRefine, setAutoRefine, refining, onRefineNow })),
       h('div', { className: 'ws-pane' + (tab === 'type' ? '' : ' ws-pane-hidden') },
@@ -21,14 +21,14 @@ function DesignPanel(props) {
         h(DecorSection, { store, design, toast })),
       h('div', { className: 'ws-pane' + (tab === 'publish' ? '' : ' ws-pane-hidden') },
         h(PublishSection, {
-          store, design, doc, parsed, article, features, hostStatus, setHostStatus, toast,
+          store, design, doc, parsed, article, features, hostStatus, setHostStatus, toast, takeSnapshot, snapshotVersion,
         })),
     ),
   )
 }
 
 function AiSection(props) {
-  const { store, design, doc, parsed, hostStatus, toast } = props
+  const { store, design, doc, parsed, hostStatus, toast, selectedBlock, takeSnapshot } = props
   const [messages, setMessages] = React.useState([])
   const [input, setInput] = React.useState('')
   const [busy, setBusy] = React.useState(false)
@@ -36,6 +36,8 @@ function AiSection(props) {
   const [phase, setPhase] = React.useState('')
   const [chunked, setChunked] = React.useState(false)
   const [pending, setPending] = React.useState(null)
+  const [scopeSelection, setScopeSelection] = React.useState(true)
+  const abortRef = React.useRef(null)
   const listRef = React.useRef(null)
   const inputRef = React.useRef(null)
 
@@ -43,6 +45,14 @@ function AiSection(props) {
     const element = listRef.current
     if (element) element.scrollTop = element.scrollHeight
   }, [messages, busy])
+
+  const sourceBlocks = parsed.blocks.filter(block => block.type !== 'title')
+  const selectedEntry = selectedBlock !== null ? sourceBlocks[selectedBlock] : undefined
+  const canScope = selectedEntry !== undefined && ['paragraph', 'heading', 'quote', 'list'].includes(selectedEntry.type)
+  React.useEffect(() => {
+    if (canScope) setScopeSelection(true)
+  }, [selectedBlock, canScope])
+  const scopeBlock = canScope && scopeSelection ? selectedEntry : null
 
   const send = async (override) => {
     const instruction = String(override ?? input).trim()
@@ -54,13 +64,15 @@ function AiSection(props) {
     }
     setInput('')
     const sentText = doc.text
+    const scopeLines = scopeBlock === null ? null : doc.text.split('\n').slice(scopeBlock.lines[0], scopeBlock.lines[1] + 1)
+    const scopeText = scopeLines === null ? '' : scopeLines.join('\n')
     setMessages(list => [...list, { role: 'user', content: instruction }])
     setBusy(true)
     setProgress(0)
     setPhase('')
     try {
       let value
-      const useChunks = chunked && doc.text.length > LONG_TEXT_CHUNK_THRESHOLD
+      const useChunks = scopeLines === null && chunked && doc.text.length > LONG_TEXT_CHUNK_THRESHOLD
       if (useChunks) {
         const chunks = splitMarkdownChunks(doc.text, 3200)
         if (chunks.length === 0) throw Object.assign(new Error(t('文章为空，无法分段')), { code: 'text-required' })
@@ -84,23 +96,41 @@ function AiSection(props) {
         value = { reply: `分段改写完成（${chunks.length} 段），版式未改。`, text: rewritten.join('\n\n') }
       } else {
         setPhase(t('模型生成中'))
+        const controller = typeof AbortController === 'function' ? new AbortController() : null
+        abortRef.current = controller
+        const effectiveInstruction = scopeLines === null
+          ? instruction
+          : `${instruction}\n\n（只改写下面这一段，不要改其他段落；保持 Markdown 结构；不要输出 design 和 meta。）`
         value = await callHostStream('aiEditStream', {
-          instruction,
-          text: doc.text,
+          instruction: effectiveInstruction,
+          text: scopeLines === null ? doc.text : scopeText,
           title: doc.meta.title,
           design: doc.design,
           meta: { author: doc.meta.author, digest: doc.meta.digest },
           history: messages.slice(-6).map(message => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
-        }, { timeoutMs: 150000, onProgress: chars => setProgress(chars) })
+        }, { timeoutMs: 150000, onProgress: chars => setProgress(chars), signal: controller?.signal })
       }
 
       const current = store.doc
       const typedMeanwhile = typeof value.text === 'string' && current.text !== sentText
-      const nextText = typeof value.text === 'string' && value.text.trim() !== '' && value.text !== current.text && !typedMeanwhile
-        ? value.text
-        : undefined
+      let nextText
+      if (scopeLines !== null) {
+        if (typeof value.text !== 'string' || value.text.trim() === '') {
+          throw Object.assign(new Error(t('AI 没有返回选中段落的改写结果')), { code: 'selection-empty' })
+        }
+        if (!typedMeanwhile) {
+          const currentLines = current.text.split('\n')
+          nextText = [
+            ...currentLines.slice(0, scopeBlock.lines[0]),
+            ...value.text.trim().split('\n'),
+            ...currentLines.slice(scopeBlock.lines[1] + 1),
+          ].join('\n')
+        }
+      } else if (typeof value.text === 'string' && value.text.trim() !== '' && value.text !== current.text && !typedMeanwhile) {
+        nextText = value.text
+      }
       let nextDesign
-      if (value.design && typeof value.design === 'object') {
+      if (scopeLines === null && value.design && typeof value.design === 'object') {
         const theme = THEMES.find(entry => entry.id === value.design.themeId)
         const themeId = theme === undefined ? current.design.themeId : theme.id
         const variant = theme === undefined
@@ -115,7 +145,7 @@ function AiSection(props) {
             : { ...(current.design.overrides ?? {}), ...(value.design.overrides ?? {}) },
         }
       }
-      const nextMeta = value.meta && typeof value.meta === 'object' ? { ...current.meta, ...value.meta } : undefined
+      const nextMeta = scopeLines === null && value.meta && typeof value.meta === 'object' ? { ...current.meta, ...value.meta } : undefined
 
       const changes = []
       if (nextText !== undefined) changes.push(t('正文'))
@@ -129,7 +159,7 @@ function AiSection(props) {
           text: nextText,
           design: nextDesign,
           meta: nextMeta,
-          reply: value.reply || t('已修改'),
+          reply: scopeLines === null ? (value.reply || t('已修改')) : (value.reply ? `${t('已改写选中段落')}。${value.reply}` : t('已改写选中段落')),
           model: value.model?.model ?? '',
           parseError: value.parseError === true,
           changes,
@@ -154,8 +184,9 @@ function AiSection(props) {
     }
   }
 
-  const applyPending = () => {
+  const applyPending = async () => {
     if (pending === null) return
+    if (typeof takeSnapshot === 'function') await takeSnapshot('before-ai')
     const applied = []
     const patch = {}
     const current = store.doc
@@ -263,6 +294,15 @@ function AiSection(props) {
         ),
       )
       : null,
+    canScope
+      ? h('div', { className: 'ws-chat-compose-option' },
+        h('div', { className: 'ws-scope-row' },
+          h('span', { className: 'ws-hint' }, `${t('当前选中')}：${selectedEntry.text.slice(0, 24)}${selectedEntry.text.length > 24 ? '…' : ''}`),
+          h('button', { type: 'button', className: 'ws-chip' + (scopeSelection ? ' on' : ''), onClick: () => setScopeSelection(true) }, t('只改选中段')),
+          h('button', { type: 'button', className: 'ws-chip' + (!scopeSelection ? ' on' : ''), onClick: () => setScopeSelection(false) }, t('改整篇')),
+        ),
+      )
+      : null,
     doc.text.length > LONG_TEXT_CHUNK_THRESHOLD
       ? h('div', { className: 'ws-chat-compose-option' },
         h(Toggle, {
@@ -290,6 +330,7 @@ function AiSection(props) {
       }),
       h('div', { className: 'ws-row' },
         h(Button, { variant: 'primary', disabled: busy || pending !== null || input.trim() === '', onClick: () => send() }, busy ? t('修改中…') : t('发送')),
+        busy ? h(Button, { variant: 'ghost', onClick: () => abortRef.current?.abort() }, t('取消')) : null,
         h('span', { className: 'ws-hint' }, t('Enter 发送，Shift+Enter 换行')),
       ),
     ),
@@ -330,10 +371,42 @@ function ThemeMiniPreview({ theme }) {
   )
 }
 
+const THEME_FAVORITES_KEY = 'dsh.wechat-studio.themeFavorites.v1'
+const THEME_RECENT_KEY = 'dsh.wechat-studio.themeRecent.v1'
+
+function loadThemeList(key) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter(id => typeof id === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 function ThemeSection(props) {
   const { store, design, analysis, doc, toast, autoRefine, setAutoRefine, refining, onRefineNow } = props
+  const [filter, setFilter] = React.useState('all')
+  const [favorites, setFavorites] = React.useState(() => loadThemeList(THEME_FAVORITES_KEY))
+  const [recent, setRecent] = React.useState(() => loadThemeList(THEME_RECENT_KEY))
   const activeTheme = THEMES.find(theme => theme.id === design.themeId) ?? THEMES[0]
+  const toggleFavorite = (themeId) => {
+    setFavorites((list) => {
+      const next = list.includes(themeId) ? list.filter(id => id !== themeId) : [themeId, ...list]
+      try { localStorage.setItem(THEME_FAVORITES_KEY, JSON.stringify(next)) } catch { /* private mode */ }
+      return next
+    })
+  }
+  const visibleThemes = filter === 'favorites'
+    ? favorites.map(id => THEMES.find(theme => theme.id === id)).filter(Boolean)
+    : filter === 'recent'
+      ? recent.map(id => THEMES.find(theme => theme.id === id)).filter(Boolean)
+      : THEMES
   const applyTheme = (theme) => {
+    setRecent((list) => {
+      const next = [theme.id, ...list.filter(id => id !== theme.id)].slice(0, 6)
+      try { localStorage.setItem(THEME_RECENT_KEY, JSON.stringify(next)) } catch { /* private mode */ }
+      return next
+    })
     store.updateDoc(current => {
       const previous = current.design?.overrides ?? {}
       // Keep a deliberately chosen accent; theme decoration and type reset.
@@ -379,31 +452,62 @@ function ThemeSection(props) {
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('主题库')), h('span', { className: 'ws-group-note' }, `${THEMES.reduce((count, entry) => count + entry.variants.length, 0)} 个版式`)),
-      h('div', { className: 'ws-themes' },
-        THEMES.map(theme => h('button', {
-          key: theme.id,
+      h('div', { className: 'ws-chips ws-theme-filter' },
+        [['all', t('全部')], ['favorites', t('收藏')], ['recent', t('最近')]].map(([id, label]) => h('button', {
+          key: id,
           type: 'button',
-          className: 'ws-theme' + (theme.id === activeTheme.id ? ' on' : ''),
-          onClick: () => applyTheme(theme),
-        },
-        h(ThemeMiniPreview, { theme }),
-        h('span', { className: 'ws-theme-meta' },
-          h('span', { className: 'ws-theme-name' }, theme.name),
-          h('span', { className: 'ws-theme-tag' }, theme.tagline.slice(0, 14)),
-        ),
-        ),
-        ),
+          className: 'ws-chip' + (filter === id ? ' on' : ''),
+          onClick: () => setFilter(id),
+        }, label)),
       ),
+      visibleThemes.length === 0
+        ? h('p', { className: 'ws-hint' }, t('还没有收藏主题；点主题卡上的星标即可收藏。'))
+        : h('div', { className: 'ws-themes' },
+          visibleThemes.map(theme => h('div', {
+            key: theme.id,
+            role: 'button',
+            tabIndex: 0,
+            className: 'ws-theme' + (theme.id === activeTheme.id ? ' on' : ''),
+            onClick: () => applyTheme(theme),
+            onKeyDown: event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); applyTheme(theme) } },
+          },
+          h(ThemeMiniPreview, { theme }),
+          h('span', { className: 'ws-theme-meta' },
+            h('span', { className: 'ws-theme-name-row' },
+              h('span', { className: 'ws-theme-name' }, theme.name),
+              h('button', {
+                type: 'button',
+                className: 'ws-theme-fav' + (favorites.includes(theme.id) ? ' on' : ''),
+                title: favorites.includes(theme.id) ? t('取消收藏') : t('收藏主题'),
+                onClick: event => { event.stopPropagation(); toggleFavorite(theme.id) },
+              }, favorites.includes(theme.id) ? '★' : '☆'),
+            ),
+            h('span', { className: 'ws-theme-tag' }, theme.tagline.slice(0, 14)),
+          ),
+          )),
+        ),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('版式变体'))),
-      h('div', { className: 'ws-chips' },
+      h('div', { className: 'ws-variant-row' },
         activeTheme.variants.map(variant => h('button', {
           key: variant.id,
           type: 'button',
-          className: 'ws-chip' + (variant.id === design.variantId ? ' on' : ''),
+          className: 'ws-variant-card' + (variant.id === design.variantId ? ' on' : ''),
           onClick: () => setVariant(variant.id),
-        }, variant.name)),
+        },
+        h('span', {
+          className: 'ws-variant-mini',
+          'data-title-style': variant.titleStyle,
+          style: { background: activeTheme.palette.bg, borderColor: activeTheme.palette.border },
+        },
+        h('span', { className: 'ws-variant-title', style: { fontFamily: activeTheme.type.titleFont, color: activeTheme.palette.text } }, t('标题')),
+        h('span', { className: 'ws-variant-rule', style: { background: activeTheme.palette.accent } }),
+        h('span', { className: 'ws-variant-line', style: { background: activeTheme.palette.secondary } }),
+        h('span', { className: 'ws-variant-line short', style: { background: activeTheme.palette.secondary } }),
+        ),
+        h('span', { className: 'ws-variant-name' }, variant.name),
+        )),
       ),
       h('p', { className: 'ws-hint' }, activeTheme.tagline),
     ),
@@ -732,7 +836,7 @@ function DecorSection(props) {
  * ------------------------------------------------------------------ */
 
 function PublishSection(props) {
-  const { store, design, doc, parsed, article, features, hostStatus, setHostStatus, toast } = props
+  const { store, design, doc, parsed, article, features, hostStatus, setHostStatus, toast, takeSnapshot, snapshotVersion } = props
   const [configOpen, setConfigOpen] = React.useState(false)
   const [appId, setAppId] = React.useState('')
   const [appSecret, setAppSecret] = React.useState('')
@@ -748,6 +852,8 @@ function PublishSection(props) {
   const [draftBusy, setDraftBusy] = React.useState(false)
   const [deleteArm, setDeleteArm] = React.useState('')
   const [importingDraft, setImportingDraft] = React.useState('')
+  const [snapshots, setSnapshots] = React.useState([])
+  const [snapshotBusy, setSnapshotBusy] = React.useState(false)
   const [networkState, setNetworkState] = React.useState({ phase: 'loading', mode: 'system', proxyUrl: '', error: '' })
   const [networkMode, setNetworkMode] = React.useState('system')
   const [networkProxy, setNetworkProxy] = React.useState('')
@@ -775,9 +881,38 @@ function PublishSection(props) {
   React.useEffect(() => () => clearTimeout(deleteArmTimer.current), [])
   const coverInputRef = React.useRef(null)
   const title = (doc.meta.title.trim() || parsed.title || '').trim()
+  const savedMediaId = typeof doc.meta.draftMediaId === 'string' ? doc.meta.draftMediaId.trim() : ''
   const author = doc.meta.author.trim()
   const digest = doc.meta.digest.trim() || deriveDigest(parsed.blocks)
   const coverDataUrl = doc.meta.coverDataUrl || ''
+  const coverLayout = typeof doc.meta.coverLayout === 'string' ? doc.meta.coverLayout : 'left'
+
+  const refreshSnapshots = React.useCallback(async () => {
+    try { setSnapshots(await listSnapshots(doc.id, 8)) } catch { setSnapshots([]) }
+  }, [doc.id])
+  React.useEffect(() => { refreshSnapshots() }, [refreshSnapshots, snapshotVersion])
+  const saveManualSnapshot = async () => {
+    if (typeof takeSnapshot !== 'function') return
+    setSnapshotBusy(true)
+    try {
+      await takeSnapshot('manual', true)
+      await refreshSnapshots()
+    } finally {
+      setSnapshotBusy(false)
+    }
+  }
+  const restoreSnapshot = async (snapshot) => {
+    if (typeof takeSnapshot === 'function') await takeSnapshot('before-restore')
+    store.updateDoc(current => ({
+      ...current,
+      text: snapshot.text,
+      design: snapshot.design,
+      meta: { ...current.meta, ...snapshot.meta },
+    }))
+    toast(t('已恢复快照'))
+  }
+
+  const previewHtmlLength = React.useMemo(() => serializeNodes(article.nodes).length, [article])
 
   const preflight = React.useMemo(() => {
     const checks = []
@@ -800,26 +935,26 @@ function PublishSection(props) {
       if (remoteImages.some(url => !/^https:/i.test(url))) push('warn', t('外链图片建议使用 HTTPS'), `${remoteImages.length}`)
       else push('ok', t('外链图片 {count} 张，发布时会转存', { count: remoteImages.length }), '')
     }
-    const htmlLength = serializeNodes(article.nodes).length
+    const htmlLength = previewHtmlLength
     if (htmlLength > 950 * 1024) push('error', t('正文 HTML 超过 950KB，删掉图片或缩短正文'), formatSize(htmlLength))
     else if (htmlLength > 800 * 1024) push('warn', t('正文 HTML 约 {size}，接近微信上限', { size: formatSize(htmlLength) }), '')
     if (coverDataUrl !== '' || doc.meta.coverCustom === true) push('ok', t('封面已就绪'), '')
     else push('warn', t('封面还在生成'), t('等封面出现或手动上传'))
     if (bundleIds.length > 0) push('ok', t('合集共 {count} 篇', { count: bundleIds.length + 1 }), t('保存时会逐篇上传'))
     return checks
-  }, [article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length])
+  }, [previewHtmlLength, article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length])
 
   React.useEffect(() => {
     // Keep the generated cover in step with the current theme; a cover the user
     // uploaded themselves stays untouched.
     if (doc.meta.coverCustom === true) return
     try {
-      const generated = renderCover({ title, design })
+      const generated = renderCover({ title, design, layout: coverLayout })
       if (generated !== coverDataUrl) store.updateMeta({ coverDataUrl: generated })
     } catch {
       // Canvas may be unavailable in unusual embedders; the publish step reports it.
     }
-  }, [title, design.themeId, design.variantId, design.colors.accent, coverDataUrl, doc.meta.coverCustom])
+  }, [title, design.themeId, design.variantId, design.colors.accent, coverDataUrl, doc.meta.coverCustom, coverLayout])
 
   const regenerateCover = () => {
     try {
@@ -1023,6 +1158,7 @@ function PublishSection(props) {
     setResult(null)
     setError(null)
     setSteps([])
+    if (typeof takeSnapshot === 'function') await takeSnapshot('before-publish')
     const push = (label, state, detail) => setSteps(list => [...list, { label, state, detail }])
     const markLastDone = () => setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done' } : step)))
 
@@ -1114,11 +1250,23 @@ function PublishSection(props) {
         })
       }
 
+      if (mode === 'update') {
+        if (savedMediaId === '') throw new Error(t('当前草稿还没有关联公众号草稿，请先另存为新草稿'))
+        if (preparedArticles.length !== 1) throw new Error(t('覆盖更新只支持单篇文章；多图文请另存为新草稿'))
+        push(t('更新公众号草稿'), 'running')
+        const updated = await callHost('updateDraft', { mediaId: savedMediaId, articles: preparedArticles }, { timeoutMs: 120000 })
+        const warnings = Array.isArray(updated.warnings) ? updated.warnings : []
+        setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done', detail: warnings.join('；') || updated.mediaId } : step)))
+        setResult({ kind: 'draft', mediaId: updated.mediaId, warnings, count: 1, updated: true })
+        toast(t('已更新公众号草稿'), 'success')
+        return
+      }
       push(`写入公众号草稿箱${preparedArticles.length > 1 ? `（${preparedArticles.length} 篇）` : ''}`, 'running')
       const draft = await callHost('createDraft', { articles: preparedArticles }, { timeoutMs: 120000 })
       const warnings = Array.isArray(draft.warnings) ? draft.warnings : []
       setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done', detail: warnings.join('；') || draft.mediaId } : step)))
-      setResult({ kind: 'draft', mediaId: draft.mediaId, warnings, count: preparedArticles.length })
+      if (preparedArticles.length === 1 && typeof draft.mediaId === 'string') store.updateMeta({ draftMediaId: draft.mediaId })
+      setResult({ kind: 'draft', mediaId: draft.mediaId, warnings, count: preparedArticles.length, updated: false })
 
       if (mode === 'publish') {
         push(t('提交发布'), 'running')
@@ -1301,11 +1449,39 @@ function PublishSection(props) {
       coverDataUrl !== ''
         ? h('img', { className: 'ws-cover', src: coverDataUrl, alt: t('封面预览') })
         : h('div', { className: 'ws-cover ws-cover-empty' }, t('封面生成中…')),
+      h('div', { className: 'ws-chips ws-cover-layouts' },
+        [['left', t('左对齐')], ['center', t('居中')], ['bottom', t('底部')], ['minimal', t('极简')]].map(([value, label]) => h('button', {
+          key: value,
+          type: 'button',
+          className: 'ws-chip' + (doc.meta.coverCustom !== true && coverLayout === value ? ' on' : ''),
+          onClick: () => store.updateMeta({ coverLayout: value, coverCustom: false }),
+        }, label)),
+      ),
       h('div', { className: 'ws-row' },
         h(Button, { onClick: regenerateCover, disabled: coverBusy }, t('按主题重绘')),
         h(Button, { onClick: () => coverInputRef.current?.click(), disabled: coverBusy }, coverBusy ? t('处理中…') : t('上传图片')),
         h('input', { ref: coverInputRef, type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: uploadCoverFile }),
       ),
+    ),
+    h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' },
+        h('span', null, t('历史版本')),
+        h('button', { type: 'button', className: 'ws-link', disabled: snapshotBusy, onClick: saveManualSnapshot }, snapshotBusy ? t('保存中…') : t('保存快照')),
+      ),
+      snapshots.length === 0
+        ? h('p', { className: 'ws-hint' }, t('暂无历史版本；AI 修改前和发布前会自动保存快照。'))
+        : h('div', { className: 'ws-snapshot-list' },
+          snapshots.map(snapshot => {
+            const reason = snapshot.reason === 'before-ai' ? t('AI 修改前') : snapshot.reason === 'before-publish' ? t('发布前') : snapshot.reason === 'before-restore' ? t('恢复前') : t('手动')
+            return h('div', { key: snapshot.id, className: 'ws-snapshot-row' },
+              h('span', { className: 'ws-snapshot-time' }, new Date(snapshot.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })),
+              h('span', { className: 'ws-snapshot-reason' }, reason),
+              h('span', { className: 'ws-snapshot-chars' }, `${snapshot.text.length} ${t('字')}`),
+              h('button', { type: 'button', className: 'ws-link', onClick: () => restoreSnapshot(snapshot) }, t('恢复')),
+            )
+          }),
+        ),
+      h('p', { className: 'ws-hint' }, t('快照存在浏览器 IndexedDB，最多保留最近 20 个版本。')),
     ),
     h('div', { className: 'ws-card ws-preflight' },
       h('div', { className: 'ws-card-head' },
@@ -1327,7 +1503,12 @@ function PublishSection(props) {
       ),
     ),
     h('div', { className: 'ws-publish-actions' },
-      h(Button, { icon: 'save', variant: 'primary', disabled: busy || hostStatus.phase === 'error', onClick: () => runPublish('draft') }, busy ? t('处理中…') : t('保存到草稿箱')),
+      savedMediaId !== ''
+        ? h(Button, { icon: 'save', variant: 'primary', disabled: busy || hostStatus.phase === 'error', onClick: () => runPublish('update') }, busy ? t('处理中…') : t('更新当前草稿'))
+        : h(Button, { icon: 'save', variant: 'primary', disabled: busy || hostStatus.phase === 'error', onClick: () => runPublish('draft') }, busy ? t('处理中…') : t('保存到草稿箱')),
+      savedMediaId !== ''
+        ? h(Button, { disabled: busy || hostStatus.phase === 'error', onClick: () => runPublish('draft') }, t('另存新草稿'))
+        : null,
       confirmPublish
         ? h('div', { className: 'ws-confirm' },
           h('span', null, t('直接发布会占用当天发布次数，确认？')),
@@ -1336,6 +1517,9 @@ function PublishSection(props) {
         )
         : h(Button, { icon: 'send', variant: 'solid', disabled: busy || hostStatus.phase === 'error', onClick: () => setConfirmPublish(true) }, t('直接发布')),
     ),
+    savedMediaId !== ''
+      ? h('p', { className: 'ws-hint' }, t('这篇已关联公众号草稿；更新会覆盖后台那一篇。'))
+      : null,
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },
         h('span', null, t('公众号草稿箱')),
@@ -1429,7 +1613,7 @@ function wrapCoverTitle(context, title, maxWidth) {
   return lines
 }
 
-function renderCover({ title, design }) {
+function renderCover({ title, design, layout = 'left' }) {
   const canvas = document.createElement('canvas')
   canvas.width = 900
   canvas.height = 383
@@ -1437,52 +1621,67 @@ function renderCover({ title, design }) {
   if (context === null) throw new Error(t('当前环境无法生成封面'))
   const accent = design.colors.accent
   const ink = design.colors.accentInk
-  const gradient = context.createLinearGradient(0, 0, 900, 383)
-  gradient.addColorStop(0, mixHex(accent, '#000000', 0.05))
-  gradient.addColorStop(0.55, accent)
-  gradient.addColorStop(1, mixHex(accent, '#000000', 0.42))
-  context.fillStyle = gradient
-  context.fillRect(0, 0, 900, 383)
+  const out = ['left', 'center', 'bottom', 'minimal'].includes(layout) ? layout : 'left'
+  if (out === 'minimal') {
+    context.fillStyle = mixHex(accent, '#000000', 0.12)
+    context.fillRect(0, 0, 900, 383)
+  } else {
+    const gradient = context.createLinearGradient(0, 0, 900, 383)
+    gradient.addColorStop(0, mixHex(accent, '#000000', 0.05))
+    gradient.addColorStop(0.55, accent)
+    gradient.addColorStop(1, mixHex(accent, '#000000', 0.42))
+    context.fillStyle = gradient
+    context.fillRect(0, 0, 900, 383)
+  }
 
-  context.globalAlpha = 0.08
-  context.fillStyle = ink
-  context.beginPath()
-  context.arc(760, 90, 150, 0, Math.PI * 2)
-  context.fill()
-  context.beginPath()
-  context.arc(845, 330, 110, 0, Math.PI * 2)
-  context.fill()
-  context.globalAlpha = 1
+  if (out !== 'minimal') {
+    context.globalAlpha = 0.08
+    context.fillStyle = ink
+    context.beginPath()
+    context.arc(760, 90, 150, 0, Math.PI * 2)
+    context.fill()
+    context.beginPath()
+    context.arc(845, 330, 110, 0, Math.PI * 2)
+    context.fill()
+    context.globalAlpha = 1
+  }
 
-  context.strokeStyle = ink
-  context.globalAlpha = 0.35
-  context.lineWidth = 2
-  context.beginPath()
-  context.moveTo(64, 118)
-  context.lineTo(64 + 44, 118)
-  context.stroke()
-  context.globalAlpha = 1
+  const x = out === 'center' ? 450 : 64
+  context.textAlign = out === 'center' ? 'center' : 'left'
+  if (out !== 'minimal') {
+    context.strokeStyle = ink
+    context.globalAlpha = 0.35
+    context.lineWidth = 2
+    context.beginPath()
+    context.moveTo(out === 'center' ? 428 : 64, 118)
+    context.lineTo(out === 'center' ? 472 : 108, 118)
+    context.stroke()
+    context.globalAlpha = 1
+    context.fillStyle = ink
+    context.globalAlpha = 0.78
+    context.font = '600 20px "PingFang SC", "Microsoft YaHei", sans-serif'
+    context.fillText(design.decor.eyebrow || design.themeName, x, 100)
+    context.globalAlpha = 1
+  }
 
-  context.fillStyle = ink
-  context.globalAlpha = 0.78
-  context.font = '600 20px "PingFang SC", "Microsoft YaHei", sans-serif'
-  context.fillText(design.decor.eyebrow || design.themeName, 64, 100)
-  context.globalAlpha = 1
-
-  const size = title.length > 26 ? 44 : title.length > 16 ? 52 : 58
+  const size = out === 'minimal' ? (title.length > 26 ? 50 : title.length > 16 ? 58 : 66) : title.length > 26 ? 44 : title.length > 16 ? 52 : 58
   context.font = `700 ${size}px "PingFang SC", "Microsoft YaHei", sans-serif`
-  const lines = wrapCoverTitle(context, title || t('未命名文章'), 700)
+  const maxWidth = out === 'minimal' ? 760 : 700
+  const lines = wrapCoverTitle(context, title || t('未命名文章'), maxWidth)
   const lineHeight = Math.round(size * 1.32)
-  const startY = 118 + (3 - lines.length) * lineHeight * 0.5
+  const baseY = out === 'bottom' ? 238 : out === 'minimal' ? 220 : 118
+  const startY = baseY + (3 - lines.length) * lineHeight * 0.5
   context.fillStyle = ink
   lines.forEach((line, index) => {
-    context.fillText(line, 64, startY + lineHeight * (index + 1))
+    context.fillText(line, x, startY + lineHeight * (index + 1))
   })
 
-  context.globalAlpha = 0.7
-  context.font = '400 18px "PingFang SC", "Microsoft YaHei", sans-serif'
-  context.fillText(design.themeName + ' · ' + design.variantName, 64, 340)
-  context.globalAlpha = 1
+  if (out !== 'minimal') {
+    context.globalAlpha = 0.7
+    context.font = '400 18px "PingFang SC", "Microsoft YaHei", sans-serif'
+    context.fillText(design.themeName + ' · ' + design.variantName, x, 348)
+    context.globalAlpha = 1
+  }
   return canvas.toDataURL('image/png')
 }
 

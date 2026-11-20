@@ -497,6 +497,68 @@ const UI_EN = {
 
   '浏览器存储写入失败，这轮修改只保存在内存里，刷新会丢失。请导出草稿 JSON，或删掉带大图的草稿。': 'Browser storage write failed; this round of edits stays in memory and will be lost on reload. Export the draft JSON or delete drafts with large images.',
 
+  '更新当前草稿': 'Update draft',
+  '另存新草稿': 'Save as new',
+  '更新公众号草稿': 'Update WeChat draft',
+  '已更新公众号草稿': 'WeChat draft updated',
+  '当前草稿还没有关联公众号草稿，请先另存为新草稿': 'This draft is not linked to a WeChat draft yet; save it as new first',
+  '覆盖更新只支持单篇文章；多图文请另存为新草稿': 'Updating in place supports one article; save bundles as new',
+  '这篇已关联公众号草稿；更新会覆盖后台那一篇。': 'This article is linked to a WeChat draft; updating overwrites it.',
+
+  '当前选中': 'Selected',
+  '只改选中段': 'Selected block only',
+  '改整篇': 'Whole article',
+  '已改写选中段落': 'Selected block rewritten',
+  'AI 没有返回选中段落的改写结果': 'The AI returned no rewrite for the selected block',
+
+  '链接文字': 'Link text',
+
+  '历史版本': 'Version history',
+  '保存快照': 'Save snapshot',
+  '保存中…': 'Saving…',
+  '暂无历史版本；AI 修改前和发布前会自动保存快照。': 'No snapshots yet; one is saved before AI edits and publishing.',
+  'AI 修改前': 'Before AI edit',
+  '发布前': 'Before publishing',
+  '恢复前': 'Before restore',
+  '手动': 'Manual',
+  '恢复': 'Restore',
+  '已保存快照': 'Snapshot saved',
+  '快照保存失败': 'Could not save snapshot',
+  '已恢复快照': 'Snapshot restored',
+  '快照存在浏览器 IndexedDB，最多保留最近 20 个版本。': 'Snapshots live in browser IndexedDB; the newest 20 per draft are kept.',
+  '字': 'chars',
+
+  '全部': 'All',
+  '收藏': 'Favorites',
+  '最近': 'Recent',
+  '收藏主题': 'Favorite theme',
+  '取消收藏': 'Remove favorite',
+  '还没有收藏主题；点主题卡上的星标即可收藏。': 'No favorite themes yet; tap the star on a theme card.',
+
+  '底部': 'Bottom',
+  '极简': 'Minimal',
+
+  '已取消': 'Cancelled',
+
+  '复制这一段': 'Duplicate block',
+  '已复制这一段': 'Block duplicated',
+
+  '查找与替换': 'Find and replace',
+  '查找': 'Find',
+  '替换为': 'Replace with',
+  '下一个': 'Next',
+  '替换': 'Replace',
+  '全部替换': 'Replace all',
+  '关闭': 'Close',
+  '没有找到匹配内容': 'No match found',
+  '已替换 {count} 处': 'Replaced {count} occurrence(s)',
+
+  '裁剪图片': 'Crop image',
+  '裁剪比例': 'Crop ratio',
+  '图片已裁剪': 'Image cropped',
+  '远程图片暂时只能换图，不能直接裁剪': 'Remote images can only be replaced, not cropped here',
+  '当前环境无法处理图片': 'This environment cannot process images',
+
 }
 
 
@@ -1421,6 +1483,23 @@ function tidyMarkdown(text) {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+/**
+ * Replace the source URL of one Markdown image line.
+ * @param {string} text Markdown source.
+ * @param {number} lineIndex zero-based line.
+ * @param {string} src new image source.
+ * @returns {string} updated source; unchanged when the line is not an image.
+ */
+function replaceImageSource(text, lineIndex, src) {
+  const lines = String(text ?? '').split('\n')
+  const line = lines[lineIndex]
+  if (typeof line !== 'string') return text
+  const match = /^(\s*!\[[^\]]*\]\()([^)]*)(\)\s*)$/.exec(line)
+  if (!match) return text
+  lines[lineIndex] = `${match[1]}${String(src ?? '').replace(/[)\n\r]/g, '')}${match[3]}`
+  return lines.join('\n')
 }
 
 /**
@@ -3063,6 +3142,7 @@ async function pruneImages(texts) {
 
 const DOC_DB_NAME = 'dsh-wechat-studio-docs'
 const DOC_STORE_NAME = 'state'
+const DOC_SNAPSHOT_STORE = 'snapshots'
 const DOC_ROW_ID = 'docs'
 
 let docDbPromise
@@ -3081,10 +3161,11 @@ function openDocDb() {
   docDbPromise = new Promise((resolve) => {
     if (!hasDocIndexedDb()) { resolve(null); return }
     let request
-    try { request = indexedDB.open(DOC_DB_NAME, 1) } catch { resolve(null); return }
+    try { request = indexedDB.open(DOC_DB_NAME, 2) } catch { resolve(null); return }
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(DOC_STORE_NAME)) db.createObjectStore(DOC_STORE_NAME, { keyPath: 'id' })
+      if (!db.objectStoreNames.contains(DOC_SNAPSHOT_STORE)) db.createObjectStore(DOC_SNAPSHOT_STORE, { keyPath: 'id' })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => resolve(null)
@@ -3093,13 +3174,13 @@ function openDocDb() {
   return docDbPromise
 }
 
-function withDocStore(mode, run) {
+function withDocStore(mode, run, storeName = DOC_STORE_NAME) {
   return openDocDb().then(db => {
     if (db === null) return null
     return new Promise((resolve) => {
       try {
-        const tx = db.transaction(DOC_STORE_NAME, mode)
-        const request = run(tx.objectStore(DOC_STORE_NAME))
+        const tx = db.transaction(storeName, mode)
+        const request = run(tx.objectStore(storeName))
         let result = null
         if (request !== undefined && request !== null) {
           request.onsuccess = () => { result = request.result }
@@ -3136,6 +3217,53 @@ async function saveDocsToDb(items) {
 /** Remove the stored draft array (not used by normal flows). */
 async function clearDocsDb() {
   await withDocStore('readwrite', store => store.delete(DOC_ROW_ID))
+}
+
+
+/** Save one version snapshot for a document; keeps the newest 20 per doc. */
+async function saveSnapshot(snapshot) {
+  if (snapshot === null || typeof snapshot !== 'object' || typeof snapshot.docId !== 'string') return false
+  const entry = {
+    id: `snap-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    docId: snapshot.docId,
+    createdAt: Date.now(),
+    reason: typeof snapshot.reason === 'string' ? snapshot.reason : 'manual',
+    text: typeof snapshot.text === 'string' ? snapshot.text : '',
+    design: snapshot.design ?? {},
+    meta: snapshot.meta ?? {},
+  }
+  const saved = await withDocStore('readwrite', store => store.put(entry), DOC_SNAPSHOT_STORE)
+  if (saved === null || saved === undefined) return false
+  const all = await withDocStore('readonly', store => store.getAll(), DOC_SNAPSHOT_STORE)
+  if (Array.isArray(all)) {
+    const mine = all.filter(item => item.docId === entry.docId).sort((a, b) => b.createdAt - a.createdAt)
+    const stale = mine.slice(20)
+    if (stale.length > 0) {
+      await withDocStore('readwrite', store => {
+        for (const item of stale) store.delete(item.id)
+      }, DOC_SNAPSHOT_STORE)
+    }
+  }
+  return true
+}
+
+/** List recent snapshots for one document, newest first. */
+async function listSnapshots(docId, limit = 8) {
+  const all = await withDocStore('readonly', store => store.getAll(), DOC_SNAPSHOT_STORE)
+  if (!Array.isArray(all)) return []
+  return all
+    .filter(item => item.docId === docId)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, limit)
+}
+
+/** Delete all snapshots for one document. */
+async function clearSnapshots(docId) {
+  const all = await withDocStore('readonly', store => store.getAll(), DOC_SNAPSHOT_STORE)
+  if (!Array.isArray(all)) return
+  await withDocStore('readwrite', store => {
+    for (const item of all) if (item.docId === docId) store.delete(item.id)
+  }, DOC_SNAPSHOT_STORE)
 }
 
 /* ===== src/bridge.mjs ===== */
@@ -3206,7 +3334,8 @@ async function callHost(action, payload = {}, options = {}) {
  */
 async function callHostStream(action, payload = {}, options = {}) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  const controller = typeof AbortController === 'function' ? new AbortController() : undefined
+  const externalSignal = options.signal !== undefined && options.signal !== null && typeof options.signal.aborted === 'boolean' ? options.signal : undefined
+  const controller = externalSignal === undefined && typeof AbortController === 'function' ? new AbortController() : undefined
   const timer = controller === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs)
   let response
   try {
@@ -3214,10 +3343,11 @@ async function callHostStream(action, payload = {}, options = {}) {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-wechat-studio': '1', accept: 'text/event-stream' },
       body: JSON.stringify({ action, ...payload }),
-      signal: controller?.signal,
+      signal: externalSignal ?? controller?.signal,
     })
   } catch (error) {
     if (timer !== undefined) clearTimeout(timer)
+    if (externalSignal?.aborted === true) throw bridgeError('cancelled', '已取消')
     if (error && error.name === 'AbortError') throw bridgeError('host-timeout', '模型响应超时，重试或把文章拆短一点')
     throw bridgeError('host-unreachable', '连不上公众号排版服务，确认插件已启用后刷新页面再试')
   }
@@ -3264,6 +3394,7 @@ async function callHostStream(action, payload = {}, options = {}) {
       }
     }
   } catch (error) {
+    if (externalSignal?.aborted === true) throw bridgeError('cancelled', '已取消')
     if (error && error.name === 'AbortError') throw bridgeError('host-timeout', '模型响应超时，重试或把文章拆短一点')
     throw error
   } finally {
@@ -3535,7 +3666,7 @@ function createDocument(seedText, design, meta) {
     id: docId(),
     text,
     design: composed,
-    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
+    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', coverLayout: 'left', draftMediaId: '', needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }
@@ -3802,6 +3933,7 @@ function StudioPanel(props) {
   const [hostStatus, setHostStatus] = React.useState({ phase: 'loading', configured: false, appIdPreview: null, message: '' })
   const [imageReady, setImageReady] = React.useState(false)
   const [imageVersion, setImageVersion] = React.useState(0)
+  const [snapshotVersion, setSnapshotVersion] = React.useState(0)
   const bumpImages = React.useCallback(() => setImageVersion(value => value + 1), [])
   React.useEffect(() => {
     let cancelled = false
@@ -3917,7 +4049,7 @@ function StudioPanel(props) {
   )
 
   const scrollEditorToBlock = React.useCallback((index, shouldFocus) => {
-    const block = parsed.blocks[index]
+    const block = parsed.blocks.filter(entry => entry.type !== 'title')[index]
     const element = textareaRef.current
     if (block === undefined || element === null) return
     const lines = doc.text.split('\n')
@@ -3939,6 +4071,22 @@ function StudioPanel(props) {
     })
   }, [parsed.blocks, doc.text])
 
+  const takeSnapshot = React.useCallback(async (reason = 'manual', announce = false) => {
+    const current = store.getDoc()
+    if (!current) return false
+    const clean = serializeDocs([current])[0]
+    const saved = await saveSnapshot({
+      docId: current.id,
+      text: clean.text,
+      design: clean.design,
+      meta: clean.meta,
+      reason,
+    })
+    if (saved) setSnapshotVersion(value => value + 1)
+    if (announce) toast(saved ? t('已保存快照') : t('快照保存失败'), saved ? 'success' : 'error')
+    return saved
+  }, [store, toast])
+
   const goToBlock = React.useCallback((index) => {
     setSelectedBlock(index)
     scrollEditorToBlock(index, true)
@@ -3947,9 +4095,10 @@ function StudioPanel(props) {
   const syncBlockFromCaret = React.useCallback((event) => {
     const element = event.currentTarget
     const line = element.value.slice(0, element.selectionStart).split('\n').length - 1
+    const blocks = parsed.blocks.filter(entry => entry.type !== 'title')
     let found = -1
-    for (let index = 0; index < parsed.blocks.length; index += 1) {
-      const block = parsed.blocks[index]
+    for (let index = 0; index < blocks.length; index += 1) {
+      const block = blocks[index]
       const first = block.lines?.[0] ?? -1
       const last = block.lines?.[1] ?? first
       if (first <= line && line <= last) { found = index; break }
@@ -4143,9 +4292,10 @@ function StudioPanel(props) {
       }),
       compact && !narrow && rightOpen ? h('div', { className: 'ws-scrim', onClick: () => setRightOpen(false) }) : null,
       h(DesignPanel, {
-        store, design, doc, analysis, features, hostStatus, setHostStatus, tab, setTab, toast, parsed, article,
+        store, design, doc, analysis, features, hostStatus, setHostStatus, tab, setTab, toast, parsed, article, selectedBlock,
         narrow, compact, showClose: narrow || compact, onClose: closeDesign,
         autoRefine, setAutoRefine, refining, onRefineNow: () => refineWithAi(true),
+        takeSnapshot, snapshotVersion,
       }),
     ),
     refining
@@ -4343,6 +4493,10 @@ function DocRail(props) {
     return () => document.removeEventListener('mousedown', onPointerDown, true)
   }, [docMenu])
   const [dragging, setDragging] = React.useState(false)
+  const [formats, setFormats] = React.useState({ heading: 0, list: '', quote: false, bold: false, highlight: false })
+  const [searchOpen, setSearchOpen] = React.useState(false)
+  const [findText, setFindText] = React.useState('')
+  const [replaceText, setReplaceText] = React.useState('')
   const uploadRef = React.useRef(null)
   const imageRef = React.useRef(null)
 
@@ -4409,20 +4563,112 @@ function DocRail(props) {
     })
   }
 
+  const transformLines = (transform) => {
+    const element = textareaRef.current
+    if (!element) return
+    const value = doc.text
+    const startLine = value.lastIndexOf('\n', Math.max(0, element.selectionStart - 1)) + 1
+    let endLine = value.indexOf('\n', element.selectionEnd)
+    if (endLine === -1) endLine = value.length
+    const before = value.slice(0, startLine)
+    const block = value.slice(startLine, endLine)
+    const after = value.slice(endLine)
+    const lines = block.split('\n').map(transform)
+    const next = before + lines.join('\n') + after
+    store.updateDoc(current => ({ ...current, text: next }), { coalesce: 'insert' })
+    requestAnimationFrame(() => {
+      element.focus()
+      element.selectionStart = startLine
+      element.selectionEnd = startLine + lines.join('\n').length
+    })
+  }
+
+  const toggleHeading = (level) => {
+    transformLines((line) => {
+      const plain = line.replace(/^#{1,6}\s+/, '')
+      const already = new RegExp(`^${'#'.repeat(level)}\s`).test(line)
+      return already ? plain : `${'#'.repeat(level)} ${plain}`
+    })
+  }
+
+  const toggleList = (ordered) => {
+    transformLines((line) => {
+      const plain = line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '')
+      const alreadyOrdered = /^\s*\d+[.)]\s/.test(line)
+      const alreadyBullet = /^\s*[-*+]\s/.test(line)
+      if (ordered && alreadyOrdered) return plain
+      if (!ordered && alreadyBullet) return plain
+      return `${ordered ? '1.' : '-'} ${plain}`
+    })
+  }
+
+  const handleEditorSelect = (event) => {
+    if (typeof onEditorCaret === 'function') onEditorCaret(event)
+    const element = event.currentTarget
+    const value = element.value
+    const start = element.selectionStart
+    const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+    let lineEnd = value.indexOf('\n', start)
+    if (lineEnd === -1) lineEnd = value.length
+    const line = value.slice(lineStart, lineEnd)
+    const heading = (line.match(/^(#{1,6})\s/) ?? [])[1]?.length ?? 0
+    const list = /^\s*\d+[.)]\s/.test(line) ? 'ol' : /^\s*[-*+]\s/.test(line) ? 'ul' : ''
+    const quote = /^\s*>/.test(line)
+    const before = value.slice(0, start)
+    const after = value.slice(element.selectionEnd)
+    const bold = (before.match(/\*\*/g) ?? []).length % 2 === 1 && after.includes('**')
+    const highlight = (before.match(/==/g) ?? []).length % 2 === 1 && after.includes('==')
+    setFormats({ heading, list, quote, bold, highlight })
+  }
+
+  const findNext = () => {
+    if (findText === '') return
+    const element = textareaRef.current
+    if (!element) return
+    let index = doc.text.indexOf(findText, element.selectionEnd)
+    if (index === -1) index = doc.text.indexOf(findText)
+    if (index === -1) { toast(t('没有找到匹配内容'), 'error'); return }
+    element.focus()
+    element.setSelectionRange(index, index + findText.length)
+    element.scrollTop = Math.max(0, doc.text.slice(0, index).split('\n').length * 20 - element.clientHeight / 3)
+  }
+  const replaceOne = () => {
+    if (findText === '') return
+    const element = textareaRef.current
+    if (element && doc.text.slice(element.selectionStart, element.selectionEnd) === findText) {
+      const next = doc.text.slice(0, element.selectionStart) + replaceText + doc.text.slice(element.selectionEnd)
+      store.updateDoc(current => ({ ...current, text: next }), { coalesce: 'replace' })
+      requestAnimationFrame(() => {
+        const at = element.selectionStart
+        element.setSelectionRange(at, at + replaceText.length)
+      })
+      return
+    }
+    findNext()
+  }
+  const replaceAll = () => {
+    if (findText === '') return
+    const count = doc.text.split(findText).length - 1
+    if (count === 0) { toast(t('没有找到匹配内容'), 'error'); return }
+    store.updateDoc(current => ({ ...current, text: current.text.split(findText).join(replaceText) }), { coalesce: 'replace' })
+    toast(t('已替换 {count} 处', { count }))
+  }
+
   const words = features.chars
   const outline = parsed.blocks
+    .filter(block => block.type !== 'title')
     .map((block, index) => ({ block, index }))
-    .filter(entry => entry.block.type === 'title' || entry.block.type === 'heading')
+    .filter(entry => entry.block.type === 'heading')
   const toolbar = [
-    { label: 'H2', title: t('小节标题'), run: () => insertBlock(t('## 小节标题')) },
-    { label: 'H3', title: t('小标题'), run: () => insertBlock(t('### 小标题')) },
-    { label: '“', title: t('引用'), run: () => insertBlock(t('> 写一句值得被记住的话')) },
-    { label: '•', title: t('无序列表'), run: () => insertBlock('- 第一点\n- 第二点\n- 第三点') },
-    { label: '1.', title: t('有序列表'), run: () => insertBlock('1. 第一步\n2. 第二步\n3. 第三步') },
+    { label: 'H2', title: `${t('小节标题')} (⌘2)`, run: () => toggleHeading(2), format: 'h2' },
+    { label: 'H3', title: `${t('小标题')} (⌘3)`, run: () => toggleHeading(3), format: 'h3' },
+    { label: '“', title: `${t('引用')} (⌘⇧.)`, run: () => insertBlock(t('> 写一句值得被记住的话')), format: 'quote' },
+    { label: '•', title: `${t('无序列表')} (⌘⇧7)`, run: () => toggleList(false), format: 'ul' },
+    { label: '1.', title: `${t('有序列表')} (⌘⇧8)`, run: () => toggleList(true), format: 'ol' },
     { label: '—', title: t('分割线'), run: () => insertBlock('---') },
     { label: t('图'), title: t('插入本地图片'), run: () => imageRef.current?.click() },
-    { label: 'B', title: t('加粗'), run: () => insert('**', '**', t('加粗文字')) },
-    { label: t('高'), title: t('高亮'), run: () => insert('==', '==', t('高亮文字')) },
+    { label: 'B', title: `${t('加粗')} (⌘B)`, run: () => insert('**', '**', t('加粗文字')), format: 'bold' },
+    { label: t('高'), title: `${t('高亮')} (⌘⇧H)`, run: () => insert('==', '==', t('高亮文字')), format: 'hl' },
     { label: t('码'), title: t('行内代码'), run: () => insert('`', '`', 'code') },
   ]
 
@@ -4461,6 +4707,7 @@ function DocRail(props) {
           : null,
       ),
       h('div', { className: 'ws-left-actions' },
+        h(IconButton, { icon: 'search', title: t('查找与替换'), onClick: () => setSearchOpen(value => !value) }),
         h(IconButton, { icon: 'chat', title: t('AI 对话修改'), onClick: onOpenAi }),
         h(IconButton, { icon: 'upload', title: t('上传文档（.md / .txt / .docx / .html）'), onClick: () => uploadRef.current?.click() }),
         h(IconButton, { icon: 'plus', title: t('新建草稿'), onClick: () => { store.addDoc(''); setSelectedBlock(null); toast(t('已新建草稿')) } }),
@@ -4501,6 +4748,16 @@ function DocRail(props) {
       value: doc.meta.title,
       onChange: event => store.updateMeta({ title: event.target.value }),
     }),
+    searchOpen
+      ? h('div', { className: 'ws-searchbar' },
+        h('input', { className: 'ws-input', value: findText, placeholder: t('查找'), onChange: event => setFindText(event.target.value), onKeyDown: event => { if (event.key === 'Enter') { event.preventDefault(); findNext() } } }),
+        h('input', { className: 'ws-input', value: replaceText, placeholder: t('替换为'), onChange: event => setReplaceText(event.target.value) }),
+        h('button', { type: 'button', className: 'ws-link', onClick: findNext }, t('下一个')),
+        h('button', { type: 'button', className: 'ws-link', onClick: replaceOne }, t('替换')),
+        h('button', { type: 'button', className: 'ws-link', onClick: replaceAll }, t('全部替换')),
+        h('button', { type: 'button', className: 'ws-link', onClick: () => setSearchOpen(false) }, t('关闭')),
+      )
+      : null,
     outline.length > 1
       ? h('div', { className: 'ws-outline' },
         h('span', { className: 'ws-outline-label' }, t('大纲')),
@@ -4517,13 +4774,23 @@ function DocRail(props) {
       )
       : null,
     h('div', { className: 'ws-toolbar' },
-      toolbar.map(item => h('button', {
-        key: item.label,
-        type: 'button',
-        className: 'ws-tool',
-        title: item.title,
-        onClick: item.run,
-      }, item.label)),
+      toolbar.map(item => {
+        const active = item.format === 'h2' ? formats.heading === 2
+          : item.format === 'h3' ? formats.heading === 3
+            : item.format === 'quote' ? formats.quote
+              : item.format === 'ul' ? formats.list === 'ul'
+                : item.format === 'ol' ? formats.list === 'ol'
+                  : item.format === 'bold' ? formats.bold
+                    : item.format === 'hl' ? formats.highlight
+                      : false
+        return h('button', {
+          key: item.label,
+          type: 'button',
+          className: 'ws-tool' + (active ? ' on' : ''),
+          title: item.title,
+          onClick: item.run,
+        }, item.label)
+      }),
     ),
     h('textarea', {
       ref: textareaRef,
@@ -4531,8 +4798,8 @@ function DocRail(props) {
       value: doc.text,
       spellCheck: false,
       placeholder: t('把公众号文案粘到这里。支持 Markdown：## 小节、> 引用、- 列表、![图片](url)、--- 分割线、**加粗**、==高亮==。'),
-      onSelect: onEditorCaret,
-      onClick: onEditorCaret,
+      onSelect: handleEditorSelect,
+      onClick: handleEditorSelect,
       onChange: event => store.updateDoc(current => ({
         ...current,
         text: event.target.value,
@@ -4574,7 +4841,21 @@ function DocRail(props) {
       },
       onKeyDown: event => {
         if (!(event.metaKey || event.ctrlKey)) return
-        if (event.key === 'z' && !event.shiftKey) { event.preventDefault(); store.undo() } else if ((event.key === 'z' && event.shiftKey) || event.key === 'y') { event.preventDefault(); store.redo() }
+        const key = event.key.toLowerCase()
+        if (key === 'z' && !event.shiftKey) { event.preventDefault(); store.undo(); return }
+        if ((key === 'z' && event.shiftKey) || key === 'y') { event.preventDefault(); store.redo(); return }
+        if (event.code === 'KeyF' && !event.shiftKey) { event.preventDefault(); setSearchOpen(true); return }
+        if (event.code === 'KeyB' && !event.shiftKey) { event.preventDefault(); insert('**', '**', t('加粗文字')); return }
+        if (event.code === 'KeyH' && event.shiftKey) { event.preventDefault(); insert('==', '==', t('高亮文字')); return }
+        if (event.code === 'KeyK') { event.preventDefault(); insert('[', '](https://)', t('链接文字')); return }
+        if (event.code === 'Digit1' || event.code === 'Digit2' || event.code === 'Digit3') {
+          if (event.shiftKey) return
+          event.preventDefault()
+          toggleHeading(Number(event.code.slice(-1)))
+          return
+        }
+        if (event.shiftKey && event.code === 'Digit7') { event.preventDefault(); toggleList(false); return }
+        if (event.shiftKey && event.code === 'Digit8') { event.preventDefault(); toggleList(true); return }
       },
     }),
     h('div', { className: 'ws-left-foot' },
@@ -4714,6 +4995,9 @@ function PreviewStage(props) {
       element.scrollIntoView({ block: 'center', behavior: 'smooth' })
     }
   }, [selectedBlock])
+  const [dragIndex, setDragIndex] = React.useState(null)
+  const [cropBlock, setCropBlock] = React.useState(null)
+  const [cropBusy, setCropBusy] = React.useState(false)
   const [captionBlock, setCaptionBlock] = React.useState(null)
   const [captionDraft, setCaptionDraft] = React.useState('')
   const startCaption = (blockIndex) => {
@@ -4732,6 +5016,40 @@ function PreviewStage(props) {
     toast(t('图注已更新'))
   }
   const cancelCaption = () => { setCaptionBlock(null); setCaptionDraft('') }
+  const cropImage = async (blockIndex, ratio) => {
+    const block = sourceBlocks[blockIndex]
+    if (!block || block.type !== 'image') return
+    setCropBusy(true)
+    try {
+      const source = expandImageRefs(block.src)
+      if (!source.startsWith('data:')) throw new Error(t('远程图片暂时只能换图，不能直接裁剪'))
+      const image = await loadImage(source)
+      const targetRatio = Number(ratio)
+      let sourceWidth = image.width
+      let sourceHeight = image.height
+      if (sourceWidth / sourceHeight > targetRatio) sourceWidth = Math.round(sourceHeight * targetRatio)
+      else sourceHeight = Math.round(sourceWidth / targetRatio)
+      const sourceX = Math.round((image.width - sourceWidth) / 2)
+      const sourceY = Math.round((image.height - sourceHeight) / 2)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.min(1200, sourceWidth)
+      canvas.height = Math.round(canvas.width / targetRatio)
+      const context = canvas.getContext('2d')
+      if (context === null) throw new Error(t('当前环境无法处理图片'))
+      context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height)
+      const compressed = await compressImage(canvas.toDataURL('image/jpeg', 0.9), 1200)
+      const ref = await materializeImage(compressed.dataUrl, { kind: 'content' })
+      store.updateDoc(current => ({ ...current, text: replaceImageSource(current.text, block.lines[0], ref) }))
+      if (typeof onImagesChanged === 'function') onImagesChanged()
+      setCropBlock(null)
+      toast(t('图片已裁剪'))
+    } catch (error) {
+      toast(error.message || t('图片处理失败'), 'error')
+    } finally {
+      setCropBusy(false)
+    }
+  }
+
   const replaceImage = (blockIndex) => {
     pendingReplaceRef.current = blockIndex
     previewImageRef.current?.click()
@@ -4803,6 +5121,34 @@ function PreviewStage(props) {
     setCaptionBlock(null)
   }
 
+  const moveBlockTo = (from, to) => {
+    if (from === to || from < 0 || to < 0) return
+    const groups = sourceBlocks.map(block => ({ start: block.lines[0], end: block.lines[1] }))
+    const lines = doc.text.split('\n')
+    const source = groups[from]
+    const target = groups[to]
+    if (!source || !target) return
+    const blockLines = lines.slice(source.start, source.end + 1)
+    const remaining = [...lines.slice(0, source.start), ...lines.slice(source.end + 1)]
+    const shift = to > from ? source.end - source.start + 1 : 0
+    const insertAt = target.start - shift
+    const next = [...remaining.slice(0, insertAt), ...blockLines, ...remaining.slice(insertAt)].join('\n')
+    store.updateDoc(current => ({ ...current, text: next }))
+    setSelectedBlock(to > from ? to : to)
+    setDragIndex(null)
+  }
+
+  const duplicateBlock = (index) => {
+    const block = sourceBlocks[index]
+    if (!block) return
+    const lines = doc.text.split('\n')
+    const copy = lines.slice(block.lines[0], block.lines[1] + 1)
+    const next = [...lines.slice(0, block.lines[1] + 1), ...copy, ...lines.slice(block.lines[1] + 1)].join('\n')
+    store.updateDoc(current => ({ ...current, text: next }))
+    setSelectedBlock(index + 1)
+    toast(t('已复制这一段'))
+  }
+
   const removeBlock = (index) => {
     const groups = sourceBlocks.map(block => ({ start: block.lines[0], end: block.lines[1] }))
     const lines = doc.text.split('\n')
@@ -4839,6 +5185,7 @@ function PreviewStage(props) {
         h(ArticleBody, {
           root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel,
           captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption,
+          dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage,
         }),
       ),
       h('input', {
@@ -4872,7 +5219,7 @@ function PreviewStage(props) {
 }
 
 function ArticleBody(props) {
-  const { root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption } = props
+  const { root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption, dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage } = props
   const [hovered, setHovered] = React.useState(null)
   const children = root.children
 
@@ -4887,14 +5234,32 @@ function ArticleBody(props) {
     const isSelected = selectedBlock === blockIndex
     return h('div', {
       key: index,
-      className: 'ws-block' + (isSelected ? ' selected' : '') + (hovered === blockIndex ? ' hovered' : ''),
+      className: 'ws-block' + (isSelected ? ' selected' : '') + (hovered === blockIndex ? ' hovered' : '') + (dragIndex === blockIndex ? ' dragging' : ''),
       'data-block': blockIndex,
+      draggable: true,
+      onDragStart: () => setDragIndex(blockIndex),
+      onDragEnd: () => setDragIndex(null),
+      onDragOver: event => event.preventDefault(),
+      onDrop: event => { event.preventDefault(); moveBlockTo(dragIndex, blockIndex) },
       onMouseEnter: () => setHovered(blockIndex),
       onMouseLeave: () => setHovered(value => (value === blockIndex ? null : value)),
       onClick: () => setSelectedBlock(isSelected ? null : blockIndex),
     },
     isSelected ? h('div', { className: 'ws-block-tag' }, blockLabel(block)) : null,
     content,
+    cropBlock === blockIndex && block.type === 'image'
+      ? h('div', { className: 'ws-caption-editor', onClick: event => event.stopPropagation() },
+        h('span', { className: 'ws-hint' }, t('裁剪比例')),
+        [['1', '1:1'], ['1.3333', '4:3'], ['1.7778', '16:9']].map(([ratio, label]) => h('button', {
+          key: ratio,
+          type: 'button',
+          className: 'ws-link',
+          disabled: cropBusy,
+          onClick: () => cropImage(blockIndex, ratio),
+        }, label)),
+        h('button', { type: 'button', className: 'ws-link', onClick: () => setCropBlock(null) }, t('取消')),
+      )
+      : null,
     captionBlock === blockIndex && block.type === 'image'
       ? h('div', { className: 'ws-caption-editor', onClick: event => event.stopPropagation() },
         h('input', {
@@ -4914,8 +5279,10 @@ function ArticleBody(props) {
       )
       : null,
     h('div', { className: 'ws-block-tools' },
+      block.type === 'image' ? h('button', { type: 'button', title: t('裁剪图片'), onClick: event => { event.stopPropagation(); setCropBlock(blockIndex) } }, h(Icon, { name: 'image', size: 12 })) : null,
       block.type === 'image' ? h('button', { type: 'button', title: t('编辑图注'), onClick: event => { event.stopPropagation(); startCaption(blockIndex) } }, h(Icon, { name: 'pen', size: 12 })) : null,
       block.type === 'image' ? h('button', { type: 'button', title: t('替换图片'), onClick: event => { event.stopPropagation(); replaceImage(blockIndex) } }, h(Icon, { name: 'image', size: 12 })) : null,
+      h('button', { type: 'button', title: t('复制这一段'), onClick: event => { event.stopPropagation(); duplicateBlock(blockIndex) } }, h(Icon, { name: 'copy', size: 12 })),
       h('button', { type: 'button', title: t('上移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, -1) } }, h(Icon, { name: 'arrowUp', size: 12 })),
       h('button', { type: 'button', title: t('下移'), onClick: event => { event.stopPropagation(); moveBlock(blockIndex, 1) } }, h(Icon, { name: 'arrowDown', size: 12 })),
       h('button', { type: 'button', title: t('删除这一段'), onClick: event => { event.stopPropagation(); removeBlock(blockIndex) } }, h(Icon, { name: 'trash', size: 12 })),
@@ -4938,7 +5305,7 @@ const TABS = [
 
 /* ===== src/ui-design.mjs ===== */
 function DesignPanel(props) {
-  const { store, design, doc, analysis, features, hostStatus, setHostStatus, tab, setTab, toast, parsed, article, showClose, onClose, autoRefine, setAutoRefine, refining, onRefineNow } = props
+  const { store, design, doc, analysis, features, hostStatus, setHostStatus, tab, setTab, toast, parsed, article, selectedBlock, showClose, onClose, autoRefine, setAutoRefine, refining, onRefineNow, takeSnapshot, snapshotVersion } = props
   return h('aside', { className: 'ws-right' },
     h('div', { className: 'ws-tabs' },
       TABS.map(entry => h('button', {
@@ -4951,7 +5318,7 @@ function DesignPanel(props) {
     ),
     h('div', { className: 'ws-panel' },
       h('div', { className: 'ws-pane' + (tab === 'ai' ? '' : ' ws-pane-hidden') },
-        h(AiSection, { store, design, doc, parsed, hostStatus, toast })),
+        h(AiSection, { store, design, doc, parsed, hostStatus, toast, selectedBlock, takeSnapshot })),
       h('div', { className: 'ws-pane' + (tab === 'theme' ? '' : ' ws-pane-hidden') },
         h(ThemeSection, { store, design, analysis, doc, toast, autoRefine, setAutoRefine, refining, onRefineNow })),
       h('div', { className: 'ws-pane' + (tab === 'type' ? '' : ' ws-pane-hidden') },
@@ -4960,14 +5327,14 @@ function DesignPanel(props) {
         h(DecorSection, { store, design, toast })),
       h('div', { className: 'ws-pane' + (tab === 'publish' ? '' : ' ws-pane-hidden') },
         h(PublishSection, {
-          store, design, doc, parsed, article, features, hostStatus, setHostStatus, toast,
+          store, design, doc, parsed, article, features, hostStatus, setHostStatus, toast, takeSnapshot, snapshotVersion,
         })),
     ),
   )
 }
 
 function AiSection(props) {
-  const { store, design, doc, parsed, hostStatus, toast } = props
+  const { store, design, doc, parsed, hostStatus, toast, selectedBlock, takeSnapshot } = props
   const [messages, setMessages] = React.useState([])
   const [input, setInput] = React.useState('')
   const [busy, setBusy] = React.useState(false)
@@ -4975,6 +5342,8 @@ function AiSection(props) {
   const [phase, setPhase] = React.useState('')
   const [chunked, setChunked] = React.useState(false)
   const [pending, setPending] = React.useState(null)
+  const [scopeSelection, setScopeSelection] = React.useState(true)
+  const abortRef = React.useRef(null)
   const listRef = React.useRef(null)
   const inputRef = React.useRef(null)
 
@@ -4982,6 +5351,14 @@ function AiSection(props) {
     const element = listRef.current
     if (element) element.scrollTop = element.scrollHeight
   }, [messages, busy])
+
+  const sourceBlocks = parsed.blocks.filter(block => block.type !== 'title')
+  const selectedEntry = selectedBlock !== null ? sourceBlocks[selectedBlock] : undefined
+  const canScope = selectedEntry !== undefined && ['paragraph', 'heading', 'quote', 'list'].includes(selectedEntry.type)
+  React.useEffect(() => {
+    if (canScope) setScopeSelection(true)
+  }, [selectedBlock, canScope])
+  const scopeBlock = canScope && scopeSelection ? selectedEntry : null
 
   const send = async (override) => {
     const instruction = String(override ?? input).trim()
@@ -4993,13 +5370,15 @@ function AiSection(props) {
     }
     setInput('')
     const sentText = doc.text
+    const scopeLines = scopeBlock === null ? null : doc.text.split('\n').slice(scopeBlock.lines[0], scopeBlock.lines[1] + 1)
+    const scopeText = scopeLines === null ? '' : scopeLines.join('\n')
     setMessages(list => [...list, { role: 'user', content: instruction }])
     setBusy(true)
     setProgress(0)
     setPhase('')
     try {
       let value
-      const useChunks = chunked && doc.text.length > LONG_TEXT_CHUNK_THRESHOLD
+      const useChunks = scopeLines === null && chunked && doc.text.length > LONG_TEXT_CHUNK_THRESHOLD
       if (useChunks) {
         const chunks = splitMarkdownChunks(doc.text, 3200)
         if (chunks.length === 0) throw Object.assign(new Error(t('文章为空，无法分段')), { code: 'text-required' })
@@ -5023,23 +5402,41 @@ function AiSection(props) {
         value = { reply: `分段改写完成（${chunks.length} 段），版式未改。`, text: rewritten.join('\n\n') }
       } else {
         setPhase(t('模型生成中'))
+        const controller = typeof AbortController === 'function' ? new AbortController() : null
+        abortRef.current = controller
+        const effectiveInstruction = scopeLines === null
+          ? instruction
+          : `${instruction}\n\n（只改写下面这一段，不要改其他段落；保持 Markdown 结构；不要输出 design 和 meta。）`
         value = await callHostStream('aiEditStream', {
-          instruction,
-          text: doc.text,
+          instruction: effectiveInstruction,
+          text: scopeLines === null ? doc.text : scopeText,
           title: doc.meta.title,
           design: doc.design,
           meta: { author: doc.meta.author, digest: doc.meta.digest },
           history: messages.slice(-6).map(message => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
-        }, { timeoutMs: 150000, onProgress: chars => setProgress(chars) })
+        }, { timeoutMs: 150000, onProgress: chars => setProgress(chars), signal: controller?.signal })
       }
 
       const current = store.doc
       const typedMeanwhile = typeof value.text === 'string' && current.text !== sentText
-      const nextText = typeof value.text === 'string' && value.text.trim() !== '' && value.text !== current.text && !typedMeanwhile
-        ? value.text
-        : undefined
+      let nextText
+      if (scopeLines !== null) {
+        if (typeof value.text !== 'string' || value.text.trim() === '') {
+          throw Object.assign(new Error(t('AI 没有返回选中段落的改写结果')), { code: 'selection-empty' })
+        }
+        if (!typedMeanwhile) {
+          const currentLines = current.text.split('\n')
+          nextText = [
+            ...currentLines.slice(0, scopeBlock.lines[0]),
+            ...value.text.trim().split('\n'),
+            ...currentLines.slice(scopeBlock.lines[1] + 1),
+          ].join('\n')
+        }
+      } else if (typeof value.text === 'string' && value.text.trim() !== '' && value.text !== current.text && !typedMeanwhile) {
+        nextText = value.text
+      }
       let nextDesign
-      if (value.design && typeof value.design === 'object') {
+      if (scopeLines === null && value.design && typeof value.design === 'object') {
         const theme = THEMES.find(entry => entry.id === value.design.themeId)
         const themeId = theme === undefined ? current.design.themeId : theme.id
         const variant = theme === undefined
@@ -5054,7 +5451,7 @@ function AiSection(props) {
             : { ...(current.design.overrides ?? {}), ...(value.design.overrides ?? {}) },
         }
       }
-      const nextMeta = value.meta && typeof value.meta === 'object' ? { ...current.meta, ...value.meta } : undefined
+      const nextMeta = scopeLines === null && value.meta && typeof value.meta === 'object' ? { ...current.meta, ...value.meta } : undefined
 
       const changes = []
       if (nextText !== undefined) changes.push(t('正文'))
@@ -5068,7 +5465,7 @@ function AiSection(props) {
           text: nextText,
           design: nextDesign,
           meta: nextMeta,
-          reply: value.reply || t('已修改'),
+          reply: scopeLines === null ? (value.reply || t('已修改')) : (value.reply ? `${t('已改写选中段落')}。${value.reply}` : t('已改写选中段落')),
           model: value.model?.model ?? '',
           parseError: value.parseError === true,
           changes,
@@ -5093,8 +5490,9 @@ function AiSection(props) {
     }
   }
 
-  const applyPending = () => {
+  const applyPending = async () => {
     if (pending === null) return
+    if (typeof takeSnapshot === 'function') await takeSnapshot('before-ai')
     const applied = []
     const patch = {}
     const current = store.doc
@@ -5202,6 +5600,15 @@ function AiSection(props) {
         ),
       )
       : null,
+    canScope
+      ? h('div', { className: 'ws-chat-compose-option' },
+        h('div', { className: 'ws-scope-row' },
+          h('span', { className: 'ws-hint' }, `${t('当前选中')}：${selectedEntry.text.slice(0, 24)}${selectedEntry.text.length > 24 ? '…' : ''}`),
+          h('button', { type: 'button', className: 'ws-chip' + (scopeSelection ? ' on' : ''), onClick: () => setScopeSelection(true) }, t('只改选中段')),
+          h('button', { type: 'button', className: 'ws-chip' + (!scopeSelection ? ' on' : ''), onClick: () => setScopeSelection(false) }, t('改整篇')),
+        ),
+      )
+      : null,
     doc.text.length > LONG_TEXT_CHUNK_THRESHOLD
       ? h('div', { className: 'ws-chat-compose-option' },
         h(Toggle, {
@@ -5229,6 +5636,7 @@ function AiSection(props) {
       }),
       h('div', { className: 'ws-row' },
         h(Button, { variant: 'primary', disabled: busy || pending !== null || input.trim() === '', onClick: () => send() }, busy ? t('修改中…') : t('发送')),
+        busy ? h(Button, { variant: 'ghost', onClick: () => abortRef.current?.abort() }, t('取消')) : null,
         h('span', { className: 'ws-hint' }, t('Enter 发送，Shift+Enter 换行')),
       ),
     ),
@@ -5269,10 +5677,42 @@ function ThemeMiniPreview({ theme }) {
   )
 }
 
+const THEME_FAVORITES_KEY = 'dsh.wechat-studio.themeFavorites.v1'
+const THEME_RECENT_KEY = 'dsh.wechat-studio.themeRecent.v1'
+
+function loadThemeList(key) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter(id => typeof id === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 function ThemeSection(props) {
   const { store, design, analysis, doc, toast, autoRefine, setAutoRefine, refining, onRefineNow } = props
+  const [filter, setFilter] = React.useState('all')
+  const [favorites, setFavorites] = React.useState(() => loadThemeList(THEME_FAVORITES_KEY))
+  const [recent, setRecent] = React.useState(() => loadThemeList(THEME_RECENT_KEY))
   const activeTheme = THEMES.find(theme => theme.id === design.themeId) ?? THEMES[0]
+  const toggleFavorite = (themeId) => {
+    setFavorites((list) => {
+      const next = list.includes(themeId) ? list.filter(id => id !== themeId) : [themeId, ...list]
+      try { localStorage.setItem(THEME_FAVORITES_KEY, JSON.stringify(next)) } catch { /* private mode */ }
+      return next
+    })
+  }
+  const visibleThemes = filter === 'favorites'
+    ? favorites.map(id => THEMES.find(theme => theme.id === id)).filter(Boolean)
+    : filter === 'recent'
+      ? recent.map(id => THEMES.find(theme => theme.id === id)).filter(Boolean)
+      : THEMES
   const applyTheme = (theme) => {
+    setRecent((list) => {
+      const next = [theme.id, ...list.filter(id => id !== theme.id)].slice(0, 6)
+      try { localStorage.setItem(THEME_RECENT_KEY, JSON.stringify(next)) } catch { /* private mode */ }
+      return next
+    })
     store.updateDoc(current => {
       const previous = current.design?.overrides ?? {}
       // Keep a deliberately chosen accent; theme decoration and type reset.
@@ -5318,31 +5758,62 @@ function ThemeSection(props) {
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('主题库')), h('span', { className: 'ws-group-note' }, `${THEMES.reduce((count, entry) => count + entry.variants.length, 0)} 个版式`)),
-      h('div', { className: 'ws-themes' },
-        THEMES.map(theme => h('button', {
-          key: theme.id,
+      h('div', { className: 'ws-chips ws-theme-filter' },
+        [['all', t('全部')], ['favorites', t('收藏')], ['recent', t('最近')]].map(([id, label]) => h('button', {
+          key: id,
           type: 'button',
-          className: 'ws-theme' + (theme.id === activeTheme.id ? ' on' : ''),
-          onClick: () => applyTheme(theme),
-        },
-        h(ThemeMiniPreview, { theme }),
-        h('span', { className: 'ws-theme-meta' },
-          h('span', { className: 'ws-theme-name' }, theme.name),
-          h('span', { className: 'ws-theme-tag' }, theme.tagline.slice(0, 14)),
-        ),
-        ),
-        ),
+          className: 'ws-chip' + (filter === id ? ' on' : ''),
+          onClick: () => setFilter(id),
+        }, label)),
       ),
+      visibleThemes.length === 0
+        ? h('p', { className: 'ws-hint' }, t('还没有收藏主题；点主题卡上的星标即可收藏。'))
+        : h('div', { className: 'ws-themes' },
+          visibleThemes.map(theme => h('div', {
+            key: theme.id,
+            role: 'button',
+            tabIndex: 0,
+            className: 'ws-theme' + (theme.id === activeTheme.id ? ' on' : ''),
+            onClick: () => applyTheme(theme),
+            onKeyDown: event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); applyTheme(theme) } },
+          },
+          h(ThemeMiniPreview, { theme }),
+          h('span', { className: 'ws-theme-meta' },
+            h('span', { className: 'ws-theme-name-row' },
+              h('span', { className: 'ws-theme-name' }, theme.name),
+              h('button', {
+                type: 'button',
+                className: 'ws-theme-fav' + (favorites.includes(theme.id) ? ' on' : ''),
+                title: favorites.includes(theme.id) ? t('取消收藏') : t('收藏主题'),
+                onClick: event => { event.stopPropagation(); toggleFavorite(theme.id) },
+              }, favorites.includes(theme.id) ? '★' : '☆'),
+            ),
+            h('span', { className: 'ws-theme-tag' }, theme.tagline.slice(0, 14)),
+          ),
+          )),
+        ),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('版式变体'))),
-      h('div', { className: 'ws-chips' },
+      h('div', { className: 'ws-variant-row' },
         activeTheme.variants.map(variant => h('button', {
           key: variant.id,
           type: 'button',
-          className: 'ws-chip' + (variant.id === design.variantId ? ' on' : ''),
+          className: 'ws-variant-card' + (variant.id === design.variantId ? ' on' : ''),
           onClick: () => setVariant(variant.id),
-        }, variant.name)),
+        },
+        h('span', {
+          className: 'ws-variant-mini',
+          'data-title-style': variant.titleStyle,
+          style: { background: activeTheme.palette.bg, borderColor: activeTheme.palette.border },
+        },
+        h('span', { className: 'ws-variant-title', style: { fontFamily: activeTheme.type.titleFont, color: activeTheme.palette.text } }, t('标题')),
+        h('span', { className: 'ws-variant-rule', style: { background: activeTheme.palette.accent } }),
+        h('span', { className: 'ws-variant-line', style: { background: activeTheme.palette.secondary } }),
+        h('span', { className: 'ws-variant-line short', style: { background: activeTheme.palette.secondary } }),
+        ),
+        h('span', { className: 'ws-variant-name' }, variant.name),
+        )),
       ),
       h('p', { className: 'ws-hint' }, activeTheme.tagline),
     ),
@@ -5671,7 +6142,7 @@ function DecorSection(props) {
  * ------------------------------------------------------------------ */
 
 function PublishSection(props) {
-  const { store, design, doc, parsed, article, features, hostStatus, setHostStatus, toast } = props
+  const { store, design, doc, parsed, article, features, hostStatus, setHostStatus, toast, takeSnapshot, snapshotVersion } = props
   const [configOpen, setConfigOpen] = React.useState(false)
   const [appId, setAppId] = React.useState('')
   const [appSecret, setAppSecret] = React.useState('')
@@ -5687,6 +6158,8 @@ function PublishSection(props) {
   const [draftBusy, setDraftBusy] = React.useState(false)
   const [deleteArm, setDeleteArm] = React.useState('')
   const [importingDraft, setImportingDraft] = React.useState('')
+  const [snapshots, setSnapshots] = React.useState([])
+  const [snapshotBusy, setSnapshotBusy] = React.useState(false)
   const [networkState, setNetworkState] = React.useState({ phase: 'loading', mode: 'system', proxyUrl: '', error: '' })
   const [networkMode, setNetworkMode] = React.useState('system')
   const [networkProxy, setNetworkProxy] = React.useState('')
@@ -5714,9 +6187,38 @@ function PublishSection(props) {
   React.useEffect(() => () => clearTimeout(deleteArmTimer.current), [])
   const coverInputRef = React.useRef(null)
   const title = (doc.meta.title.trim() || parsed.title || '').trim()
+  const savedMediaId = typeof doc.meta.draftMediaId === 'string' ? doc.meta.draftMediaId.trim() : ''
   const author = doc.meta.author.trim()
   const digest = doc.meta.digest.trim() || deriveDigest(parsed.blocks)
   const coverDataUrl = doc.meta.coverDataUrl || ''
+  const coverLayout = typeof doc.meta.coverLayout === 'string' ? doc.meta.coverLayout : 'left'
+
+  const refreshSnapshots = React.useCallback(async () => {
+    try { setSnapshots(await listSnapshots(doc.id, 8)) } catch { setSnapshots([]) }
+  }, [doc.id])
+  React.useEffect(() => { refreshSnapshots() }, [refreshSnapshots, snapshotVersion])
+  const saveManualSnapshot = async () => {
+    if (typeof takeSnapshot !== 'function') return
+    setSnapshotBusy(true)
+    try {
+      await takeSnapshot('manual', true)
+      await refreshSnapshots()
+    } finally {
+      setSnapshotBusy(false)
+    }
+  }
+  const restoreSnapshot = async (snapshot) => {
+    if (typeof takeSnapshot === 'function') await takeSnapshot('before-restore')
+    store.updateDoc(current => ({
+      ...current,
+      text: snapshot.text,
+      design: snapshot.design,
+      meta: { ...current.meta, ...snapshot.meta },
+    }))
+    toast(t('已恢复快照'))
+  }
+
+  const previewHtmlLength = React.useMemo(() => serializeNodes(article.nodes).length, [article])
 
   const preflight = React.useMemo(() => {
     const checks = []
@@ -5739,26 +6241,26 @@ function PublishSection(props) {
       if (remoteImages.some(url => !/^https:/i.test(url))) push('warn', t('外链图片建议使用 HTTPS'), `${remoteImages.length}`)
       else push('ok', t('外链图片 {count} 张，发布时会转存', { count: remoteImages.length }), '')
     }
-    const htmlLength = serializeNodes(article.nodes).length
+    const htmlLength = previewHtmlLength
     if (htmlLength > 950 * 1024) push('error', t('正文 HTML 超过 950KB，删掉图片或缩短正文'), formatSize(htmlLength))
     else if (htmlLength > 800 * 1024) push('warn', t('正文 HTML 约 {size}，接近微信上限', { size: formatSize(htmlLength) }), '')
     if (coverDataUrl !== '' || doc.meta.coverCustom === true) push('ok', t('封面已就绪'), '')
     else push('warn', t('封面还在生成'), t('等封面出现或手动上传'))
     if (bundleIds.length > 0) push('ok', t('合集共 {count} 篇', { count: bundleIds.length + 1 }), t('保存时会逐篇上传'))
     return checks
-  }, [article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length])
+  }, [previewHtmlLength, article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length])
 
   React.useEffect(() => {
     // Keep the generated cover in step with the current theme; a cover the user
     // uploaded themselves stays untouched.
     if (doc.meta.coverCustom === true) return
     try {
-      const generated = renderCover({ title, design })
+      const generated = renderCover({ title, design, layout: coverLayout })
       if (generated !== coverDataUrl) store.updateMeta({ coverDataUrl: generated })
     } catch {
       // Canvas may be unavailable in unusual embedders; the publish step reports it.
     }
-  }, [title, design.themeId, design.variantId, design.colors.accent, coverDataUrl, doc.meta.coverCustom])
+  }, [title, design.themeId, design.variantId, design.colors.accent, coverDataUrl, doc.meta.coverCustom, coverLayout])
 
   const regenerateCover = () => {
     try {
@@ -5962,6 +6464,7 @@ function PublishSection(props) {
     setResult(null)
     setError(null)
     setSteps([])
+    if (typeof takeSnapshot === 'function') await takeSnapshot('before-publish')
     const push = (label, state, detail) => setSteps(list => [...list, { label, state, detail }])
     const markLastDone = () => setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done' } : step)))
 
@@ -6053,11 +6556,23 @@ function PublishSection(props) {
         })
       }
 
+      if (mode === 'update') {
+        if (savedMediaId === '') throw new Error(t('当前草稿还没有关联公众号草稿，请先另存为新草稿'))
+        if (preparedArticles.length !== 1) throw new Error(t('覆盖更新只支持单篇文章；多图文请另存为新草稿'))
+        push(t('更新公众号草稿'), 'running')
+        const updated = await callHost('updateDraft', { mediaId: savedMediaId, articles: preparedArticles }, { timeoutMs: 120000 })
+        const warnings = Array.isArray(updated.warnings) ? updated.warnings : []
+        setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done', detail: warnings.join('；') || updated.mediaId } : step)))
+        setResult({ kind: 'draft', mediaId: updated.mediaId, warnings, count: 1, updated: true })
+        toast(t('已更新公众号草稿'), 'success')
+        return
+      }
       push(`写入公众号草稿箱${preparedArticles.length > 1 ? `（${preparedArticles.length} 篇）` : ''}`, 'running')
       const draft = await callHost('createDraft', { articles: preparedArticles }, { timeoutMs: 120000 })
       const warnings = Array.isArray(draft.warnings) ? draft.warnings : []
       setSteps(list => list.map((step, index) => (index === list.length - 1 ? { ...step, state: 'done', detail: warnings.join('；') || draft.mediaId } : step)))
-      setResult({ kind: 'draft', mediaId: draft.mediaId, warnings, count: preparedArticles.length })
+      if (preparedArticles.length === 1 && typeof draft.mediaId === 'string') store.updateMeta({ draftMediaId: draft.mediaId })
+      setResult({ kind: 'draft', mediaId: draft.mediaId, warnings, count: preparedArticles.length, updated: false })
 
       if (mode === 'publish') {
         push(t('提交发布'), 'running')
@@ -6240,11 +6755,39 @@ function PublishSection(props) {
       coverDataUrl !== ''
         ? h('img', { className: 'ws-cover', src: coverDataUrl, alt: t('封面预览') })
         : h('div', { className: 'ws-cover ws-cover-empty' }, t('封面生成中…')),
+      h('div', { className: 'ws-chips ws-cover-layouts' },
+        [['left', t('左对齐')], ['center', t('居中')], ['bottom', t('底部')], ['minimal', t('极简')]].map(([value, label]) => h('button', {
+          key: value,
+          type: 'button',
+          className: 'ws-chip' + (doc.meta.coverCustom !== true && coverLayout === value ? ' on' : ''),
+          onClick: () => store.updateMeta({ coverLayout: value, coverCustom: false }),
+        }, label)),
+      ),
       h('div', { className: 'ws-row' },
         h(Button, { onClick: regenerateCover, disabled: coverBusy }, t('按主题重绘')),
         h(Button, { onClick: () => coverInputRef.current?.click(), disabled: coverBusy }, coverBusy ? t('处理中…') : t('上传图片')),
         h('input', { ref: coverInputRef, type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: uploadCoverFile }),
       ),
+    ),
+    h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' },
+        h('span', null, t('历史版本')),
+        h('button', { type: 'button', className: 'ws-link', disabled: snapshotBusy, onClick: saveManualSnapshot }, snapshotBusy ? t('保存中…') : t('保存快照')),
+      ),
+      snapshots.length === 0
+        ? h('p', { className: 'ws-hint' }, t('暂无历史版本；AI 修改前和发布前会自动保存快照。'))
+        : h('div', { className: 'ws-snapshot-list' },
+          snapshots.map(snapshot => {
+            const reason = snapshot.reason === 'before-ai' ? t('AI 修改前') : snapshot.reason === 'before-publish' ? t('发布前') : snapshot.reason === 'before-restore' ? t('恢复前') : t('手动')
+            return h('div', { key: snapshot.id, className: 'ws-snapshot-row' },
+              h('span', { className: 'ws-snapshot-time' }, new Date(snapshot.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })),
+              h('span', { className: 'ws-snapshot-reason' }, reason),
+              h('span', { className: 'ws-snapshot-chars' }, `${snapshot.text.length} ${t('字')}`),
+              h('button', { type: 'button', className: 'ws-link', onClick: () => restoreSnapshot(snapshot) }, t('恢复')),
+            )
+          }),
+        ),
+      h('p', { className: 'ws-hint' }, t('快照存在浏览器 IndexedDB，最多保留最近 20 个版本。')),
     ),
     h('div', { className: 'ws-card ws-preflight' },
       h('div', { className: 'ws-card-head' },
@@ -6266,7 +6809,12 @@ function PublishSection(props) {
       ),
     ),
     h('div', { className: 'ws-publish-actions' },
-      h(Button, { icon: 'save', variant: 'primary', disabled: busy || hostStatus.phase === 'error', onClick: () => runPublish('draft') }, busy ? t('处理中…') : t('保存到草稿箱')),
+      savedMediaId !== ''
+        ? h(Button, { icon: 'save', variant: 'primary', disabled: busy || hostStatus.phase === 'error', onClick: () => runPublish('update') }, busy ? t('处理中…') : t('更新当前草稿'))
+        : h(Button, { icon: 'save', variant: 'primary', disabled: busy || hostStatus.phase === 'error', onClick: () => runPublish('draft') }, busy ? t('处理中…') : t('保存到草稿箱')),
+      savedMediaId !== ''
+        ? h(Button, { disabled: busy || hostStatus.phase === 'error', onClick: () => runPublish('draft') }, t('另存新草稿'))
+        : null,
       confirmPublish
         ? h('div', { className: 'ws-confirm' },
           h('span', null, t('直接发布会占用当天发布次数，确认？')),
@@ -6275,6 +6823,9 @@ function PublishSection(props) {
         )
         : h(Button, { icon: 'send', variant: 'solid', disabled: busy || hostStatus.phase === 'error', onClick: () => setConfirmPublish(true) }, t('直接发布')),
     ),
+    savedMediaId !== ''
+      ? h('p', { className: 'ws-hint' }, t('这篇已关联公众号草稿；更新会覆盖后台那一篇。'))
+      : null,
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },
         h('span', null, t('公众号草稿箱')),
@@ -6368,7 +6919,7 @@ function wrapCoverTitle(context, title, maxWidth) {
   return lines
 }
 
-function renderCover({ title, design }) {
+function renderCover({ title, design, layout = 'left' }) {
   const canvas = document.createElement('canvas')
   canvas.width = 900
   canvas.height = 383
@@ -6376,52 +6927,67 @@ function renderCover({ title, design }) {
   if (context === null) throw new Error(t('当前环境无法生成封面'))
   const accent = design.colors.accent
   const ink = design.colors.accentInk
-  const gradient = context.createLinearGradient(0, 0, 900, 383)
-  gradient.addColorStop(0, mixHex(accent, '#000000', 0.05))
-  gradient.addColorStop(0.55, accent)
-  gradient.addColorStop(1, mixHex(accent, '#000000', 0.42))
-  context.fillStyle = gradient
-  context.fillRect(0, 0, 900, 383)
+  const out = ['left', 'center', 'bottom', 'minimal'].includes(layout) ? layout : 'left'
+  if (out === 'minimal') {
+    context.fillStyle = mixHex(accent, '#000000', 0.12)
+    context.fillRect(0, 0, 900, 383)
+  } else {
+    const gradient = context.createLinearGradient(0, 0, 900, 383)
+    gradient.addColorStop(0, mixHex(accent, '#000000', 0.05))
+    gradient.addColorStop(0.55, accent)
+    gradient.addColorStop(1, mixHex(accent, '#000000', 0.42))
+    context.fillStyle = gradient
+    context.fillRect(0, 0, 900, 383)
+  }
 
-  context.globalAlpha = 0.08
-  context.fillStyle = ink
-  context.beginPath()
-  context.arc(760, 90, 150, 0, Math.PI * 2)
-  context.fill()
-  context.beginPath()
-  context.arc(845, 330, 110, 0, Math.PI * 2)
-  context.fill()
-  context.globalAlpha = 1
+  if (out !== 'minimal') {
+    context.globalAlpha = 0.08
+    context.fillStyle = ink
+    context.beginPath()
+    context.arc(760, 90, 150, 0, Math.PI * 2)
+    context.fill()
+    context.beginPath()
+    context.arc(845, 330, 110, 0, Math.PI * 2)
+    context.fill()
+    context.globalAlpha = 1
+  }
 
-  context.strokeStyle = ink
-  context.globalAlpha = 0.35
-  context.lineWidth = 2
-  context.beginPath()
-  context.moveTo(64, 118)
-  context.lineTo(64 + 44, 118)
-  context.stroke()
-  context.globalAlpha = 1
+  const x = out === 'center' ? 450 : 64
+  context.textAlign = out === 'center' ? 'center' : 'left'
+  if (out !== 'minimal') {
+    context.strokeStyle = ink
+    context.globalAlpha = 0.35
+    context.lineWidth = 2
+    context.beginPath()
+    context.moveTo(out === 'center' ? 428 : 64, 118)
+    context.lineTo(out === 'center' ? 472 : 108, 118)
+    context.stroke()
+    context.globalAlpha = 1
+    context.fillStyle = ink
+    context.globalAlpha = 0.78
+    context.font = '600 20px "PingFang SC", "Microsoft YaHei", sans-serif'
+    context.fillText(design.decor.eyebrow || design.themeName, x, 100)
+    context.globalAlpha = 1
+  }
 
-  context.fillStyle = ink
-  context.globalAlpha = 0.78
-  context.font = '600 20px "PingFang SC", "Microsoft YaHei", sans-serif'
-  context.fillText(design.decor.eyebrow || design.themeName, 64, 100)
-  context.globalAlpha = 1
-
-  const size = title.length > 26 ? 44 : title.length > 16 ? 52 : 58
+  const size = out === 'minimal' ? (title.length > 26 ? 50 : title.length > 16 ? 58 : 66) : title.length > 26 ? 44 : title.length > 16 ? 52 : 58
   context.font = `700 ${size}px "PingFang SC", "Microsoft YaHei", sans-serif`
-  const lines = wrapCoverTitle(context, title || t('未命名文章'), 700)
+  const maxWidth = out === 'minimal' ? 760 : 700
+  const lines = wrapCoverTitle(context, title || t('未命名文章'), maxWidth)
   const lineHeight = Math.round(size * 1.32)
-  const startY = 118 + (3 - lines.length) * lineHeight * 0.5
+  const baseY = out === 'bottom' ? 238 : out === 'minimal' ? 220 : 118
+  const startY = baseY + (3 - lines.length) * lineHeight * 0.5
   context.fillStyle = ink
   lines.forEach((line, index) => {
-    context.fillText(line, 64, startY + lineHeight * (index + 1))
+    context.fillText(line, x, startY + lineHeight * (index + 1))
   })
 
-  context.globalAlpha = 0.7
-  context.font = '400 18px "PingFang SC", "Microsoft YaHei", sans-serif'
-  context.fillText(design.themeName + ' · ' + design.variantName, 64, 340)
-  context.globalAlpha = 1
+  if (out !== 'minimal') {
+    context.globalAlpha = 0.7
+    context.font = '400 18px "PingFang SC", "Microsoft YaHei", sans-serif'
+    context.fillText(design.themeName + ' · ' + design.variantName, x, 348)
+    context.globalAlpha = 1
+  }
   return canvas.toDataURL('image/png')
 }
 
@@ -6508,6 +7074,7 @@ const ICON_PATHS = {
   redo: 'M15 7l5 5-5 5 M20 12H10a5 5 0 0 0 0 10h3',
   panel: 'M4 4h16v16H4z M15 4v16',
   more: 'M6 12h.01 M12 12h.01 M18 12h.01',
+  search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z M15.5 15.5L21 21',
   chevron: 'M6 9l6 6 6-6',
   doc: 'M6 3h8l4 4v14H6z M14 3v4h4',
   key: 'M14 7a4 4 0 1 0-3.5 4L4 17v3h3v-2h2v-2h2l2-2a4 4 0 0 0 4-4z',
@@ -6605,6 +7172,9 @@ const STUDIO_CSS = `
 .ws-caption-editor{position:relative;display:flex;align-items:center;gap:6px;margin:4px 0 6px;padding:6px;border:1px solid var(--ws-border);border-radius:8px;background:var(--ws-surface);z-index:5}
 .ws-caption-editor .ws-input{height:28px;font-size:12px;flex:1}
 .ws-caption-editor .ws-link{white-space:nowrap;font-size:11px}
+.ws-searchbar{display:flex;align-items:center;gap:5px;margin:6px 14px 0;padding:5px;border:1px solid var(--ws-border);border-radius:8px;background:var(--ws-surface)}
+.ws-searchbar .ws-input{height:26px;font-size:12px;flex:1;min-width:0}
+.ws-searchbar .ws-link{white-space:nowrap}
 .ws-outline{display:flex;align-items:center;gap:6px;padding:6px 14px 0;overflow:hidden}
 .ws-outline-label{font-size:10px;color:var(--ws-muted);letter-spacing:.08em;flex:none}
 .ws-outline-list{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
@@ -6615,6 +7185,7 @@ const STUDIO_CSS = `
 .ws-outline-item[data-level="2"]{padding-left:4px}
 .ws-outline-item[data-level="3"]{padding-left:10px}
 .ws-toolbar{flex:none;display:flex;flex-wrap:wrap;gap:2px;padding:4px 12px 8px;border-bottom:1px solid var(--ws-border)}
+.ws-tool.on{background:var(--ws-surface2);border-color:var(--ws-border2);color:var(--ws-text);font-weight:600}
 .ws-tool{min-width:26px;height:26px;padding:0 6px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--ws-muted);font:inherit;font-size:12px;cursor:pointer}
 .ws-tool:hover{background:var(--ws-surface2);color:var(--ws-text);border-color:var(--ws-border)}
 .ws-editor{flex:1;min-height:0;width:100%;padding:14px 16px 24px;border:0;outline:none;resize:none;background:transparent;color:var(--ws-text);font:inherit;font-size:13.5px;line-height:1.9;tab-size:2}
@@ -6663,6 +7234,7 @@ const STUDIO_CSS = `
 .ws-article{width:100%;min-height:120px}
 .ws-block{position:relative;border-radius:4px}
 .ws-block:hover{outline:1px dashed rgba(0,0,0,.14);outline-offset:2px}
+.ws-block.dragging{opacity:.45;outline:1px dashed var(--ws-brand)}
 .ws-block.selected{outline:2px solid var(--ws-brand);outline-offset:2px}
 .ws-block-tools{position:absolute;top:-13px;right:2px;display:none;align-items:center;gap:1px;padding:2px;border-radius:7px;background:#212226;box-shadow:0 6px 18px rgba(0,0,0,.28);z-index:4}
 .ws-block:hover .ws-block-tools{display:flex}
@@ -6708,10 +7280,31 @@ const STUDIO_CSS = `
 .ws-theme-mini-line{height:3px;border-radius:2px;opacity:.36;width:88%}
 .ws-theme-mini-line.short{width:62%;opacity:.24}
 .ws-theme-mini-quote{margin-top:auto;font-size:8.5px;line-height:1.4;padding-left:6px;border-left:2px solid;opacity:.78;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-theme-name-row{display:flex;align-items:center;gap:4px}
+.ws-theme-fav{border:0;background:transparent;color:var(--ws-muted);font-size:13px;line-height:1;padding:1px 2px;margin-left:auto;cursor:pointer;border-radius:4px}
+.ws-theme-fav.on{color:var(--ws-brand)}
+.ws-theme-fav:hover{background:var(--ws-surface2)}
+.ws-theme-filter{margin-bottom:6px}
+.ws-variant-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ws-variant-card{display:flex;flex-direction:column;gap:4px;padding:0;border:1px solid var(--ws-border);border-radius:8px;background:var(--ws-bg);cursor:pointer;font:inherit;text-align:left;overflow:hidden}
+.ws-variant-card.on{border-color:var(--ws-brand);box-shadow:0 0 0 1px var(--ws-brand) inset}
+.ws-variant-mini{display:flex;flex-direction:column;gap:3px;padding:7px 8px;height:56px;border-bottom:1px solid;overflow:hidden}
+.ws-variant-title{font-size:11px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-variant-mini[data-title-style="ribbon"] .ws-variant-title{background:rgba(0,0,0,.06);padding:2px 4px;width:max-content;max-width:90%}
+.ws-variant-mini[data-title-style="boxed"] .ws-variant-title{border:1px solid currentColor;padding:1px 3px;width:max-content;max-width:90%}
+.ws-variant-mini[data-title-style="centered"] .ws-variant-title{text-align:center}
+.ws-variant-mini[data-title-style="vertical"] .ws-variant-title{border-left:2px solid;padding-left:4px}
+.ws-variant-mini[data-title-style="underline"] .ws-variant-title{text-decoration:underline;text-underline-offset:2px}
+.ws-variant-rule{height:2px;width:22px;border-radius:2px}
+.ws-variant-line{height:2px;width:82%;border-radius:2px;opacity:.35}
+.ws-variant-line.short{width:55%;opacity:.22}
+.ws-variant-name{font-size:11px;color:var(--ws-text);padding:0 8px 6px}
 .ws-theme-meta{display:flex;flex-direction:column;gap:1px;min-width:0}
 .ws-theme-name{font-size:12.5px;font-weight:600;color:var(--ws-text)}
 .ws-theme-tag{font-size:10.5px;color:var(--ws-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ws-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ws-scope-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ws-scope-row .ws-hint{flex:1;min-width:120px;margin:0}
 .ws-preset-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
 .ws-chip{height:28px;padding:0 11px;border:1px solid var(--ws-border);border-radius:99px;background:var(--ws-bg);color:var(--ws-text);font:inherit;font-size:12px;cursor:pointer}
 .ws-chip:hover{border-color:var(--ws-border2)}
@@ -6768,6 +7361,11 @@ const STUDIO_CSS = `
 .ws-audit-count{min-width:22px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ws-muted)}
 .ws-audit-row.warn .ws-audit-count{color:var(--ws-danger)}
 .ws-audit-row .ws-link{margin-left:auto}
+.ws-snapshot-list{display:flex;flex-direction:column;gap:3px}
+.ws-snapshot-row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ws-muted);min-height:24px}
+.ws-snapshot-time{font-variant-numeric:tabular-nums}
+.ws-snapshot-reason{color:var(--ws-text)}
+.ws-snapshot-chars{flex:1;text-align:right}
 .ws-preflight-list{display:flex;flex-direction:column;gap:5px}
 .ws-preflight-row{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ws-muted)}
 .ws-preflight-dot{width:6px;height:6px;border-radius:50%;background:var(--ws-success);flex:none}

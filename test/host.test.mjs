@@ -631,6 +631,28 @@ test('listDrafts：读取草稿箱并映射标题与时间', async () => {
   assert.equal(body.no_content, 0)
 })
 
+test('updateDraft：覆盖更新单篇草稿并保留 mediaId', async () => {
+  const { service, calls } = makeService({
+    routes: [
+      ['/cgi-bin/token', () => jsonResponse({ access_token: 'TOKEN-1', expires_in: 7200 })],
+      ['/cgi-bin/draft/update', () => jsonResponse({ errcode: 0, errmsg: 'ok' })],
+    ],
+  })
+  const result = await service.updateDraft({ mediaId: 'DRAFT-1', articles: [draftPayload()] })
+  assert.equal(result.mediaId, 'DRAFT-1')
+  assert.equal(result.updated, true)
+  const request = calls.find(call => call.url.includes('/cgi-bin/draft/update'))
+  const body = JSON.parse(request.init.body)
+  assert.equal(body.media_id, 'DRAFT-1')
+  assert.equal(body.index, 0)
+  assert.equal(body.articles.title, '一篇文章的标题')
+  await assert.rejects(() => service.updateDraft({ articles: [draftPayload()] }), error => error.code === 'media-required')
+  await assert.rejects(
+    () => service.updateDraft({ mediaId: 'DRAFT-1', articles: [draftPayload(), draftPayload()] }),
+    error => error.code === 'update-single-only',
+  )
+})
+
 test('getDraft：读取草稿正文并映射评论开关', async () => {
   const { service, calls } = makeService({
     routes: [
