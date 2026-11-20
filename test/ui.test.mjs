@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 
 import { JSDOM } from 'jsdom'
+import { createCanvas, Image as CanvasImage } from '@napi-rs/canvas'
 import { IDBFactory } from 'fake-indexeddb'
 import { saveDocsToDb, saveSnapshot, appendLedgerEvent } from '../src/docdb.mjs'
 import React from 'react'
@@ -24,8 +25,18 @@ async function mountPanel({ width = 1280, language = '', fetchImpl = null, seedD
   try { Object.defineProperty(globalThis, 'navigator', { value: window.navigator, configurable: true }) } catch { /* Node exposes a read-only navigator */ }
   Object.defineProperty(window.HTMLElement.prototype, 'clientWidth', { configurable: true, get() { return width } })
   window.matchMedia = window.matchMedia ?? (() => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
-  // jsdom has no canvas; cover generation catches the failure.
-  window.HTMLCanvasElement.prototype.getContext = () => null
+  const canvasMap = new WeakMap()
+  const nativeCanvas = (element) => {
+    let canvas = canvasMap.get(element)
+    if (canvas === undefined || canvas.width !== (element.width || 300) || canvas.height !== (element.height || 150)) {
+      canvas = createCanvas(element.width || 300, element.height || 150)
+      canvasMap.set(element, canvas)
+    }
+    return canvas
+  }
+  window.Image = CanvasImage
+  window.HTMLCanvasElement.prototype.getContext = function getContext(type) { return nativeCanvas(this).getContext(type) }
+  window.HTMLCanvasElement.prototype.toDataURL = function toDataURL(type, quality) { return nativeCanvas(this).toDataURL(type, quality) }
   if (language !== '') window.localStorage.setItem('dsh.wechat-studio.uiLang', language)
   if (Array.isArray(seedDocs) && seedDocs.length > 0) window.localStorage.setItem('dsh.wechat-studio.docs.v1', JSON.stringify({ docs: seedDocs, activeId: seedDocs[0].id }))
 
@@ -45,10 +56,13 @@ async function mountPanel({ width = 1280, language = '', fetchImpl = null, seedD
     indexedDB: idbFactory ?? undefined,
     AbortController,
     AbortSignal,
+    BroadcastChannel,
     URL,
     TextDecoder,
     TextEncoder,
     HTMLElement: window.HTMLElement,
+    Image: window.Image,
+    FileReader: window.FileReader,
     Element: window.Element,
     MutationObserver: window.MutationObserver,
     ResizeObserver: class { observe() {} disconnect() {} },
@@ -856,5 +870,116 @@ test('快照 diff、恢复与发布对账单在真实 IndexedDB 下工作', asyn
     root.unmount()
     dom.window.close()
     globalThis.indexedDB = undefined
+  }
+})
+
+
+test('四种封面布局生成不同的 900×383 图片', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '发布')
+    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 350))
+    const cover = () => {
+      const image = container.querySelector('img.ws-cover')
+      return image === null ? '' : image.getAttribute('src') ?? ''
+    }
+    const first = cover()
+    assert.ok(first.startsWith('data:image/png'))
+    for (const label of ['居中', '底部', '极简']) {
+      const button = [...container.querySelectorAll('button')].find(item => item.textContent.trim() === label)
+      button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+      await new Promise(resolve => setTimeout(resolve, 260))
+      const next = cover()
+      assert.ok(next.startsWith('data:image/png'))
+      assert.notEqual(next, first, label + ' layout changes the cover')
+    }
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('版式 DNA 可以从参考图提取并生成三个配方', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const reference = createCanvas(96, 96)
+    const context = reference.getContext('2d')
+    context.fillStyle = '#f5f1e8'
+    context.fillRect(0, 0, 96, 96)
+    context.fillStyle = '#c0392b'
+    context.fillRect(10, 10, 30, 30)
+    const buffer = reference.toBuffer('image/png')
+    const file = new window.File([buffer], 'reference.png', { type: 'image/png' })
+    const dnaGroup = [...container.querySelectorAll('.ws-group')].find(group => group.textContent.includes('版式 DNA'))
+    const input = dnaGroup.querySelector('input[type="file"]')
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] })
+    input.dispatchEvent(new window.Event('change', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 500))
+    assert.equal(container.querySelectorAll('.ws-dna-card').length, 3)
+    const save = [...container.querySelectorAll('.ws-dna-card button')].find(button => button.textContent.trim() === '存为我的版式')
+    save.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 150))
+    assert.ok(window.localStorage.getItem('dsh.wechat-studio.themeDna.v1'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('图片裁剪会生成新的图片地址并写回正文', async () => {
+  const source = createCanvas(240, 120)
+  const sourceContext = source.getContext('2d')
+  sourceContext.fillStyle = '#0e7c86'
+  sourceContext.fillRect(0, 0, 240, 120)
+  sourceContext.fillStyle = '#ffffff'
+  sourceContext.fillRect(80, 20, 80, 80)
+  const oldDataUrl = source.toDataURL('image/png')
+  const seed = [{
+    id: 'doc-crop',
+    text: `# 裁剪测试\n\n![配图](${oldDataUrl})`,
+    design: { themeId: 'column', variantId: 'essay', overrides: {} },
+    meta: { title: '裁剪测试', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false },
+    createdAt: 1,
+    updatedAt: 1,
+  }]
+  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
+  try {
+    const crop = [...container.querySelectorAll('button')].find(button => button.getAttribute('title') === '裁剪图片')
+    assert.ok(crop)
+    crop.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    const square = [...container.querySelectorAll('button')].find(button => button.textContent.trim() === '1:1')
+    assert.ok(square)
+    square.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 700))
+    const value = container.querySelector('.ws-editor').value
+    assert.ok(!value.includes(oldDataUrl), 'original image is replaced')
+    assert.match(value, /!\[配图\]\(data:image\/(jpeg|png)/)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+
+test('双窗口通过 BroadcastChannel 提示并载入另一版本', async () => {
+  const first = await mountPanel({ seedDocs: blockSeed })
+  const second = await mountPanel({ seedDocs: blockSeed })
+  try {
+    const copy = [...first.container.querySelectorAll('button')].find(button => button.getAttribute('title') === '复制这一段')
+    copy.dispatchEvent(new first.window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 1400))
+    assert.ok(second.container.querySelector('.ws-remote-banner'), 'remote banner appears in the other window')
+    const load = [...second.container.querySelectorAll('.ws-remote-banner button')].find(button => button.textContent.includes('载入'))
+    assert.ok(load)
+    load.dispatchEvent(new second.window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 250))
+    assert.equal((second.container.querySelector('.ws-editor').value.match(/第一段。/g) ?? []).length, 2)
+  } finally {
+    second.root.unmount()
+    second.dom.window.close()
+    first.root.unmount()
+    first.dom.window.close()
   }
 })
