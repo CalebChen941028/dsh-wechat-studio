@@ -5482,9 +5482,9 @@ function PreviewStage(props) {
     const secondLines = lines.slice(second.start, second.end + 1)
     const next = [
       ...lines.slice(0, first.start),
-      ...(a.start < b.start ? secondLines : firstLines),
+      ...secondLines,
       ...lines.slice(first.end + 1, second.start),
-      ...(a.start < b.start ? firstLines : secondLines),
+      ...firstLines,
       ...lines.slice(second.end + 1),
     ].join('\n')
     void blocks
@@ -5515,7 +5515,9 @@ function PreviewStage(props) {
     if (!block) return
     const lines = doc.text.split('\n')
     const copy = lines.slice(block.lines[0], block.lines[1] + 1)
-    const next = [...lines.slice(0, block.lines[1] + 1), ...copy, ...lines.slice(block.lines[1] + 1)].join('\n')
+    const rest = lines.slice(block.lines[1] + 1)
+    const gapAfter = (rest[0] ?? '').trim() === '' ? [] : ['']
+    const next = [...lines.slice(0, block.lines[1] + 1), '', ...copy, ...gapAfter, ...rest].join('\n')
     store.updateDoc(current => ({ ...current, text: next }))
     setSelectedBlock(index + 1)
     toast(t('已复制这一段'))

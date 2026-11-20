@@ -628,3 +628,160 @@ test('AI 流式生成可以取消', async () => {
     dom.window.close()
   }
 })
+
+const blockSeed = [{
+  id: 'doc-blocks',
+  text: '# 标题\n\n第一段。\n\n第二段。\n\n第三段。',
+  design: { themeId: 'column', variantId: 'essay', overrides: {} },
+  meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false },
+  createdAt: 1,
+  updatedAt: 1,
+}]
+
+test('段落上移、下移、复制与删除都会改写正文', async () => {
+  const { dom, window, container, root } = await mountPanel({ seedDocs: blockSeed })
+  try {
+    const upButtons = () => [...container.querySelectorAll('button')].filter(button => button.getAttribute('title') === '上移')
+    upButtons()[1].click()
+    await new Promise(resolve => setTimeout(resolve, 160))
+    let value = container.querySelector('.ws-editor').value
+    assert.ok(value.indexOf('第二段。') < value.indexOf('第一段。'), 'second block moved up')
+
+    const downButtons = () => [...container.querySelectorAll('button')].filter(button => button.getAttribute('title') === '下移')
+    downButtons()[0].dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 160))
+    value = container.querySelector('.ws-editor').value
+    assert.ok(value.indexOf('第一段。') < value.indexOf('第二段。'), 'first block moved down')
+
+    const copy = [...container.querySelectorAll('button')].find(button => button.getAttribute('title') === '复制这一段')
+    copy.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 160))
+    value = container.querySelector('.ws-editor').value
+    assert.equal((value.match(/第一段。/g) ?? []).length, 2)
+
+    const remove = [...container.querySelectorAll('button')].find(button => button.getAttribute('title') === '删除这一段')
+    remove.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 160))
+    value = container.querySelector('.ws-editor').value
+    assert.equal((value.match(/第一段。/g) ?? []).length, 1)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('拖拽可以把后一段移到前一段之前', async () => {
+  const { dom, window, container, root } = await mountPanel({ seedDocs: blockSeed })
+  try {
+    const first = [...container.querySelectorAll('.ws-block')].find(node => node.textContent.includes('第一段。'))
+    const second = [...container.querySelectorAll('.ws-block')].find(node => node.textContent.includes('第二段。'))
+    second.dispatchEvent(new window.Event('dragstart', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 80))
+    first.dispatchEvent(new window.Event('dragover', { bubbles: true, cancelable: true }))
+    first.dispatchEvent(new window.Event('drop', { bubbles: true, cancelable: true }))
+    await new Promise(resolve => setTimeout(resolve, 200))
+    const value = container.querySelector('.ws-editor').value
+    assert.ok(value.indexOf('第二段。') < value.indexOf('第一段。'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('点击主题卡切换主题，点击变体卡切换版式', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const badge = () => container.querySelector('.ws-brand .ws-badge')?.textContent ?? ''
+    const before = badge()
+    const themes = [...container.querySelectorAll('.ws-theme')]
+    themes[1].dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 160))
+    assert.notEqual(badge(), before)
+    assert.ok(themes[1].className.includes('on'))
+
+    const variants = [...container.querySelectorAll('.ws-variant-card')]
+    assert.ok(variants.length >= 2)
+    variants[1].dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 140))
+    assert.ok([...container.querySelectorAll('.ws-variant-card')][1].className.includes('on'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('锁定后可以再解锁', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const lock = [...container.querySelectorAll('button')].find(button => button.getAttribute('title') === '锁定这一段')
+    lock.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 140))
+    assert.ok(container.querySelector('.ws-block.locked'))
+    const unlock = [...container.querySelectorAll('button')].find(button => button.getAttribute('title') === '解锁这一段')
+    assert.ok(unlock)
+    unlock.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 140))
+    assert.equal(container.querySelector('.ws-block.locked'), null)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('AI 页未选中段落时也能选语气并显示 token 估算', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const aiTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === 'AI')
+    aiTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 150))
+    assert.ok(container.textContent.includes('语气'))
+    assert.ok(container.textContent.includes('tokens'))
+    const spoken = [...container.querySelectorAll('.ws-chat-compose-option .ws-chip')].find(button => button.textContent.trim() === '更口语')
+    assert.ok(spoken)
+    spoken.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 100))
+    assert.ok(spoken.className.includes('on'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('封面布局切换会选中对应按钮', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '发布')
+    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 150))
+    const centered = [...container.querySelectorAll('button')].find(button => button.textContent.trim() === '居中')
+    centered.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 180))
+    const again = [...container.querySelectorAll('button')].find(button => button.textContent.trim() === '居中')
+    assert.ok(again.className.includes('on'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('标题过长时信息流显示截断警告', async () => {
+  const seed = [{
+    id: 'doc-long-title',
+    text: '# 标题\n\n正文。',
+    design: { themeId: 'column', variantId: 'essay', overrides: {} },
+    meta: { title: '这是一个非常非常长、长到信息流里一定会被微信截断的标题，用来验证警告是否出现', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false },
+    createdAt: 1,
+    updatedAt: 1,
+  }]
+  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
+  try {
+    const feed = [...container.querySelectorAll('.ws-surface-switch button')].find(button => button.textContent.trim() === '信息流')
+    feed.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 150))
+    assert.ok(container.querySelector('.ws-surface-hints'))
+    assert.ok(container.querySelector('.ws-surface-hints').textContent.includes('信息流'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
