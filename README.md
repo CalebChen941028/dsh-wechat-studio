@@ -129,6 +129,10 @@ WX_APPID=... WX_SECRET=... WX_COVER_PATH=/path/cover.png WX_ALLOW_PUBLISH=1 npm 
 
 ![大纲](screenshots/wechat-studio-outline.png)
 
+### 发布质检与对账单
+
+![发布质检](screenshots/wechat-studio-v2.2-qa.png)
+
 ### 首次使用提示
 
 ![帮助](screenshots/wechat-studio-v1.9-help.png)
