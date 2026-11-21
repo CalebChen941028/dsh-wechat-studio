@@ -11,6 +11,7 @@ const DOC_STORE_NAME = 'state'
 const DOC_SNAPSHOT_STORE = 'snapshots'
 const DOC_LEDGER_STORE = 'ledger'
 const DOC_SNIPPET_STORE = 'snippets'
+const DOC_STYLE_STORE = 'styleEvents'
 const DOC_ROW_ID = 'docs'
 
 let docDbPromise
@@ -29,13 +30,14 @@ function openDocDb() {
   docDbPromise = new Promise((resolve) => {
     if (!hasDocIndexedDb()) { resolve(null); return }
     let request
-    try { request = indexedDB.open(DOC_DB_NAME, 4) } catch { resolve(null); return }
+    try { request = indexedDB.open(DOC_DB_NAME, 5) } catch { resolve(null); return }
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(DOC_STORE_NAME)) db.createObjectStore(DOC_STORE_NAME, { keyPath: 'id' })
       if (!db.objectStoreNames.contains(DOC_SNAPSHOT_STORE)) db.createObjectStore(DOC_SNAPSHOT_STORE, { keyPath: 'id' })
       if (!db.objectStoreNames.contains(DOC_LEDGER_STORE)) db.createObjectStore(DOC_LEDGER_STORE, { keyPath: 'id' })
       if (!db.objectStoreNames.contains(DOC_SNIPPET_STORE)) db.createObjectStore(DOC_SNIPPET_STORE, { keyPath: 'id' })
+      if (!db.objectStoreNames.contains(DOC_STYLE_STORE)) db.createObjectStore(DOC_STYLE_STORE, { keyPath: 'id' })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => resolve(null)
@@ -199,4 +201,39 @@ export async function listSnippets() {
 export async function deleteSnippet(id) {
   const deleted = await withDocStore('readwrite', store => store.delete(id), DOC_SNIPPET_STORE)
   return deleted !== null
+}
+
+
+/** Record one accepted/discarded AI edit for local style memory. */
+export async function appendStyleEvent(event) {
+  if (event === null || typeof event !== 'object') return false
+  const entry = {
+    id: `style-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    docId: typeof event.docId === 'string' ? event.docId : '',
+    type: event.type === 'discarded' ? 'discarded' : 'accepted',
+    instruction: typeof event.instruction === 'string' ? event.instruction.slice(0, 300) : '',
+    stylePreset: typeof event.stylePreset === 'string' ? event.stylePreset : '',
+    scope: typeof event.scope === 'string' ? event.scope : '',
+    at: Date.now(),
+  }
+  const saved = await withDocStore('readwrite', store => store.put(entry), DOC_STYLE_STORE)
+  if (saved === null || saved === undefined) return false
+  const all = await withDocStore('readonly', store => store.getAll(), DOC_STYLE_STORE)
+  if (Array.isArray(all)) {
+    const stale = all.sort((a, b) => b.at - a.at).slice(60)
+    if (stale.length > 0) await withDocStore('readwrite', store => { for (const item of stale) store.delete(item.id) }, DOC_STYLE_STORE)
+  }
+  return true
+}
+
+/** List recent style-memory events, newest first. */
+export async function listStyleEvents(limit = 30) {
+  const all = await withDocStore('readonly', store => store.getAll(), DOC_STYLE_STORE)
+  if (!Array.isArray(all)) return []
+  return all.sort((a, b) => b.at - a.at).slice(0, limit)
+}
+
+/** Clear style memory. */
+export async function clearStyleEvents() {
+  await withDocStore('readwrite', store => { store.clear() }, DOC_STYLE_STORE)
 }

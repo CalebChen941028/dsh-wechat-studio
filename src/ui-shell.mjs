@@ -142,7 +142,7 @@ function createDocument(seedText, design, meta) {
     id: docId(),
     text,
     design: composed,
-    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', coverLayout: 'left', draftMediaId: '', draftArticleCount: 0, aiHashes: [], lockedHashes: [], styleGuide: DEFAULT_STYLE_GUIDE, needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
+    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', coverLayout: 'left', draftMediaId: '', draftArticleCount: 0, aiHashes: [], lockedHashes: [], styleGuide: DEFAULT_STYLE_GUIDE, plannedAt: '', needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }
@@ -453,6 +453,7 @@ function StudioPanel(props) {
   const [snapshotVersion, setSnapshotVersion] = React.useState(0)
   const [helpOpen, setHelpOpen] = React.useState(() => { try { return localStorage.getItem(HELP_SEEN_KEY) !== '1' } catch { return false } })
   const [snippetsOpen, setSnippetsOpen] = React.useState(false)
+  const [imagesOpen, setImagesOpen] = React.useState(false)
   const [paletteOpen, setPaletteOpen] = React.useState(false)
   const [diagnosticsOpen, setDiagnosticsOpen] = React.useState(false)
   const [helpFirstRun, setHelpFirstRun] = React.useState(() => { try { return localStorage.getItem(HELP_SEEN_KEY) !== '1' } catch { return false } })
@@ -819,6 +820,7 @@ function StudioPanel(props) {
     { id: 'snapshot', label: t('保存版本快照'), hint: t('当前正文存入历史版本'), run: () => takeSnapshot('manual', true) },
     { id: 'new', label: t('新建草稿'), hint: t('从空白开始'), run: () => { store.addDoc(''); setSelectedBlock(null); toast(t('已新建草稿')) } },
     { id: 'snippets', label: t('打开片段库'), hint: t('插入作者简介、引导等常用块'), run: () => setSnippetsOpen(true) },
+    { id: 'images', label: t('打开素材库'), hint: t('复用已上传的图片'), run: () => setImagesOpen(true) },
     { id: 'help', label: t('使用提示与快捷键'), hint: t('查看隐藏操作'), run: () => setHelpOpen(true) },
     { id: 'diagnostics', label: t('诊断报告'), hint: t('存储用量与最近错误'), run: () => setDiagnosticsOpen(true) },
     ...store.docs.map(entry => ({
@@ -860,7 +862,7 @@ function StudioPanel(props) {
     h('div', { className: 'ws-body' },
       h(DocRail, {
         store, parsed, features, textareaRef, toast, narrow, selectedBlock, setSelectedBlock,
-        onGoToBlock: goToBlock, onEditorCaret: syncBlockFromCaret, onOpenSnippets: () => setSnippetsOpen(true),
+        onGoToBlock: goToBlock, onEditorCaret: syncBlockFromCaret, onOpenSnippets: () => setSnippetsOpen(true), onOpenImages: () => setImagesOpen(true),
         onImportDocument: importDocument, onContentPasted: () => scheduleAutoCompose(true),
         onImagesChanged: bumpImages,
         onOpenAi: () => openDesign('ai'),
@@ -878,6 +880,7 @@ function StudioPanel(props) {
     ),
     paletteOpen ? h(CommandPalette, { commands: paletteCommands, onClose: () => setPaletteOpen(false) }) : null,
     snippetsOpen ? h(SnippetDialog, { store, toast, textareaRef, onClose: () => setSnippetsOpen(false) }) : null,
+    imagesOpen ? h(ImageLibraryDialog, { store, toast, textareaRef, onClose: () => setImagesOpen(false) }) : null,
     helpOpen ? h(HelpDialog, { firstRun: helpFirstRun, onClose: closeHelp, onDiagnostics: () => { setHelpOpen(false); setDiagnosticsOpen(true) } }) : null,
     diagnosticsOpen ? h(DiagnosticsDialog, { onClose: () => setDiagnosticsOpen(false) }) : null,
     refining
@@ -1138,6 +1141,86 @@ function SnippetDialog({ store, toast, textareaRef, onClose }) {
             h('button', { type: 'button', className: 'ws-link danger', onClick: () => remove(snippet.id) }, t('删除')),
           )),
       ),
+    ),
+  )
+}
+
+function ImageLibraryDialog({ store, toast, textareaRef, onClose }) {
+  const [images, setImages] = React.useState([])
+  const [busy, setBusy] = React.useState(false)
+  const [loading, setLoading] = React.useState(true)
+  const fileRef = React.useRef(null)
+  const refresh = React.useCallback(() => {
+    setLoading(true)
+    listImages().then(items => setImages(items)).catch(() => setImages([])).finally(() => setLoading(false))
+  }, [])
+  React.useEffect(() => { refresh() }, [refresh])
+  const insert = (image) => {
+    const element = textareaRef.current
+    if (!element) { toast(t('先把光标放到正文里')); return }
+    const start = element.selectionStart
+    const end = element.selectionEnd
+    const alt = t('配图')
+    const snippet = `\n\n![${alt}](wsimg://${image.id})\n\n`
+    store.updateDoc(current => ({ ...current, text: `${current.text.slice(0, start)}${snippet}${current.text.slice(end)}` }), { coalesce: 'insert' })
+    requestAnimationFrame(() => {
+      element.focus()
+      const caret = start + snippet.length
+      element.setSelectionRange(caret, caret)
+    })
+    toast(t('图片已插入正文'), 'success')
+    onClose()
+  }
+  const upload = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setBusy(true)
+    try {
+      const raw = await readFileAsDataUrl(file)
+      const compressed = await compressImage(raw, 1600)
+      const ref = await materializeImage(compressed.dataUrl, { kind: 'library' })
+      if (!ref.startsWith('wsimg://')) throw new Error(t('图片保存失败，浏览器存储不可用'))
+      refresh()
+      toast(t('图片已加入素材库'), 'success')
+    } catch (error) {
+      toast(error.message || t('图片处理失败'), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const remove = async (id) => {
+    await deleteImage(id)
+    refresh()
+  }
+  return h('div', { className: 'ws-modal-scrim', onClick: event => { if (event.target === event.currentTarget) onClose() } },
+    h('div', { className: 'ws-modal ws-library-modal', role: 'dialog', 'aria-modal': 'true' },
+      h('div', { className: 'ws-modal-head' },
+        h(Icon, { name: 'image', size: 16 }),
+        h('strong', null, t('图片素材库')),
+        h(IconButton, { icon: 'close', title: t('关闭'), onClick: onClose }),
+      ),
+      h('p', { className: 'ws-hint' }, t('已上传的图片可以跨文章复用；点击插入会把短引用写进正文。')),
+      h('div', { className: 'ws-row' },
+        h(Button, { onClick: () => fileRef.current?.click(), disabled: busy }, busy ? t('上传中…') : t('上传图片')),
+        h('span', { className: 'ws-hint' }, t('支持 PNG / JPEG，自动压缩')),
+        h('input', { ref: fileRef, type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: upload }),
+      ),
+      loading
+        ? h('p', { className: 'ws-hint' }, t('读取素材中…'))
+        : images.length === 0
+          ? h('p', { className: 'ws-hint' }, t('素材库还是空的。'))
+          : h('div', { className: 'ws-library-grid' }, images.map(image => h('div', { key: image.id, className: 'ws-library-card' },
+            h('img', { src: image.dataUrl, alt: '' }),
+            h('div', { className: 'ws-library-meta' },
+              h('span', null, image.kind === 'library' ? t('素材') : t('正文图')),
+              h('span', null, `${Math.round((image.bytes ?? 0) / 1024)}KB`),
+            ),
+            h('div', { className: 'ws-library-actions' },
+              h('button', { type: 'button', className: 'ws-link', onClick: () => insert(image) }, t('插入')),
+              h('button', { type: 'button', className: 'ws-link danger', onClick: () => remove(image.id) }, t('删除')),
+            ),
+          ))),
     ),
   )
 }

@@ -733,6 +733,43 @@ const UI_EN = {
   '没有发现会阻断发布的问题。': 'Nothing blocks publishing.',
   '质检汇总发布检查、实测保真、AI 来源、段落锁与分发场景；下面的细节仍可逐条查看。': 'QA combines publish checks, measured fidelity, AI provenance, block locks and distribution surfaces; details are listed below.',
 
+  '已切换公众号账号': 'Switched account',
+  '切换账号失败': 'Could not switch account',
+  '账号已删除': 'Account removed',
+  '删除账号失败': 'Could not remove account',
+  '公众号账号已保存到本机凭据库': 'Account saved in the local credential store',
+  '账号名称': 'Account name',
+  '例如：品牌主号': 'e.g. Brand main account',
+  '当前': 'Current',
+  '切换': 'Switch',
+  '新增账号': 'Add account',
+  '清除全部': 'Clear all',
+
+  'AI 风格记忆': 'AI style memory',
+  '采用 {count}': '{count} adopted',
+  '放弃 {count}': '{count} discarded',
+  '还没有采用记录': 'No adopted edits yet',
+  '清空记忆': 'Clear memory',
+
+  '打开素材库': 'Open image library',
+  '图片已插入正文': 'Image inserted',
+  '图片保存失败，浏览器存储不可用': 'Could not save the image; browser storage is unavailable',
+  '图片已加入素材库': 'Image added to the library',
+  '图片素材库': 'Image library',
+  '已上传的图片可以跨文章复用；点击插入会把短引用写进正文。': 'Uploaded images can be reused across articles; insert writes a short reference.',
+  '上传中…': 'Uploading…',
+  '上传图片': 'Upload image',
+  '支持 PNG / JPEG，自动压缩': 'PNG / JPEG, compressed automatically',
+  '读取素材中…': 'Loading images…',
+  '素材库还是空的。': 'The image library is empty.',
+  '素材': 'Asset',
+  '正文图': 'Content',
+  '素材库': 'Image library',
+
+  '发布计划': 'Publish plan',
+  '计划日期': 'Planned date',
+  '计划日期只是本地排期，不会自动发布；到时间在发布面板手动发送。': 'This is a local schedule only; it does not auto-publish. Send manually when the time comes.',
+
 }
 
 

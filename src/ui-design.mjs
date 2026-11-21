@@ -38,7 +38,12 @@ function AiSection(props) {
   const [pending, setPending] = React.useState(null)
   const [scopeMode, setScopeMode] = React.useState('selection')
   const [stylePreset, setStylePreset] = React.useState('')
+  const [memoryEvents, setMemoryEvents] = React.useState([])
   const abortRef = React.useRef(null)
+  const refreshMemory = React.useCallback(() => {
+    listStyleEvents(30).then(items => setMemoryEvents(items)).catch(() => setMemoryEvents([]))
+  }, [])
+  React.useEffect(() => { refreshMemory() }, [refreshMemory])
   const listRef = React.useRef(null)
   const inputRef = React.useRef(null)
 
@@ -113,6 +118,7 @@ function AiSection(props) {
             meta: { author: doc.meta.author, digest: doc.meta.digest },
             history: [],
             styleGuide: doc.meta.styleGuide ?? DEFAULT_STYLE_GUIDE,
+            styleMemory: memoryEvents.filter(item => item.type === 'accepted').slice(0, 3).map(item => item.instruction),
           }, { timeoutMs: 150000 })
           if (typeof part.text !== 'string' || part.text.trim() === '') {
             throw Object.assign(new Error(`第 ${index + 1} 段没有返回改写结果，已取消，正文未改。`), { code: 'chunk-missing' })
@@ -137,6 +143,7 @@ function AiSection(props) {
           meta: { author: doc.meta.author, digest: doc.meta.digest },
           history: messages.slice(-6).map(message => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
           styleGuide: doc.meta.styleGuide ?? DEFAULT_STYLE_GUIDE,
+          styleMemory: memoryEvents.filter(item => item.type === 'accepted').slice(0, 3).map(item => item.instruction),
         }, { timeoutMs: 150000, onProgress: chars => setProgress(chars), signal: controller?.signal })
       }
 
@@ -185,6 +192,7 @@ function AiSection(props) {
       if (nextText !== undefined || nextDesign !== undefined || nextMeta !== undefined) {
         setPending({
           baseText: sentText,
+          instruction,
           text: nextText,
           design: nextDesign,
           meta: nextMeta,
@@ -240,6 +248,7 @@ function AiSection(props) {
       }
     }
     if (Object.keys(patch).length > 0) store.updateDoc(state => ({ ...state, ...patch }))
+    appendStyleEvent({ docId: current.id, type: 'accepted', instruction: pending.instruction, stylePreset, scope: scopeMode }).then(refreshMemory).catch(() => {})
     setMessages(list => [...list, {
       role: 'assistant',
       content: pending.reply,
@@ -255,6 +264,7 @@ function AiSection(props) {
   const discardPending = () => {
     if (pending === null) return
     setMessages(list => [...list, { role: 'assistant', content: t('已放弃这次 AI 修改'), applied: [] }])
+    appendStyleEvent({ docId: store.doc.id, type: 'discarded', instruction: pending.instruction, stylePreset, scope: scopeMode }).then(refreshMemory).catch(() => {})
     setPending(null)
   }
 
@@ -401,6 +411,17 @@ function AiSection(props) {
         className: 'ws-chip',
         onClick: () => send(text),
       }, text)))
+      : null,
+    memoryEvents.length > 0
+      ? h('div', { className: 'ws-memory' },
+        h('div', { className: 'ws-memory-head' },
+          h(Icon, { name: 'sparkles', size: 12 }),
+          h('span', null, t('AI 风格记忆')),
+          h('span', { className: 'ws-badge' }, `${t('采用 {count}', { count: memoryEvents.filter(item => item.type === 'accepted').length })} · ${t('放弃 {count}', { count: memoryEvents.filter(item => item.type === 'discarded').length })}`),
+        ),
+        h('p', { className: 'ws-hint' }, memoryEvents.filter(item => item.type === 'accepted').slice(0, 3).map(item => item.instruction).join(' / ') || t('还没有采用记录')),
+        h('button', { type: 'button', className: 'ws-link', onClick: () => { clearStyleEvents().then(refreshMemory).catch(() => {}) } }, t('清空记忆')),
+      )
       : null,
     h('p', { className: 'ws-hint' }, t('模型是当前会话的默认模型；要求改版式时只动主题与装饰，不会重写正文。')),
   )
@@ -1116,6 +1137,8 @@ function PublishSection(props) {
   const [appId, setAppId] = React.useState('')
   const [appSecret, setAppSecret] = React.useState('')
   const [configBusy, setConfigBusy] = React.useState(false)
+  const [accounts, setAccounts] = React.useState({ items: [], activeId: '' })
+  const [accountName, setAccountName] = React.useState('')
   const [steps, setSteps] = React.useState([])
   const [busy, setBusy] = React.useState(false)
   const [result, setResult] = React.useState(null)
@@ -1334,15 +1357,64 @@ function PublishSection(props) {
     }
   }
 
+  const loadAccounts = async () => {
+    try {
+      const value = await callHost('listAccounts')
+      setAccounts({ items: Array.isArray(value.accounts) ? value.accounts : [], activeId: value.activeId ?? '' })
+    } catch {
+      setAccounts({ items: [], activeId: '' })
+    }
+  }
+  React.useEffect(() => { if (hostStatus.configured) loadAccounts() }, [hostStatus.configured])
+
+  const makeActive = (value) => {
+    const active = (value.accounts ?? []).find(item => item.active) ?? (value.accounts ?? []).find(item => item.id === value.activeId)
+    setAccounts({ items: Array.isArray(value.accounts) ? value.accounts : [], activeId: value.activeId ?? '' })
+    setHostStatus(current => ({
+      ...current,
+      phase: 'ready',
+      configured: active !== undefined,
+      appIdPreview: active?.appIdPreview ?? null,
+      message: '',
+    }))
+  }
+
+  const switchAccount = async (id) => {
+    setConfigBusy(true)
+    try {
+      const value = await callHost('switchAccount', { id })
+      makeActive(value)
+      toast(t('已切换公众号账号'), 'success')
+    } catch (failure) {
+      toast(failure.message || t('切换账号失败'), 'error')
+    } finally {
+      setConfigBusy(false)
+    }
+  }
+
+  const removeAccount = async (id) => {
+    setConfigBusy(true)
+    try {
+      const value = await callHost('removeAccount', { id })
+      makeActive(value)
+      toast(t('账号已删除'))
+    } catch (failure) {
+      toast(failure.message || t('删除账号失败'), 'error')
+    } finally {
+      setConfigBusy(false)
+    }
+  }
+
   const saveConfig = async () => {
     setConfigBusy(true)
     try {
-      const value = await callHost('saveConfig', { appId: appId.trim(), appSecret: appSecret.trim() })
-      setHostStatus({ phase: 'ready', configured: value.configured === true, appIdPreview: value.appIdPreview ?? null, message: '' })
+      const value = await callHost('saveAccount', { name: accountName.trim(), appId: appId.trim(), appSecret: appSecret.trim(), activate: true })
+      makeActive(value)
       setConfigOpen(false)
+      setAccountName('')
       setAppId('')
       setAppSecret('')
-      toast(t('公众号密钥已保存到本机凭据库'), 'success')
+      toast(t('公众号账号已保存到本机凭据库'), 'success')
     } catch (failure) {
       toast(failure.message || t('保存失败'), 'error')
     } finally {
@@ -1433,6 +1505,7 @@ function PublishSection(props) {
     setConfigBusy(true)
     try {
       await callHost('clearConfig')
+      setAccounts({ items: [], activeId: '' })
       setHostStatus({ phase: 'ready', configured: false, appIdPreview: null, message: '' })
       toast('已清除本机保存的公众号密钥')
     } catch (failure) {
@@ -1685,8 +1758,23 @@ function PublishSection(props) {
       hostStatus.configured
         ? h('p', { className: 'ws-hint' }, `AppID：${hostStatus.appIdPreview ?? t('（已保存）')}。密钥只在本机凭据库，页面拿不到明文。`)
         : h('p', { className: 'ws-hint' }, t('在公众号后台「设置与开发 → 基本配置」拿到 AppID 与 AppSecret。还需要把本机出口 IP 加进白名单。')),
+      accounts.items.length > 0
+        ? h('div', { className: 'ws-accounts' },
+          accounts.items.map(item => h('div', { key: item.id, className: 'ws-account-row' + (item.active ? ' on' : '') },
+            h('span', { className: 'ws-account-name' }, item.name),
+            h('span', { className: 'ws-account-id' }, item.appIdPreview),
+            item.active
+              ? h('span', { className: 'ws-badge ok' }, t('当前'))
+              : h('button', { type: 'button', className: 'ws-link', disabled: configBusy, onClick: () => switchAccount(item.id) }, t('切换')),
+            accounts.items.length > 1 && !item.active
+              ? h('button', { type: 'button', className: 'ws-link danger', disabled: configBusy, onClick: () => removeAccount(item.id) }, t('删除'))
+              : null,
+          )),
+        )
+        : null,
       configOpen
         ? h('div', { className: 'ws-config' },
+          h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, t('账号名称')), h('input', { className: 'ws-input', value: accountName, placeholder: t('例如：品牌主号'), onChange: event => setAccountName(event.target.value) })),
           h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, 'AppID'), h('input', { className: 'ws-input', value: appId, placeholder: t('wx 开头的一串字符'), onChange: event => setAppId(event.target.value) })),
           h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, 'AppSecret'), h('input', { className: 'ws-input', type: 'password', value: appSecret, placeholder: t('32 位密钥，保存后不再显示'), onChange: event => setAppSecret(event.target.value) })),
           h('div', { className: 'ws-row' },
@@ -1695,9 +1783,9 @@ function PublishSection(props) {
           ),
         )
         : h('div', { className: 'ws-row' },
-          h(Button, { variant: hostStatus.configured ? 'ghost' : 'primary', onClick: () => setConfigOpen(true), disabled: hostStatus.phase === 'error' }, hostStatus.configured ? t('更新密钥') : t('填写密钥')),
+          h(Button, { variant: hostStatus.configured ? 'ghost' : 'primary', onClick: () => { setConfigOpen(true); setAccountName(''); setAppId(''); setAppSecret('') }, disabled: hostStatus.phase === 'error' }, hostStatus.configured ? t('新增账号') : t('填写密钥')),
           hostStatus.configured ? h(Button, { onClick: testConnection, disabled: configBusy }, configBusy ? t('测试中…') : t('测试连接')) : null,
-          hostStatus.configured ? h(Button, { onClick: clearConfig, disabled: configBusy, variant: 'ghost' }, t('清除')) : null,
+          hostStatus.configured ? h(Button, { onClick: clearConfig, disabled: configBusy, variant: 'ghost' }, t('清除全部')) : null,
         ),
     ),
     h('div', { className: 'ws-card' },
@@ -1835,6 +1923,24 @@ function PublishSection(props) {
         h(Button, { onClick: () => coverInputRef.current?.click(), disabled: coverBusy }, coverBusy ? t('处理中…') : t('上传图片')),
         h('input', { ref: coverInputRef, type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: uploadCoverFile }),
       ),
+    ),
+    h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' }, h('span', null, t('发布计划'))),
+      h('div', { className: 'ws-field-row' },
+        h('span', { className: 'ws-field-label' }, t('计划日期')),
+        h('input', {
+          className: 'ws-input',
+          type: 'date',
+          value: typeof doc.meta.plannedAt === 'string' ? doc.meta.plannedAt.slice(0, 10) : '',
+          onChange: event => store.updateMeta({ plannedAt: event.target.value === '' ? '' : `${event.target.value}T09:00:00` }),
+        }),
+      ),
+      store.docs.filter(entry => typeof entry.meta.plannedAt === 'string' && entry.meta.plannedAt !== '').slice(0, 6).map(entry => h('div', { key: entry.id, className: 'ws-plan-row' + (entry.id === doc.id ? ' on' : '') },
+        h('span', { className: 'ws-plan-date' }, entry.meta.plannedAt.slice(0, 10)),
+        h('span', { className: 'ws-plan-title' }, entry.meta.title.trim() || parseArticle(entry.text).title || t('未命名草稿')),
+        entry.id === doc.id ? h('span', { className: 'ws-badge' }, t('当前')) : h('button', { type: 'button', className: 'ws-link', onClick: () => store.selectDoc(entry.id) }, t('打开')),
+      )),
+      h('p', { className: 'ws-hint' }, t('计划日期只是本地排期，不会自动发布；到时间在发布面板手动发送。')),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },

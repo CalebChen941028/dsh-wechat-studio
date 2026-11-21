@@ -212,3 +212,20 @@ export async function pruneImages(texts) {
   }
   return stale.length
 }
+
+
+/** List every stored image, newest first, for the asset library. */
+export async function listImages() {
+  const rows = await withStore('readonly', store => store.getAll())
+  if (!Array.isArray(rows)) return []
+  return rows
+    .filter(row => row && typeof row.id === 'string' && typeof row.dataUrl === 'string')
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+}
+
+/** Delete one stored image and drop it from the cache. */
+export async function deleteImage(id) {
+  cache.delete(id)
+  const result = await withStore('readwrite', store => store.delete(id))
+  return result !== null
+}

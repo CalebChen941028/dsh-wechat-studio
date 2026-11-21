@@ -24,6 +24,9 @@ A DeepSeek Harness (DSH) sidebar bundle for turning Markdown into WeChat Officia
   - `scripts/wechat-fidelity.mjs` — opt-in real-account fidelity check; creates and deletes temporary drafts.
   - `fidelity.mjs` — results of that check, shown as measured scores in the theme library and publish preflight.
   - `brandkit.mjs` — portable export/import of favorites, layout DNA, house style and snippets.
+  - `images.mjs` — image registry plus reusable image library (list/delete/materialize).
+  - `host/service.js` accounts live under `wechat-studio/accounts`; legacy `wechat-studio/account` is migrated on read.
+  - multi-account credentials live under `wechat-studio/accounts`; legacy single-account records are migrated on read.
   - publish QA aggregates preflight, fidelity, AI provenance, block locks and distribution warnings; an error boundary plus local diagnostics report covers render failures.
   - `i18n.mjs` — gettext-style UI copy: Chinese source strings, English catalog, language from explicit override, DSH locale, then document `lang`.
   - `host/network.js` — outbound network settings: system fetch or one fixed HTTP(S) proxy for WeChat API calls; the proxy URL lives in the credential store and passwords are redacted in responses.

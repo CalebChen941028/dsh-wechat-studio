@@ -248,3 +248,10 @@ test('aiEdit prompt carries the house style', async () => {
   assert.match(prompt, /段落不超过 90 字/)
   assert.match(prompt, /正文图片必须带图注/)
 })
+
+test('aiEdit prompt carries recent adopted edits', async () => {
+  const { ctx, calls } = fakeContext({ chunks: jsonReply({ reply: '好' }) })
+  await createAiEditor({ ctx }).edit({ instruction: '润色', text: ARTICLE, styleMemory: ['标题改短', '第二段压到两行'] })
+  const prompt = calls[0].messages[0].content[0].text
+  assert.match(prompt, /最近采用的改法：标题改短；第二段压到两行/)
+})

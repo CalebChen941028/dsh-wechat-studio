@@ -165,7 +165,7 @@ function TopBar(props) {
  * ------------------------------------------------------------------ */
 
 function DocRail(props) {
-  const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onGoToBlock, onEditorCaret, onOpenSnippets, onImportDocument, onContentPasted, onOpenAi, onImagesChanged } = props
+  const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onGoToBlock, onEditorCaret, onOpenSnippets, onOpenImages, onImportDocument, onContentPasted, onOpenAi, onImagesChanged } = props
   const { doc } = store
   const [docMenu, setDocMenu] = React.useState(false)
   React.useEffect(() => {
@@ -394,6 +394,7 @@ function DocRail(props) {
       ),
       h('div', { className: 'ws-left-actions' },
         h(IconButton, { icon: 'doc', title: t('片段库'), onClick: onOpenSnippets }),
+        h(IconButton, { icon: 'image', title: t('素材库'), onClick: onOpenImages }),
         h(IconButton, { icon: 'search', title: t('查找与替换'), onClick: () => setSearchOpen(value => !value) }),
         h(IconButton, { icon: 'chat', title: t('AI 对话修改'), onClick: onOpenAi }),
         h(IconButton, { icon: 'upload', title: t('上传文档（.md / .txt / .docx / .html）'), onClick: () => uploadRef.current?.click() }),

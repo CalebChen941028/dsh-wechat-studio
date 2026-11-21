@@ -767,26 +767,32 @@ test('status/saveConfig/clearConfig：读写凭据且不回传 appSecret', async
   const credentials = fakeCredentials()
   const { service } = makeService({ credentials, routes: [] })
 
-  assert.deepEqual(await service.status(), { configured: false, appIdPreview: null, tokenCached: false })
+  assert.deepEqual(await service.status(), { configured: false, appIdPreview: null, tokenCached: false, activeId: '', accounts: [] })
 
   const saved = await service.saveConfig({ appId: APP_ID, appSecret: APP_SECRET })
-  assert.deepEqual(saved, { configured: true, appIdPreview: 'wx1234…cdef' })
+  assert.equal(saved.configured, true)
+  assert.equal(saved.appIdPreview, 'wx1234…cdef')
+  assert.equal(saved.accounts.length, 1)
+  assert.equal(saved.accounts[0].appIdPreview, 'wx1234…cdef')
   assert.equal(JSON.stringify(saved).includes(APP_SECRET), false, '保存结果不能带 appSecret')
 
-  const record = credentials.store.get('wechat-studio/account')
+  const record = credentials.store.get('wechat-studio/accounts')
   assert.equal(record.kind, 'api-key')
-  assert.deepEqual(JSON.parse(record.key), { appId: APP_ID, appSecret: APP_SECRET })
+  const stored = JSON.parse(record.key)
+  assert.equal(stored.accounts[0].appId, APP_ID)
+  assert.equal(stored.accounts[0].appSecret, APP_SECRET)
 
-  assert.deepEqual(await service.status(), { configured: true, appIdPreview: 'wx1234…cdef', tokenCached: false })
+  assert.equal((await service.status()).configured, true)
+  assert.equal((await service.status()).appIdPreview, 'wx1234…cdef')
 
-  assert.deepEqual(await service.clearConfig(), { configured: false })
-  assert.equal(credentials.store.has('wechat-studio/account'), false)
+  assert.equal((await service.clearConfig()).configured, false)
+  assert.deepEqual(JSON.parse(credentials.store.get('wechat-studio/accounts').key).accounts, [])
 })
 
 test('status：凭据记录损坏时按未配置处理', async () => {
   const credentials = fakeCredentials({ kind: 'api-key', key: '{不是 JSON' })
   const { service } = makeService({ credentials, routes: [] })
-  assert.deepEqual(await service.status(), { configured: false, appIdPreview: null, tokenCached: false })
+  assert.equal((await service.status()).configured, false)
 })
 
 test('没有 credentials 服务时给出明确错误', async () => {
@@ -1024,10 +1030,10 @@ test('index.js：扁平 { action, ...payload } 请求走通 status', async () =>
     body: { action: 'status' },
   })
   assert.equal(response.status, 200)
-  assert.deepEqual(response.body, {
-    ok: true,
-    value: { configured: true, appIdPreview: 'wx1234…cdef', tokenCached: false },
-  })
+  assert.equal(response.body.ok, true)
+  assert.equal(response.body.value.configured, true)
+  assert.equal(response.body.value.appIdPreview, 'wx1234…cdef')
+  assert.equal(response.body.value.accounts.length, 1)
 })
 
 test('index.js：嵌套 payload 写法也能保存配置', async () => {
@@ -1040,7 +1046,7 @@ test('index.js：嵌套 payload 写法也能保存配置', async () => {
   assert.equal(response.status, 200)
   assert.equal(response.body.ok, true)
   assert.equal(response.body.value.configured, true)
-  assert.equal(credentials.store.has('wechat-studio/account'), true)
+  assert.equal(credentials.store.has('wechat-studio/accounts'), true)
 })
 
 test('index.js：未知 action 返回业务错误', async () => {
@@ -1207,4 +1213,26 @@ test('articleStats：按日期范围读取发布复盘，无权限时透出错�
   const body = JSON.parse(request.init.body)
   assert.match(body.begin_date, /^\d{4}-\d{2}-\d{2}$/)
   assert.match(body.end_date, /^\d{4}-\d{2}-\d{2}$/)
+})
+
+test('多账号：新增、切换、删除并迁移旧单账号记录', async () => {
+  const credentials = fakeCredentials(ACCOUNT_RECORD)
+  const { service } = makeService({ credentials, routes: [] })
+  const migrated = await service.listAccounts()
+  assert.equal(migrated.accounts.length, 1)
+  assert.equal(migrated.accounts[0].appIdPreview, 'wx1234…cdef')
+
+  const second = await service.saveAccount({ name: '第二个号', appId: 'wxabcdef1234567890', appSecret: APP_SECRET, activate: true })
+  assert.equal(second.accounts.length, 2)
+  assert.equal(second.accounts.find(item => item.id === second.activeId).name, '第二个号')
+  assert.equal(JSON.stringify(second).includes(APP_SECRET), false)
+
+  const firstId = second.accounts.find(item => item.name === '默认账号').id
+  const switched = await service.switchAccount({ id: firstId })
+  assert.equal(switched.activeId, firstId)
+  assert.equal((await service.status()).configured, true)
+
+  const removed = await service.removeAccount({ id: second.accounts.find(item => item.name === '第二个号').id })
+  assert.equal(removed.accounts.length, 1)
+  assert.equal(removed.activeId, firstId)
 })

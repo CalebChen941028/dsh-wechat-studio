@@ -31,3 +31,4 @@ test('hasUnresolvedImageRefs 在缓存为空时报告未解析引用', () => {
   assert.equal(hasUnresolvedImageRefs('![a](wsimg://missing)'), true)
   assert.equal(hasUnresolvedImageRefs('![a](https://example.com/a.png)'), false)
 })
+

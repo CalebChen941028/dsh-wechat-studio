@@ -1118,3 +1118,78 @@ test('品牌包可以导入收藏与版式预设', async () => {
     dom.window.close()
   }
 })
+
+test('多个公众号账号可以切换', async () => {
+  let active = 'a'
+  const accounts = [
+    { id: 'a', name: '主号', appIdPreview: 'wx1111', active: true },
+    { id: 'b', name: '副号', appIdPreview: 'wx2222', active: false },
+  ]
+  const fetchImpl = async (url, init) => {
+    const body = init === undefined ? {} : JSON.parse(init.body)
+    let value = { configured: true }
+    if (body.action === 'status') value = { configured: true, phase: 'ready', appIdPreview: 'wx1111', message: '', activeId: active, accounts }
+    if (body.action === 'listAccounts') value = { activeId: active, accounts: accounts.map(item => ({ ...item, active: item.id === active })) }
+    if (body.action === 'switchAccount') {
+      active = body.id
+      value = { activeId: active, accounts: accounts.map(item => ({ ...item, active: item.id === active })) }
+    }
+    return { ok: true, status: 200, async json() { return { ok: true, value } } }
+  }
+  const { dom, window, container, root } = await mountPanel({ fetchImpl })
+  try {
+    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '发布')
+    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 250))
+    assert.equal(container.querySelectorAll('.ws-account-row').length, 2)
+    const switchButton = [...container.querySelectorAll('.ws-account-row button')].find(button => button.textContent.trim() === '切换')
+    switchButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 220))
+    assert.ok(container.querySelector('.ws-account-row.on').textContent.includes('副号'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('发布计划日期与草稿列表可见', async () => {
+  const seed = [{
+    id: 'doc-plan',
+    text: '# 标题\n\n正文。',
+    design: { themeId: 'column', variantId: 'essay', overrides: {} },
+    meta: { title: '计划稿', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', plannedAt: '2026-12-01T09:00:00', needOpenComment: false, onlyFansCanComment: false },
+    createdAt: 1,
+    updatedAt: 1,
+  }]
+  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
+  try {
+    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '发布')
+    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 200))
+    assert.ok(container.querySelector('.ws-plan-row'))
+    assert.ok(container.querySelector('.ws-plan-row').textContent.includes('2026-12-01'))
+    const dateInput = container.querySelector('input[type="date"]')
+    assert.equal(dateInput.value, '2026-12-01')
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('命令面板可以打开素材库弹层', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const start = [...container.querySelectorAll('.ws-modal button')].find(button => button.textContent.trim() === '开始使用')
+    if (start) start.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 100))
+    window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    const item = [...container.querySelectorAll('.ws-palette-item')].find(button => button.textContent.includes('打开素材库'))
+    item.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 180))
+    assert.ok(container.querySelector('.ws-library-modal'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})

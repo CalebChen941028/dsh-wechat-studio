@@ -189,10 +189,12 @@ function buildUserPrompt(payload) {
   lines.push(`当前标题：${typeof meta.title === 'string' && meta.title.trim() !== '' ? meta.title.trim() : '（正文第一行 # 标题）'}`)
   lines.push(`当前作者：${typeof meta.author === 'string' && meta.author.trim() !== '' ? meta.author.trim() : '（未填）'}`)
   const style = normalizeStyleGuide(payload?.styleGuide)
+  const memory = Array.isArray(payload?.styleMemory) ? payload.styleMemory.filter(item => typeof item === 'string' && item.trim() !== '').slice(0, 3) : []
   const toneLabel = style.tone === 'spoken' ? '口语' : style.tone === 'professional' ? '专业' : style.tone === 'story' ? '故事' : '克制'
   lines.push(`写作规范：语气 ${toneLabel}；段落不超过 ${style.maxParagraphChars} 字${style.requireCaptions ? '；正文图片必须带图注' : ''}`)
   if (style.bannedWords.length > 0) lines.push(`禁用词（不要出现）：${style.bannedWords.join('、')}`)
   if (style.preferredWords.length > 0) lines.push(`偏好词（优先使用）：${style.preferredWords.join('、')}`)
+  if (memory.length > 0) lines.push(`最近采用的改法：${memory.join('；')}`)
   lines.push(`当前排版：主题 ${typeof design.themeId === 'string' ? design.themeId : 'ink'}，版式 ${typeof design.variantId === 'string' ? design.variantId : 'editorial'}`)
   lines.push(`排版覆盖参数：${JSON.stringify(design.overrides ?? {}, null, 0)}`)
   lines.push(`可用主题（主题 id：名称，风格；版式 id）：${THEME_CATALOG.map(theme => `${theme[0]}（${theme[1]}，${theme[2]}；版式 ${theme[3]}）`).join('；')}`)

@@ -5,7 +5,7 @@ import { indexedDB as fakeIndexedDB } from 'fake-indexeddb'
 
 globalThis.indexedDB = fakeIndexedDB
 
-const { saveDocsToDb, loadDocsFromDb, saveSnapshot, listSnapshots, clearSnapshots, appendLedgerEvent, listLedgerEvents, saveSnippet, listSnippets, deleteSnippet } = await import('../src/docdb.mjs')
+const { saveDocsToDb, loadDocsFromDb, saveSnapshot, listSnapshots, clearSnapshots, appendLedgerEvent, listLedgerEvents, saveSnippet, listSnippets, deleteSnippet, appendStyleEvent, listStyleEvents, clearStyleEvents } = await import('../src/docdb.mjs')
 
 test('saveDocsToDb / loadDocsFromDb 保留顺序与长正文', async () => {
   const longText = '长文正文。'.repeat(12000)
@@ -63,4 +63,16 @@ test('snippet 增删查', async () => {
   assert.equal(list[0].name, '作者简介')
   assert.equal(await deleteSnippet('snip-1'), true)
   assert.deepEqual(await listSnippets(), [])
+})
+
+
+test('style memory 记录采用与放弃', async () => {
+  await appendStyleEvent({ docId: 'doc-a', type: 'accepted', instruction: '标题改短', stylePreset: 'concise' })
+  await new Promise(resolve => setTimeout(resolve, 5))
+  await appendStyleEvent({ docId: 'doc-a', type: 'discarded', instruction: '改口语', stylePreset: 'spoken' })
+  const list = await listStyleEvents()
+  assert.equal(list.length, 2)
+  assert.equal(list[0].type, 'discarded')
+  await clearStyleEvents()
+  assert.deepEqual(await listStyleEvents(), [])
 })

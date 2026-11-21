@@ -27,6 +27,7 @@ export class StudioError extends Error {
 
 /** 公众号凭据在 credentials 记录里的 key。 */
 const CREDENTIALS_KEY = 'wechat-studio/account'
+const ACCOUNTS_KEY = 'wechat-studio/accounts'
 
 /** 出站网络设置在 credentials 记录里的 key。 */
 const NETWORK_KEY = 'wechat-studio/network'
@@ -307,16 +308,84 @@ export function createStudioService({ ctx, fetchImpl = fetch, importUndici } = {
     return service
   }
 
-  /** 读取已保存的公众号凭据。 */
-  async function readAccount({ required }) {
+  /** Normalize the persisted account list; invalid rows are dropped. */
+  function normalizeAccountsState(value) {
+    const accounts = Array.isArray(value?.accounts)
+      ? value.accounts
+        .filter(entry => entry && typeof entry.appId === 'string' && typeof entry.appSecret === 'string')
+        .map((entry, index) => ({
+          id: typeof entry.id === 'string' && entry.id !== '' ? entry.id : `acct-${index + 1}`,
+          name: typeof entry.name === 'string' && entry.name.trim() !== '' ? entry.name.trim().slice(0, 40) : `公众号 ${index + 1}`,
+          appId: entry.appId,
+          appSecret: entry.appSecret,
+        }))
+      : []
+    const activeId = accounts.some(entry => entry.id === value?.activeId) ? value.activeId : (accounts[0]?.id ?? '')
+    return { activeId, accounts }
+  }
+
+  async function writeAccountsState(state) {
+    const service = credentials()
+    try {
+      await service.modifyRecord(ACCOUNTS_KEY, async () => ({ kind: 'api-key', key: JSON.stringify(state) }))
+    } catch (error) {
+      throw new StudioError('credentials-unavailable', `保存公众号账号失败：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  /** Read the multi-account state, migrating the legacy single-account record once. */
+  async function readAccountsState() {
     const service = credentials()
     let record
     try {
-      record = await service.readRecord(CREDENTIALS_KEY)
+      record = await service.readRecord(ACCOUNTS_KEY)
     } catch (error) {
-      throw new StudioError('credentials-unavailable', `读取本机保存的公众号密钥失败：${error instanceof Error ? error.message : String(error)}`)
+      throw new StudioError('credentials-unavailable', `读取本机保存的公众号账号失败：${error instanceof Error ? error.message : String(error)}`)
     }
-    const account = parseAccountRecord(record)
+    if (record !== undefined && record !== null && typeof record.key === 'string') {
+      try {
+        const parsed = JSON.parse(record.key)
+        const state = normalizeAccountsState(parsed)
+        if (state.accounts.length > 0) return state
+      } catch {
+        // Fall through to the legacy record.
+      }
+    }
+    let legacy = null
+    try {
+      legacy = parseAccountRecord(await service.readRecord(CREDENTIALS_KEY))
+    } catch {
+      legacy = null
+    }
+    if (legacy !== null) {
+      const migrated = { activeId: 'acct-legacy', accounts: [{ id: 'acct-legacy', name: '默认账号', appId: legacy.appId, appSecret: legacy.appSecret }] }
+      await writeAccountsState(migrated)
+      return migrated
+    }
+    return { activeId: '', accounts: [] }
+  }
+
+  function activeAccountOf(state) {
+    const account = state.accounts.find(entry => entry.id === state.activeId) ?? state.accounts[0]
+    return account === undefined ? null : { id: account.id, name: account.name, appId: account.appId, appSecret: account.appSecret }
+  }
+
+  function publicAccounts(state) {
+    return {
+      activeId: state.activeId,
+      accounts: state.accounts.map(entry => ({
+        id: entry.id,
+        name: entry.name,
+        appIdPreview: previewAppId(entry.appId),
+        active: entry.id === state.activeId,
+      })),
+    }
+  }
+
+  /** 读取当前公众号凭据。 */
+  async function readAccount({ required }) {
+    const state = await readAccountsState()
+    const account = activeAccountOf(state)
     if (account === null && required) {
       throw new StudioError('not-configured', '还没有配置公众号 AppID 和 AppSecret，请先在设置里填写并保存')
     }
@@ -513,13 +582,66 @@ export function createStudioService({ ctx, fetchImpl = fetch, importUndici } = {
   return {
     /** 当前配置状态。 */
     async status() {
-      const account = await readAccount({ required: false })
-      if (account === null) return { configured: false, appIdPreview: null, tokenCached: false }
+      const state = await readAccountsState()
+      const account = activeAccountOf(state)
+      if (account === null) return { configured: false, appIdPreview: null, tokenCached: false, ...publicAccounts(state) }
       return {
         configured: true,
         appIdPreview: previewAppId(account.appId),
         tokenCached: cachedToken(account.appId) !== undefined,
+        ...publicAccounts(state),
       }
+    },
+
+    /** 列出账号；secret 不返回。 */
+    async listAccounts() {
+      return publicAccounts(await readAccountsState())
+    },
+
+    /** 新增或更新账号，并可按请求切换。 */
+    async saveAccount(payload = {}) {
+      const state = await readAccountsState()
+      const appId = normalizeAppId(payload?.appId)
+      const appSecret = normalizeAppSecret(payload?.appSecret)
+      const name = typeof payload?.name === 'string' && payload.name.trim() !== '' ? payload.name.trim().slice(0, 40) : ''
+      const id = typeof payload?.id === 'string' && payload.id !== '' ? payload.id : `acct-${Date.now().toString(36)}`
+      const existing = state.accounts.find(entry => entry.id === id)
+      if (existing === undefined) {
+        state.accounts.push({ id, name: name || `公众号 ${state.accounts.length + 1}`, appId, appSecret })
+      } else {
+        existing.appId = appId
+        existing.appSecret = appSecret
+        if (name !== '') existing.name = name
+      }
+      if (payload?.activate === true || state.activeId === '') state.activeId = id
+      await writeAccountsState(state)
+      tokenCache.clear()
+      tokenPending.clear()
+      return publicAccounts(state)
+    },
+
+    /** 切换当前账号。 */
+    async switchAccount(payload = {}) {
+      const state = await readAccountsState()
+      const id = typeof payload?.id === 'string' ? payload.id : ''
+      if (!state.accounts.some(entry => entry.id === id)) throw new StudioError('account-missing', '这个公众号账号不存在')
+      state.activeId = id
+      await writeAccountsState(state)
+      tokenCache.clear()
+      tokenPending.clear()
+      return publicAccounts(state)
+    },
+
+    /** 删除一个账号。 */
+    async removeAccount(payload = {}) {
+      const state = await readAccountsState()
+      const id = typeof payload?.id === 'string' ? payload.id : ''
+      state.accounts = state.accounts.filter(entry => entry.id !== id)
+      if (state.activeId === id) state.activeId = state.accounts[0]?.id ?? ''
+      await writeAccountsState(state)
+      tokenCache.clear()
+      tokenPending.clear()
+      return publicAccounts(state)
     },
 
     /** 读取出站网络设置（代理密码不回传明文）。 */
@@ -649,31 +771,33 @@ export function createStudioService({ ctx, fetchImpl = fetch, importUndici } = {
 
     /** 保存 AppID / AppSecret 到本机凭据库。 */
     async saveConfig(payload = {}) {
+      const state = await readAccountsState()
       const appId = normalizeAppId(payload?.appId)
       const appSecret = normalizeAppSecret(payload?.appSecret)
-      const service = credentials()
-      const record = { kind: 'api-key', key: JSON.stringify({ appId, appSecret }) }
-      try {
-        await service.modifyRecord(CREDENTIALS_KEY, async () => record)
-      } catch (error) {
-        throw new StudioError('credentials-unavailable', `保存公众号密钥失败：${error instanceof Error ? error.message : String(error)}`)
+      const existing = state.accounts.find(entry => entry.id === state.activeId)
+      if (existing === undefined) {
+        state.accounts.push({ id: `acct-${Date.now().toString(36)}`, name: '默认账号', appId, appSecret })
+      } else {
+        existing.appId = appId
+        existing.appSecret = appSecret
       }
+      state.activeId = state.accounts[0].id
+      await writeAccountsState(state)
       tokenCache.clear()
       tokenPending.clear()
-      return { configured: true, appIdPreview: previewAppId(appId) }
+      return { configured: true, appIdPreview: previewAppId(appId), ...publicAccounts(state) }
     },
 
     /** 删除本机保存的公众号密钥。 */
     async clearConfig() {
-      const service = credentials()
-      try {
-        await service.deleteRecord(CREDENTIALS_KEY)
-      } catch (error) {
-        throw new StudioError('credentials-unavailable', `清除公众号密钥失败：${error instanceof Error ? error.message : String(error)}`)
-      }
+      const state = await readAccountsState()
+      state.accounts = []
+      state.activeId = ''
+      await writeAccountsState(state)
+      try { await credentials().deleteRecord(CREDENTIALS_KEY) } catch { /* legacy may be absent */ }
       tokenCache.clear()
       tokenPending.clear()
-      return { configured: false }
+      return { configured: false, activeId: '', accounts: [] }
     },
 
     /** 取一次 access_token，确认凭据可用。 */

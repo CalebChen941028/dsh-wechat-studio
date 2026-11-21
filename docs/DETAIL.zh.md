@@ -28,6 +28,7 @@ DeepSeek Harness（DSH）的侧边栏 bundle：把 Markdown 变成公众号文�
 - 发布支持覆盖更新（多图文按原篇数逐篇更新，篇数变化拒绝），media_id 失效自动解除关联；跨窗口用 BroadcastChannel 提醒冲突。
 - 发布前质检把发布检查、实测保真、AI 来源、段落锁和分发提示汇总成一个结论；编辑部规范存于文档 meta，AI 与发布检查共用；片段、品牌包与快照/账本同存 IndexedDB，诊断记录最近 20 条运行时错误。
 - 分发镜在预览层模拟信息流/分享卡/搜一搜；发布对账单与快照共享 IndexedDB；主题卡显示真实账号实测分数；段落锁和 AI 来源按块文本 hash 记录在 meta。
+- 账号列表存 credentials 的 `wechat-studio/accounts`，旧单账号记录自动迁移；AI 风格记忆、片段、素材、快照和账本各自独立存储；长文预览启用内容跳过与图片懒加载。
 - 草稿正文存 IndexedDB（localStorage 只留偏好与 active id），不可用时回退 localStorage；自动生成的封面不落库。
 
 ## 限制

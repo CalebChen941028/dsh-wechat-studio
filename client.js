@@ -744,6 +744,43 @@ const UI_EN = {
   '没有发现会阻断发布的问题。': 'Nothing blocks publishing.',
   '质检汇总发布检查、实测保真、AI 来源、段落锁与分发场景；下面的细节仍可逐条查看。': 'QA combines publish checks, measured fidelity, AI provenance, block locks and distribution surfaces; details are listed below.',
 
+  '已切换公众号账号': 'Switched account',
+  '切换账号失败': 'Could not switch account',
+  '账号已删除': 'Account removed',
+  '删除账号失败': 'Could not remove account',
+  '公众号账号已保存到本机凭据库': 'Account saved in the local credential store',
+  '账号名称': 'Account name',
+  '例如：品牌主号': 'e.g. Brand main account',
+  '当前': 'Current',
+  '切换': 'Switch',
+  '新增账号': 'Add account',
+  '清除全部': 'Clear all',
+
+  'AI 风格记忆': 'AI style memory',
+  '采用 {count}': '{count} adopted',
+  '放弃 {count}': '{count} discarded',
+  '还没有采用记录': 'No adopted edits yet',
+  '清空记忆': 'Clear memory',
+
+  '打开素材库': 'Open image library',
+  '图片已插入正文': 'Image inserted',
+  '图片保存失败，浏览器存储不可用': 'Could not save the image; browser storage is unavailable',
+  '图片已加入素材库': 'Image added to the library',
+  '图片素材库': 'Image library',
+  '已上传的图片可以跨文章复用；点击插入会把短引用写进正文。': 'Uploaded images can be reused across articles; insert writes a short reference.',
+  '上传中…': 'Uploading…',
+  '上传图片': 'Upload image',
+  '支持 PNG / JPEG，自动压缩': 'PNG / JPEG, compressed automatically',
+  '读取素材中…': 'Loading images…',
+  '素材库还是空的。': 'The image library is empty.',
+  '素材': 'Asset',
+  '正文图': 'Content',
+  '素材库': 'Image library',
+
+  '发布计划': 'Publish plan',
+  '计划日期': 'Planned date',
+  '计划日期只是本地排期，不会自动发布；到时间在发布面板手动发送。': 'This is a local schedule only; it does not auto-publish. Send manually when the time comes.',
+
 }
 
 
@@ -2742,7 +2779,7 @@ function nodesToReact(nodes, h) {
     if (current === null || current === undefined) return null
     const props = { key: index, style: reactStyle(current.style) }
     if (current.tag === 'img') {
-      return h('img', { ...props, ...current.attrs })
+      return h('img', { ...props, ...current.attrs, loading: 'lazy', decoding: 'async' })
     }
     return h(current.tag, props, ...nodesToReact(current.children, h))
   })
@@ -3469,6 +3506,23 @@ async function pruneImages(texts) {
   return stale.length
 }
 
+
+/** List every stored image, newest first, for the asset library. */
+async function listImages() {
+  const rows = await withStore('readonly', store => store.getAll())
+  if (!Array.isArray(rows)) return []
+  return rows
+    .filter(row => row && typeof row.id === 'string' && typeof row.dataUrl === 'string')
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+}
+
+/** Delete one stored image and drop it from the cache. */
+async function deleteImage(id) {
+  cache.delete(id)
+  const result = await withStore('readwrite', store => store.delete(id))
+  return result !== null
+}
+
 /* ===== src/docdb.mjs ===== */
 /**
  * Document body persistence (IndexedDB).
@@ -3483,6 +3537,7 @@ const DOC_STORE_NAME = 'state'
 const DOC_SNAPSHOT_STORE = 'snapshots'
 const DOC_LEDGER_STORE = 'ledger'
 const DOC_SNIPPET_STORE = 'snippets'
+const DOC_STYLE_STORE = 'styleEvents'
 const DOC_ROW_ID = 'docs'
 
 let docDbPromise
@@ -3501,13 +3556,14 @@ function openDocDb() {
   docDbPromise = new Promise((resolve) => {
     if (!hasDocIndexedDb()) { resolve(null); return }
     let request
-    try { request = indexedDB.open(DOC_DB_NAME, 4) } catch { resolve(null); return }
+    try { request = indexedDB.open(DOC_DB_NAME, 5) } catch { resolve(null); return }
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(DOC_STORE_NAME)) db.createObjectStore(DOC_STORE_NAME, { keyPath: 'id' })
       if (!db.objectStoreNames.contains(DOC_SNAPSHOT_STORE)) db.createObjectStore(DOC_SNAPSHOT_STORE, { keyPath: 'id' })
       if (!db.objectStoreNames.contains(DOC_LEDGER_STORE)) db.createObjectStore(DOC_LEDGER_STORE, { keyPath: 'id' })
       if (!db.objectStoreNames.contains(DOC_SNIPPET_STORE)) db.createObjectStore(DOC_SNIPPET_STORE, { keyPath: 'id' })
+      if (!db.objectStoreNames.contains(DOC_STYLE_STORE)) db.createObjectStore(DOC_STYLE_STORE, { keyPath: 'id' })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => resolve(null)
@@ -3671,6 +3727,41 @@ async function listSnippets() {
 async function deleteSnippet(id) {
   const deleted = await withDocStore('readwrite', store => store.delete(id), DOC_SNIPPET_STORE)
   return deleted !== null
+}
+
+
+/** Record one accepted/discarded AI edit for local style memory. */
+async function appendStyleEvent(event) {
+  if (event === null || typeof event !== 'object') return false
+  const entry = {
+    id: `style-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    docId: typeof event.docId === 'string' ? event.docId : '',
+    type: event.type === 'discarded' ? 'discarded' : 'accepted',
+    instruction: typeof event.instruction === 'string' ? event.instruction.slice(0, 300) : '',
+    stylePreset: typeof event.stylePreset === 'string' ? event.stylePreset : '',
+    scope: typeof event.scope === 'string' ? event.scope : '',
+    at: Date.now(),
+  }
+  const saved = await withDocStore('readwrite', store => store.put(entry), DOC_STYLE_STORE)
+  if (saved === null || saved === undefined) return false
+  const all = await withDocStore('readonly', store => store.getAll(), DOC_STYLE_STORE)
+  if (Array.isArray(all)) {
+    const stale = all.sort((a, b) => b.at - a.at).slice(60)
+    if (stale.length > 0) await withDocStore('readwrite', store => { for (const item of stale) store.delete(item.id) }, DOC_STYLE_STORE)
+  }
+  return true
+}
+
+/** List recent style-memory events, newest first. */
+async function listStyleEvents(limit = 30) {
+  const all = await withDocStore('readonly', store => store.getAll(), DOC_STYLE_STORE)
+  if (!Array.isArray(all)) return []
+  return all.sort((a, b) => b.at - a.at).slice(0, limit)
+}
+
+/** Clear style memory. */
+async function clearStyleEvents() {
+  await withDocStore('readwrite', store => { store.clear() }, DOC_STYLE_STORE)
 }
 
 /* ===== src/brandkit.mjs ===== */
@@ -4117,7 +4208,7 @@ function createDocument(seedText, design, meta) {
     id: docId(),
     text,
     design: composed,
-    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', coverLayout: 'left', draftMediaId: '', draftArticleCount: 0, aiHashes: [], lockedHashes: [], styleGuide: DEFAULT_STYLE_GUIDE, needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
+    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', coverLayout: 'left', draftMediaId: '', draftArticleCount: 0, aiHashes: [], lockedHashes: [], styleGuide: DEFAULT_STYLE_GUIDE, plannedAt: '', needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }
@@ -4428,6 +4519,7 @@ function StudioPanel(props) {
   const [snapshotVersion, setSnapshotVersion] = React.useState(0)
   const [helpOpen, setHelpOpen] = React.useState(() => { try { return localStorage.getItem(HELP_SEEN_KEY) !== '1' } catch { return false } })
   const [snippetsOpen, setSnippetsOpen] = React.useState(false)
+  const [imagesOpen, setImagesOpen] = React.useState(false)
   const [paletteOpen, setPaletteOpen] = React.useState(false)
   const [diagnosticsOpen, setDiagnosticsOpen] = React.useState(false)
   const [helpFirstRun, setHelpFirstRun] = React.useState(() => { try { return localStorage.getItem(HELP_SEEN_KEY) !== '1' } catch { return false } })
@@ -4794,6 +4886,7 @@ function StudioPanel(props) {
     { id: 'snapshot', label: t('保存版本快照'), hint: t('当前正文存入历史版本'), run: () => takeSnapshot('manual', true) },
     { id: 'new', label: t('新建草稿'), hint: t('从空白开始'), run: () => { store.addDoc(''); setSelectedBlock(null); toast(t('已新建草稿')) } },
     { id: 'snippets', label: t('打开片段库'), hint: t('插入作者简介、引导等常用块'), run: () => setSnippetsOpen(true) },
+    { id: 'images', label: t('打开素材库'), hint: t('复用已上传的图片'), run: () => setImagesOpen(true) },
     { id: 'help', label: t('使用提示与快捷键'), hint: t('查看隐藏操作'), run: () => setHelpOpen(true) },
     { id: 'diagnostics', label: t('诊断报告'), hint: t('存储用量与最近错误'), run: () => setDiagnosticsOpen(true) },
     ...store.docs.map(entry => ({
@@ -4835,7 +4928,7 @@ function StudioPanel(props) {
     h('div', { className: 'ws-body' },
       h(DocRail, {
         store, parsed, features, textareaRef, toast, narrow, selectedBlock, setSelectedBlock,
-        onGoToBlock: goToBlock, onEditorCaret: syncBlockFromCaret, onOpenSnippets: () => setSnippetsOpen(true),
+        onGoToBlock: goToBlock, onEditorCaret: syncBlockFromCaret, onOpenSnippets: () => setSnippetsOpen(true), onOpenImages: () => setImagesOpen(true),
         onImportDocument: importDocument, onContentPasted: () => scheduleAutoCompose(true),
         onImagesChanged: bumpImages,
         onOpenAi: () => openDesign('ai'),
@@ -4853,6 +4946,7 @@ function StudioPanel(props) {
     ),
     paletteOpen ? h(CommandPalette, { commands: paletteCommands, onClose: () => setPaletteOpen(false) }) : null,
     snippetsOpen ? h(SnippetDialog, { store, toast, textareaRef, onClose: () => setSnippetsOpen(false) }) : null,
+    imagesOpen ? h(ImageLibraryDialog, { store, toast, textareaRef, onClose: () => setImagesOpen(false) }) : null,
     helpOpen ? h(HelpDialog, { firstRun: helpFirstRun, onClose: closeHelp, onDiagnostics: () => { setHelpOpen(false); setDiagnosticsOpen(true) } }) : null,
     diagnosticsOpen ? h(DiagnosticsDialog, { onClose: () => setDiagnosticsOpen(false) }) : null,
     refining
@@ -5117,6 +5211,86 @@ function SnippetDialog({ store, toast, textareaRef, onClose }) {
   )
 }
 
+function ImageLibraryDialog({ store, toast, textareaRef, onClose }) {
+  const [images, setImages] = React.useState([])
+  const [busy, setBusy] = React.useState(false)
+  const [loading, setLoading] = React.useState(true)
+  const fileRef = React.useRef(null)
+  const refresh = React.useCallback(() => {
+    setLoading(true)
+    listImages().then(items => setImages(items)).catch(() => setImages([])).finally(() => setLoading(false))
+  }, [])
+  React.useEffect(() => { refresh() }, [refresh])
+  const insert = (image) => {
+    const element = textareaRef.current
+    if (!element) { toast(t('先把光标放到正文里')); return }
+    const start = element.selectionStart
+    const end = element.selectionEnd
+    const alt = t('配图')
+    const snippet = `\n\n![${alt}](wsimg://${image.id})\n\n`
+    store.updateDoc(current => ({ ...current, text: `${current.text.slice(0, start)}${snippet}${current.text.slice(end)}` }), { coalesce: 'insert' })
+    requestAnimationFrame(() => {
+      element.focus()
+      const caret = start + snippet.length
+      element.setSelectionRange(caret, caret)
+    })
+    toast(t('图片已插入正文'), 'success')
+    onClose()
+  }
+  const upload = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setBusy(true)
+    try {
+      const raw = await readFileAsDataUrl(file)
+      const compressed = await compressImage(raw, 1600)
+      const ref = await materializeImage(compressed.dataUrl, { kind: 'library' })
+      if (!ref.startsWith('wsimg://')) throw new Error(t('图片保存失败，浏览器存储不可用'))
+      refresh()
+      toast(t('图片已加入素材库'), 'success')
+    } catch (error) {
+      toast(error.message || t('图片处理失败'), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const remove = async (id) => {
+    await deleteImage(id)
+    refresh()
+  }
+  return h('div', { className: 'ws-modal-scrim', onClick: event => { if (event.target === event.currentTarget) onClose() } },
+    h('div', { className: 'ws-modal ws-library-modal', role: 'dialog', 'aria-modal': 'true' },
+      h('div', { className: 'ws-modal-head' },
+        h(Icon, { name: 'image', size: 16 }),
+        h('strong', null, t('图片素材库')),
+        h(IconButton, { icon: 'close', title: t('关闭'), onClick: onClose }),
+      ),
+      h('p', { className: 'ws-hint' }, t('已上传的图片可以跨文章复用；点击插入会把短引用写进正文。')),
+      h('div', { className: 'ws-row' },
+        h(Button, { onClick: () => fileRef.current?.click(), disabled: busy }, busy ? t('上传中…') : t('上传图片')),
+        h('span', { className: 'ws-hint' }, t('支持 PNG / JPEG，自动压缩')),
+        h('input', { ref: fileRef, type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: upload }),
+      ),
+      loading
+        ? h('p', { className: 'ws-hint' }, t('读取素材中…'))
+        : images.length === 0
+          ? h('p', { className: 'ws-hint' }, t('素材库还是空的。'))
+          : h('div', { className: 'ws-library-grid' }, images.map(image => h('div', { key: image.id, className: 'ws-library-card' },
+            h('img', { src: image.dataUrl, alt: '' }),
+            h('div', { className: 'ws-library-meta' },
+              h('span', null, image.kind === 'library' ? t('素材') : t('正文图')),
+              h('span', null, `${Math.round((image.bytes ?? 0) / 1024)}KB`),
+            ),
+            h('div', { className: 'ws-library-actions' },
+              h('button', { type: 'button', className: 'ws-link', onClick: () => insert(image) }, t('插入')),
+              h('button', { type: 'button', className: 'ws-link danger', onClick: () => remove(image.id) }, t('删除')),
+            ),
+          ))),
+    ),
+  )
+}
+
 function HelpDialog({ firstRun, onClose, onDiagnostics }) {
   React.useEffect(() => {
     const onKeyDown = (event) => { if (event.key === 'Escape') onClose() }
@@ -5351,7 +5525,7 @@ function TopBar(props) {
  * ------------------------------------------------------------------ */
 
 function DocRail(props) {
-  const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onGoToBlock, onEditorCaret, onOpenSnippets, onImportDocument, onContentPasted, onOpenAi, onImagesChanged } = props
+  const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onGoToBlock, onEditorCaret, onOpenSnippets, onOpenImages, onImportDocument, onContentPasted, onOpenAi, onImagesChanged } = props
   const { doc } = store
   const [docMenu, setDocMenu] = React.useState(false)
   React.useEffect(() => {
@@ -5580,6 +5754,7 @@ function DocRail(props) {
       ),
       h('div', { className: 'ws-left-actions' },
         h(IconButton, { icon: 'doc', title: t('片段库'), onClick: onOpenSnippets }),
+        h(IconButton, { icon: 'image', title: t('素材库'), onClick: onOpenImages }),
         h(IconButton, { icon: 'search', title: t('查找与替换'), onClick: () => setSearchOpen(value => !value) }),
         h(IconButton, { icon: 'chat', title: t('AI 对话修改'), onClick: onOpenAi }),
         h(IconButton, { icon: 'upload', title: t('上传文档（.md / .txt / .docx / .html）'), onClick: () => uploadRef.current?.click() }),
@@ -6312,7 +6487,12 @@ function AiSection(props) {
   const [pending, setPending] = React.useState(null)
   const [scopeMode, setScopeMode] = React.useState('selection')
   const [stylePreset, setStylePreset] = React.useState('')
+  const [memoryEvents, setMemoryEvents] = React.useState([])
   const abortRef = React.useRef(null)
+  const refreshMemory = React.useCallback(() => {
+    listStyleEvents(30).then(items => setMemoryEvents(items)).catch(() => setMemoryEvents([]))
+  }, [])
+  React.useEffect(() => { refreshMemory() }, [refreshMemory])
   const listRef = React.useRef(null)
   const inputRef = React.useRef(null)
 
@@ -6387,6 +6567,7 @@ function AiSection(props) {
             meta: { author: doc.meta.author, digest: doc.meta.digest },
             history: [],
             styleGuide: doc.meta.styleGuide ?? DEFAULT_STYLE_GUIDE,
+            styleMemory: memoryEvents.filter(item => item.type === 'accepted').slice(0, 3).map(item => item.instruction),
           }, { timeoutMs: 150000 })
           if (typeof part.text !== 'string' || part.text.trim() === '') {
             throw Object.assign(new Error(`第 ${index + 1} 段没有返回改写结果，已取消，正文未改。`), { code: 'chunk-missing' })
@@ -6411,6 +6592,7 @@ function AiSection(props) {
           meta: { author: doc.meta.author, digest: doc.meta.digest },
           history: messages.slice(-6).map(message => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
           styleGuide: doc.meta.styleGuide ?? DEFAULT_STYLE_GUIDE,
+          styleMemory: memoryEvents.filter(item => item.type === 'accepted').slice(0, 3).map(item => item.instruction),
         }, { timeoutMs: 150000, onProgress: chars => setProgress(chars), signal: controller?.signal })
       }
 
@@ -6459,6 +6641,7 @@ function AiSection(props) {
       if (nextText !== undefined || nextDesign !== undefined || nextMeta !== undefined) {
         setPending({
           baseText: sentText,
+          instruction,
           text: nextText,
           design: nextDesign,
           meta: nextMeta,
@@ -6514,6 +6697,7 @@ function AiSection(props) {
       }
     }
     if (Object.keys(patch).length > 0) store.updateDoc(state => ({ ...state, ...patch }))
+    appendStyleEvent({ docId: current.id, type: 'accepted', instruction: pending.instruction, stylePreset, scope: scopeMode }).then(refreshMemory).catch(() => {})
     setMessages(list => [...list, {
       role: 'assistant',
       content: pending.reply,
@@ -6529,6 +6713,7 @@ function AiSection(props) {
   const discardPending = () => {
     if (pending === null) return
     setMessages(list => [...list, { role: 'assistant', content: t('已放弃这次 AI 修改'), applied: [] }])
+    appendStyleEvent({ docId: store.doc.id, type: 'discarded', instruction: pending.instruction, stylePreset, scope: scopeMode }).then(refreshMemory).catch(() => {})
     setPending(null)
   }
 
@@ -6675,6 +6860,17 @@ function AiSection(props) {
         className: 'ws-chip',
         onClick: () => send(text),
       }, text)))
+      : null,
+    memoryEvents.length > 0
+      ? h('div', { className: 'ws-memory' },
+        h('div', { className: 'ws-memory-head' },
+          h(Icon, { name: 'sparkles', size: 12 }),
+          h('span', null, t('AI 风格记忆')),
+          h('span', { className: 'ws-badge' }, `${t('采用 {count}', { count: memoryEvents.filter(item => item.type === 'accepted').length })} · ${t('放弃 {count}', { count: memoryEvents.filter(item => item.type === 'discarded').length })}`),
+        ),
+        h('p', { className: 'ws-hint' }, memoryEvents.filter(item => item.type === 'accepted').slice(0, 3).map(item => item.instruction).join(' / ') || t('还没有采用记录')),
+        h('button', { type: 'button', className: 'ws-link', onClick: () => { clearStyleEvents().then(refreshMemory).catch(() => {}) } }, t('清空记忆')),
+      )
       : null,
     h('p', { className: 'ws-hint' }, t('模型是当前会话的默认模型；要求改版式时只动主题与装饰，不会重写正文。')),
   )
@@ -7390,6 +7586,8 @@ function PublishSection(props) {
   const [appId, setAppId] = React.useState('')
   const [appSecret, setAppSecret] = React.useState('')
   const [configBusy, setConfigBusy] = React.useState(false)
+  const [accounts, setAccounts] = React.useState({ items: [], activeId: '' })
+  const [accountName, setAccountName] = React.useState('')
   const [steps, setSteps] = React.useState([])
   const [busy, setBusy] = React.useState(false)
   const [result, setResult] = React.useState(null)
@@ -7608,15 +7806,64 @@ function PublishSection(props) {
     }
   }
 
+  const loadAccounts = async () => {
+    try {
+      const value = await callHost('listAccounts')
+      setAccounts({ items: Array.isArray(value.accounts) ? value.accounts : [], activeId: value.activeId ?? '' })
+    } catch {
+      setAccounts({ items: [], activeId: '' })
+    }
+  }
+  React.useEffect(() => { if (hostStatus.configured) loadAccounts() }, [hostStatus.configured])
+
+  const makeActive = (value) => {
+    const active = (value.accounts ?? []).find(item => item.active) ?? (value.accounts ?? []).find(item => item.id === value.activeId)
+    setAccounts({ items: Array.isArray(value.accounts) ? value.accounts : [], activeId: value.activeId ?? '' })
+    setHostStatus(current => ({
+      ...current,
+      phase: 'ready',
+      configured: active !== undefined,
+      appIdPreview: active?.appIdPreview ?? null,
+      message: '',
+    }))
+  }
+
+  const switchAccount = async (id) => {
+    setConfigBusy(true)
+    try {
+      const value = await callHost('switchAccount', { id })
+      makeActive(value)
+      toast(t('已切换公众号账号'), 'success')
+    } catch (failure) {
+      toast(failure.message || t('切换账号失败'), 'error')
+    } finally {
+      setConfigBusy(false)
+    }
+  }
+
+  const removeAccount = async (id) => {
+    setConfigBusy(true)
+    try {
+      const value = await callHost('removeAccount', { id })
+      makeActive(value)
+      toast(t('账号已删除'))
+    } catch (failure) {
+      toast(failure.message || t('删除账号失败'), 'error')
+    } finally {
+      setConfigBusy(false)
+    }
+  }
+
   const saveConfig = async () => {
     setConfigBusy(true)
     try {
-      const value = await callHost('saveConfig', { appId: appId.trim(), appSecret: appSecret.trim() })
-      setHostStatus({ phase: 'ready', configured: value.configured === true, appIdPreview: value.appIdPreview ?? null, message: '' })
+      const value = await callHost('saveAccount', { name: accountName.trim(), appId: appId.trim(), appSecret: appSecret.trim(), activate: true })
+      makeActive(value)
       setConfigOpen(false)
+      setAccountName('')
       setAppId('')
       setAppSecret('')
-      toast(t('公众号密钥已保存到本机凭据库'), 'success')
+      toast(t('公众号账号已保存到本机凭据库'), 'success')
     } catch (failure) {
       toast(failure.message || t('保存失败'), 'error')
     } finally {
@@ -7707,6 +7954,7 @@ function PublishSection(props) {
     setConfigBusy(true)
     try {
       await callHost('clearConfig')
+      setAccounts({ items: [], activeId: '' })
       setHostStatus({ phase: 'ready', configured: false, appIdPreview: null, message: '' })
       toast('已清除本机保存的公众号密钥')
     } catch (failure) {
@@ -7959,8 +8207,23 @@ function PublishSection(props) {
       hostStatus.configured
         ? h('p', { className: 'ws-hint' }, `AppID：${hostStatus.appIdPreview ?? t('（已保存）')}。密钥只在本机凭据库，页面拿不到明文。`)
         : h('p', { className: 'ws-hint' }, t('在公众号后台「设置与开发 → 基本配置」拿到 AppID 与 AppSecret。还需要把本机出口 IP 加进白名单。')),
+      accounts.items.length > 0
+        ? h('div', { className: 'ws-accounts' },
+          accounts.items.map(item => h('div', { key: item.id, className: 'ws-account-row' + (item.active ? ' on' : '') },
+            h('span', { className: 'ws-account-name' }, item.name),
+            h('span', { className: 'ws-account-id' }, item.appIdPreview),
+            item.active
+              ? h('span', { className: 'ws-badge ok' }, t('当前'))
+              : h('button', { type: 'button', className: 'ws-link', disabled: configBusy, onClick: () => switchAccount(item.id) }, t('切换')),
+            accounts.items.length > 1 && !item.active
+              ? h('button', { type: 'button', className: 'ws-link danger', disabled: configBusy, onClick: () => removeAccount(item.id) }, t('删除'))
+              : null,
+          )),
+        )
+        : null,
       configOpen
         ? h('div', { className: 'ws-config' },
+          h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, t('账号名称')), h('input', { className: 'ws-input', value: accountName, placeholder: t('例如：品牌主号'), onChange: event => setAccountName(event.target.value) })),
           h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, 'AppID'), h('input', { className: 'ws-input', value: appId, placeholder: t('wx 开头的一串字符'), onChange: event => setAppId(event.target.value) })),
           h('label', { className: 'ws-field' }, h('span', { className: 'ws-field-label' }, 'AppSecret'), h('input', { className: 'ws-input', type: 'password', value: appSecret, placeholder: t('32 位密钥，保存后不再显示'), onChange: event => setAppSecret(event.target.value) })),
           h('div', { className: 'ws-row' },
@@ -7969,9 +8232,9 @@ function PublishSection(props) {
           ),
         )
         : h('div', { className: 'ws-row' },
-          h(Button, { variant: hostStatus.configured ? 'ghost' : 'primary', onClick: () => setConfigOpen(true), disabled: hostStatus.phase === 'error' }, hostStatus.configured ? t('更新密钥') : t('填写密钥')),
+          h(Button, { variant: hostStatus.configured ? 'ghost' : 'primary', onClick: () => { setConfigOpen(true); setAccountName(''); setAppId(''); setAppSecret('') }, disabled: hostStatus.phase === 'error' }, hostStatus.configured ? t('新增账号') : t('填写密钥')),
           hostStatus.configured ? h(Button, { onClick: testConnection, disabled: configBusy }, configBusy ? t('测试中…') : t('测试连接')) : null,
-          hostStatus.configured ? h(Button, { onClick: clearConfig, disabled: configBusy, variant: 'ghost' }, t('清除')) : null,
+          hostStatus.configured ? h(Button, { onClick: clearConfig, disabled: configBusy, variant: 'ghost' }, t('清除全部')) : null,
         ),
     ),
     h('div', { className: 'ws-card' },
@@ -8109,6 +8372,24 @@ function PublishSection(props) {
         h(Button, { onClick: () => coverInputRef.current?.click(), disabled: coverBusy }, coverBusy ? t('处理中…') : t('上传图片')),
         h('input', { ref: coverInputRef, type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: uploadCoverFile }),
       ),
+    ),
+    h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' }, h('span', null, t('发布计划'))),
+      h('div', { className: 'ws-field-row' },
+        h('span', { className: 'ws-field-label' }, t('计划日期')),
+        h('input', {
+          className: 'ws-input',
+          type: 'date',
+          value: typeof doc.meta.plannedAt === 'string' ? doc.meta.plannedAt.slice(0, 10) : '',
+          onChange: event => store.updateMeta({ plannedAt: event.target.value === '' ? '' : `${event.target.value}T09:00:00` }),
+        }),
+      ),
+      store.docs.filter(entry => typeof entry.meta.plannedAt === 'string' && entry.meta.plannedAt !== '').slice(0, 6).map(entry => h('div', { key: entry.id, className: 'ws-plan-row' + (entry.id === doc.id ? ' on' : '') },
+        h('span', { className: 'ws-plan-date' }, entry.meta.plannedAt.slice(0, 10)),
+        h('span', { className: 'ws-plan-title' }, entry.meta.title.trim() || parseArticle(entry.text).title || t('未命名草稿')),
+        entry.id === doc.id ? h('span', { className: 'ws-badge' }, t('当前')) : h('button', { type: 'button', className: 'ws-link', onClick: () => store.selectDoc(entry.id) }, t('打开')),
+      )),
+      h('p', { className: 'ws-hint' }, t('计划日期只是本地排期，不会自动发布；到时间在发布面板手动发送。')),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },
@@ -8697,7 +8978,7 @@ const STUDIO_CSS = `
 .ws-home-indicator{flex:none;height:22px;display:flex;align-items:center;justify-content:center;background:#fff}
 .ws-home-indicator i{display:block;width:136px;height:5px;border-radius:3px;background:#111}
 .ws-article{width:100%;min-height:120px}
-.ws-block{position:relative;border-radius:4px}
+.ws-block{content-visibility:auto;contain-intrinsic-size:auto 140px;position:relative;border-radius:4px}
 .ws-block:hover{outline:1px dashed rgba(0,0,0,.14);outline-offset:2px}
 .ws-block.ai{box-shadow:inset 2px 0 0 color-mix(in srgb,var(--ws-accent) 55%,transparent)}
 .ws-block.locked{box-shadow:inset 3px 0 0 color-mix(in srgb,var(--ws-warn,#b47a00) 70%,transparent)}
@@ -8839,6 +9120,10 @@ const STUDIO_CSS = `
 .ws-draft-search{height:28px;font-size:12px;margin:0 0 6px}
 .ws-draft-pager{display:flex;align-items:center;gap:8px;justify-content:space-between;padding-top:4px}
 .ws-draft-pager .ws-hint{flex:1;text-align:center;margin:0}
+.ws-memory{display:flex;flex-direction:column;gap:4px;padding:7px 8px;border:1px solid var(--ws-border);border-radius:8px;background:var(--ws-surface2)}
+.ws-memory-head{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600}
+.ws-memory-head .ws-badge{margin-left:auto}
+.ws-memory .ws-hint{margin:0}
 .ws-qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
 .ws-qa-item{display:flex;flex-direction:column;gap:1px;padding:6px 7px;border:1px solid var(--ws-border);border-radius:7px;background:var(--ws-surface2)}
 .ws-qa-label{font-size:10px;color:var(--ws-muted)}
@@ -8861,6 +9146,15 @@ const STUDIO_CSS = `
 .ws-dna-presets{display:flex;flex-direction:column;gap:2px;margin-top:6px;border-top:1px solid var(--ws-border);padding-top:6px}
 .ws-dna-preset{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ws-muted)}
 .ws-dna-preset-name{flex:1;color:var(--ws-text)}
+.ws-accounts{display:flex;flex-direction:column;gap:3px;margin:6px 0}
+.ws-account-row{display:flex;align-items:center;gap:7px;padding:5px 7px;border:1px solid var(--ws-border);border-radius:7px;font-size:11px;color:var(--ws-muted)}
+.ws-account-row.on{border-color:var(--ws-accent);background:var(--ws-surface2)}
+.ws-account-name{flex:1;color:var(--ws-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-account-id{font-family:ui-monospace,Menlo,monospace;font-size:10px}
+.ws-plan-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--ws-border);font-size:11px;color:var(--ws-muted)}
+.ws-plan-row.on{color:var(--ws-text)}
+.ws-plan-date{font-variant-numeric:tabular-nums;flex:none;width:78px}
+.ws-plan-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ws-stat-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ws-muted);padding:4px 0;border-bottom:1px solid var(--ws-border)}
 .ws-stat-title{flex:1;color:var(--ws-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ws-stat-num{font-variant-numeric:tabular-nums}
@@ -9138,6 +9432,12 @@ const STUDIO_CSS = `
 .ws-palette-label{font-size:12.5px}
 .ws-palette-hint{font-size:10.5px;color:var(--ws-muted);margin-left:auto}
 .ws-palette-foot{display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--ws-border);font-size:10px;color:var(--ws-muted)}
+.ws-library-modal{width:min(620px,100%)}
+.ws-library-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-height:420px;overflow:auto;padding:2px}
+.ws-library-card{display:flex;flex-direction:column;border:1px solid var(--ws-border);border-radius:8px;overflow:hidden;background:var(--ws-bg)}
+.ws-library-card img{width:100%;height:86px;object-fit:cover;display:block;background:var(--ws-surface2)}
+.ws-library-meta{display:flex;justify-content:space-between;gap:4px;font-size:10px;color:var(--ws-muted);padding:4px 6px}
+.ws-library-actions{display:flex;gap:7px;padding:0 6px 6px;font-size:10.5px}
 .ws-snippet-modal{width:min(560px,100%)}
 .ws-snippet-create{display:flex;flex-direction:column;gap:6px;padding:9px;border:1px solid var(--ws-border);border-radius:9px;background:var(--ws-surface2)}
 .ws-snippet-section{display:flex;flex-direction:column;gap:3px;margin-top:4px}
@@ -9199,6 +9499,9 @@ const STUDIO_CSS = `
 .ws-search-hit-meta{font-size:10.5px;color:#b0b0b0}
 .ws-surface-hints{display:flex;flex-wrap:wrap;gap:5px;padding:0 2px}
 .ws-surface-hints span{font-size:10.5px;padding:3px 6px;border-radius:5px;background:var(--ws-warn-soft,#fff3d8);color:var(--ws-warn,#8a5a00);border:1px solid rgba(180,120,0,.12)}
+@media (prefers-reduced-motion: reduce){
+  .ws-phone, .ws-block, .ws-theme-mini, .ws-diff-line{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+}
 @media (max-width: 1000px){
   .ws-root{padding:8px;gap:8px}
   .ws-top{height:52px;border-radius:16px}

@@ -717,7 +717,7 @@ export function nodesToReact(nodes, h) {
     if (current === null || current === undefined) return null
     const props = { key: index, style: reactStyle(current.style) }
     if (current.tag === 'img') {
-      return h('img', { ...props, ...current.attrs })
+      return h('img', { ...props, ...current.attrs, loading: 'lazy', decoding: 'async' })
     }
     return h(current.tag, props, ...nodesToReact(current.children, h))
   })
