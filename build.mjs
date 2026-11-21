@@ -22,7 +22,7 @@ function stripModuleSyntax(source) {
     .replace(/^export\s+/gm, '')
 }
 
-const sources = ['i18n', 'themes', 'fidelity', 'engine', 'render', 'docparse', 'images', 'docdb', 'bridge', 'ui-shell', 'ui-editor', 'ui-design', 'ui-misc']
+const sources = ['i18n', 'themes', 'fidelity', 'engine', 'render', 'docparse', 'images', 'docdb', 'brandkit', 'bridge', 'ui-shell', 'ui-editor', 'ui-design', 'ui-misc']
   .map(name => {
     const code = stripModuleSyntax(readFileSync(join(root, 'src', `${name}.mjs`), 'utf8'))
     return `/* ===== src/${name}.mjs ===== */\n${code.trim()}\n`
@@ -73,7 +73,7 @@ return {
     ctx.effect(() => ctx.slots.inject('main', () => ctx.slots.register({
       name: 'main',
       key: PANEL_ID,
-    }, StudioPanel)), 'wechat-studio: studio panel')
+    }, StudioShell)), 'wechat-studio: studio panel')
   },
 }
   },

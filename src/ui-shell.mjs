@@ -9,6 +9,7 @@ const PANEL_ID = 'wechat-studio'
 const STORAGE_KEY = 'dsh.wechat-studio.docs.v1'
 const ACTIVE_KEY = 'dsh.wechat-studio.active.v1'
 const HELP_SEEN_KEY = 'dsh.wechat-studio.helpSeen.v1'
+const DIAGNOSTICS_KEY = 'dsh.wechat-studio.errors.v1'
 const APPEARANCE_KEY = 'dsh.wechat-studio.appearance.v1'
 const LONG_TEXT_CHUNK_THRESHOLD = 7000
 const DEVICE_KEY = 'dsh.wechat-studio.device.v1'
@@ -141,7 +142,7 @@ function createDocument(seedText, design, meta) {
     id: docId(),
     text,
     design: composed,
-    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', coverLayout: 'left', draftMediaId: '', draftArticleCount: 0, aiHashes: [], lockedHashes: [], needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
+    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', coverLayout: 'left', draftMediaId: '', draftArticleCount: 0, aiHashes: [], lockedHashes: [], styleGuide: DEFAULT_STYLE_GUIDE, needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }
@@ -451,7 +452,34 @@ function StudioPanel(props) {
   const [imageVersion, setImageVersion] = React.useState(0)
   const [snapshotVersion, setSnapshotVersion] = React.useState(0)
   const [helpOpen, setHelpOpen] = React.useState(() => { try { return localStorage.getItem(HELP_SEEN_KEY) !== '1' } catch { return false } })
+  const [snippetsOpen, setSnippetsOpen] = React.useState(false)
+  const [paletteOpen, setPaletteOpen] = React.useState(false)
+  const [diagnosticsOpen, setDiagnosticsOpen] = React.useState(false)
   const [helpFirstRun, setHelpFirstRun] = React.useState(() => { try { return localStorage.getItem(HELP_SEEN_KEY) !== '1' } catch { return false } })
+  React.useEffect(() => {
+    const onKey = (event) => {
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setPaletteOpen(value => !value)
+      }
+      if (event.key === 'Escape') {
+        setPaletteOpen(false)
+        setSnippetsOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
+  React.useEffect(() => {
+    const onError = (event) => recordDiagnostic(event.error ?? event.message, 'window')
+    const onRejection = (event) => recordDiagnostic(event.reason, 'promise')
+    window.addEventListener('error', onError)
+    window.addEventListener('unhandledrejection', onRejection)
+    return () => {
+      window.removeEventListener('error', onError)
+      window.removeEventListener('unhandledrejection', onRejection)
+    }
+  }, [])
   const bumpImages = React.useCallback(() => setImageVersion(value => value + 1), [])
   React.useEffect(() => {
     let cancelled = false
@@ -781,6 +809,26 @@ function StudioPanel(props) {
     else setRightOpen(false)
   }
 
+  const paletteCommands = [
+    { id: 'compose', label: t('自动编排'), hint: t('按内容选主题与版式'), run: runCompose },
+    { id: 'reshuffle', label: t('换一版'), hint: t('当前主题内换版式'), run: reshuffle },
+    { id: 'copy', label: t('复制 HTML'), hint: t('复制带内联样式的正文'), run: copyArticle },
+    { id: 'theme', label: t('打开主题面板'), hint: t('主题、版式、版式 DNA'), run: () => openDesign('theme') },
+    { id: 'publish', label: t('打开发布面板'), hint: t('草稿、对账单、发布检查'), run: () => openDesign('publish') },
+    { id: 'ai', label: t('打开 AI 修改'), hint: t('对话修改正文或版式'), run: () => openDesign('ai') },
+    { id: 'snapshot', label: t('保存版本快照'), hint: t('当前正文存入历史版本'), run: () => takeSnapshot('manual', true) },
+    { id: 'new', label: t('新建草稿'), hint: t('从空白开始'), run: () => { store.addDoc(''); setSelectedBlock(null); toast(t('已新建草稿')) } },
+    { id: 'snippets', label: t('打开片段库'), hint: t('插入作者简介、引导等常用块'), run: () => setSnippetsOpen(true) },
+    { id: 'help', label: t('使用提示与快捷键'), hint: t('查看隐藏操作'), run: () => setHelpOpen(true) },
+    { id: 'diagnostics', label: t('诊断报告'), hint: t('存储用量与最近错误'), run: () => setDiagnosticsOpen(true) },
+    ...store.docs.map(entry => ({
+      id: `doc-${entry.id}`,
+      label: `${t('切换草稿')}：${entry.meta.title.trim() || parseArticle(entry.text).title || t('未命名草稿')}`,
+      hint: t('当前窗口载入这篇草稿'),
+      run: () => { store.selectDoc(entry.id); setSelectedBlock(null) },
+    })),
+  ]
+
   const rootClassNames = [
     'ws-root',
     narrow ? 'ws-narrow' : compact ? 'ws-compact' : 'ws-wide',
@@ -812,7 +860,7 @@ function StudioPanel(props) {
     h('div', { className: 'ws-body' },
       h(DocRail, {
         store, parsed, features, textareaRef, toast, narrow, selectedBlock, setSelectedBlock,
-        onGoToBlock: goToBlock, onEditorCaret: syncBlockFromCaret,
+        onGoToBlock: goToBlock, onEditorCaret: syncBlockFromCaret, onOpenSnippets: () => setSnippetsOpen(true),
         onImportDocument: importDocument, onContentPasted: () => scheduleAutoCompose(true),
         onImagesChanged: bumpImages,
         onOpenAi: () => openDesign('ai'),
@@ -828,7 +876,10 @@ function StudioPanel(props) {
         takeSnapshot, snapshotVersion,
       }),
     ),
-    helpOpen ? h(HelpDialog, { firstRun: helpFirstRun, onClose: closeHelp }) : null,
+    paletteOpen ? h(CommandPalette, { commands: paletteCommands, onClose: () => setPaletteOpen(false) }) : null,
+    snippetsOpen ? h(SnippetDialog, { store, toast, textareaRef, onClose: () => setSnippetsOpen(false) }) : null,
+    helpOpen ? h(HelpDialog, { firstRun: helpFirstRun, onClose: closeHelp, onDiagnostics: () => { setHelpOpen(false); setDiagnosticsOpen(true) } }) : null,
+    diagnosticsOpen ? h(DiagnosticsDialog, { onClose: () => setDiagnosticsOpen(false) }) : null,
     refining
       ? h('div', { className: 'ws-refining' },
         h('span', { className: 'ws-typing-dot' }),
@@ -841,7 +892,257 @@ function StudioPanel(props) {
   )
 }
 
-function HelpDialog({ firstRun, onClose }) {
+function recordDiagnostic(error, source = 'runtime') {
+  try {
+    const items = JSON.parse(localStorage.getItem(DIAGNOSTICS_KEY) ?? '[]')
+    const list = Array.isArray(items) ? items : []
+    list.unshift({
+      at: new Date().toISOString(),
+      source,
+      message: error?.message ?? String(error),
+      stack: typeof error?.stack === 'string' ? error.stack.slice(0, 4000) : '',
+    })
+    localStorage.setItem(DIAGNOSTICS_KEY, JSON.stringify(list.slice(0, 20)))
+  } catch { /* storage unavailable */ }
+}
+
+function readDiagnostics() {
+  try {
+    const items = JSON.parse(localStorage.getItem(DIAGNOSTICS_KEY) ?? '[]')
+    return Array.isArray(items) ? items : []
+  } catch {
+    return []
+  }
+}
+
+let ErrorBoundaryClass = null
+function getErrorBoundaryClass() {
+  if (ErrorBoundaryClass !== null) return ErrorBoundaryClass
+  ErrorBoundaryClass = class StudioErrorBoundary extends React.Component {
+    constructor(props) {
+      super(props)
+      this.state = { error: null }
+    }
+    static getDerivedStateFromError(error) { return { error } }
+    componentDidCatch(error) { recordDiagnostic(error, 'render') }
+    render() {
+      if (this.state.error === null) return this.props.children
+      return h('div', { className: 'ws-root ws-crash', style: { padding: 24, fontFamily: 'system-ui', color: 'inherit' } },
+        h('h2', { style: { fontSize: 16, margin: '0 0 8px' } }, t('编辑器遇到错误')),
+        h('p', { style: { fontSize: 12, opacity: 0.7, lineHeight: 1.6 } }, t('这一轮修改还在浏览器存储里。先刷新页面；如果反复出现，打开诊断报告看看最近的错误。')),
+        h('div', { style: { display: 'flex', gap: 8, marginTop: 12 } },
+          h('button', { type: 'button', className: 'ws-btn primary', onClick: () => location.reload() }, t('刷新页面')),
+          h('button', { type: 'button', className: 'ws-btn', onClick: () => { try { localStorage.removeItem(DIAGNOSTICS_KEY) } catch { /* ignore */ } location.reload() } }, t('清除错误并刷新')),
+        ),
+      )
+    }
+  }
+  return ErrorBoundaryClass
+}
+
+
+function StudioShell(props) {
+  return h(getErrorBoundaryClass(), null, h(StudioPanel, props))
+}
+
+function DiagnosticsDialog({ onClose }) {
+  const [errors, setErrors] = React.useState(() => readDiagnostics())
+  const [storage, setStorage] = React.useState(null)
+  React.useEffect(() => {
+    let cancelled = false
+    if (navigator?.storage?.estimate) {
+      navigator.storage.estimate().then(value => { if (!cancelled) setStorage(value) }).catch(() => {})
+    }
+    return () => { cancelled = true }
+  }, [])
+  const clear = () => {
+    try { localStorage.removeItem(DIAGNOSTICS_KEY) } catch { /* ignore */ }
+    setErrors([])
+  }
+  const copy = async () => {
+    const report = JSON.stringify({ generatedAt: new Date().toISOString(), storage, errors }, null, 2)
+    try { await navigator.clipboard.writeText(report) } catch { /* clipboard may be blocked */ }
+    onClose()
+  }
+  const mb = (bytes) => typeof bytes === 'number' ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : '—'
+  return h('div', { className: 'ws-modal-scrim', onClick: event => { if (event.target === event.currentTarget) onClose() } },
+    h('div', { className: 'ws-modal', role: 'dialog', 'aria-modal': 'true' },
+      h('div', { className: 'ws-modal-head' },
+        h(Icon, { name: 'help', size: 16 }),
+        h('strong', null, t('诊断报告')),
+        h(IconButton, { icon: 'close', title: t('关闭'), onClick: onClose }),
+      ),
+      h('div', { className: 'ws-help-section' },
+        h('h4', null, t('浏览器存储')),
+        h('p', { className: 'ws-hint' }, storage === null ? t('暂时无法读取存储用量') : t('已用 {used} / 配额 {quota}', { used: mb(storage.usage), quota: mb(storage.quota) })),
+      ),
+      h('div', { className: 'ws-help-section' },
+        h('h4', null, t('最近错误')),
+        errors.length === 0
+          ? h('p', { className: 'ws-hint' }, t('最近没有记录到错误。'))
+          : errors.slice(0, 6).map((item, index) => h('div', { key: index, className: 'ws-help-row' },
+            h('span', { className: 'ws-help-key' }, item.at.slice(11, 19)),
+            h('span', null, `${item.source} · ${item.message}`),
+          )),
+      ),
+      h('div', { className: 'ws-modal-actions' },
+        h(Button, { variant: 'ghost', onClick: clear }, t('清空错误')),
+        h(Button, { onClick: copy }, t('复制报告并关闭')),
+        h(Button, { variant: 'primary', onClick: onClose }, t('关闭')),
+      ),
+    ),
+  )
+}
+
+function CommandPalette({ commands, onClose }) {
+  const [query, setQuery] = React.useState('')
+  const [index, setIndex] = React.useState(0)
+  const filtered = commands.filter(command => `${command.label} ${command.hint ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()))
+  React.useEffect(() => { setIndex(0) }, [query])
+  const run = (command) => { onClose(); command.run() }
+  const onKeyDown = (event) => {
+    if (event.key === 'Escape') { event.preventDefault(); onClose() }
+    else if (event.key === 'ArrowDown') { event.preventDefault(); setIndex(value => Math.min(filtered.length - 1, value + 1)) }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); setIndex(value => Math.max(0, value - 1)) }
+    else if (event.key === 'Enter') {
+      event.preventDefault()
+      const command = filtered[index]
+      if (command !== undefined) run(command)
+    }
+  }
+  return h('div', { className: 'ws-modal-scrim', onClick: event => { if (event.target === event.currentTarget) onClose() } },
+    h('div', { className: 'ws-modal ws-palette', role: 'dialog', 'aria-modal': 'true', onKeyDown },
+      h('div', { className: 'ws-palette-search' },
+        h(Icon, { name: 'search', size: 15 }),
+        h('input', {
+          className: 'ws-palette-input',
+          autoFocus: true,
+          value: query,
+          placeholder: t('搜索动作、草稿、主题…'),
+          onChange: event => setQuery(event.target.value),
+        }),
+        h('span', { className: 'ws-kbd' }, 'Esc'),
+      ),
+      h('div', { className: 'ws-palette-list' },
+        filtered.length === 0
+          ? h('p', { className: 'ws-hint' }, t('没有匹配的命令'))
+          : filtered.map((command, commandIndex) => h('button', {
+            key: command.id,
+            type: 'button',
+            className: 'ws-palette-item' + (commandIndex === index ? ' on' : ''),
+            onMouseEnter: () => setIndex(commandIndex),
+            onClick: () => run(command),
+          },
+          h('span', { className: 'ws-palette-label' }, command.label),
+          command.hint ? h('span', { className: 'ws-palette-hint' }, command.hint) : null,
+          )),
+      ),
+      h('div', { className: 'ws-palette-foot' },
+        h('span', null, '↑↓ 选择 · Enter 执行'),
+        h('span', null, '⌘K 开关'),
+      ),
+    ),
+  )
+}
+
+const SNIPPET_BUILTINS = [
+  { id: 'builtin-outro', name: '关注引导', text: '如果这篇对你有用，点个「在看」，或者转给正在需要它的人。' },
+  { id: 'builtin-bio', name: '作者简介', text: '{{author}}，写作者。这里放一句你希望读者记住的话。' },
+  { id: 'builtin-disclaimer', name: '免责声明', text: '本文只代表个人经验，不构成专业建议；涉及具体决策请结合自身情况判断。' },
+]
+
+function SnippetDialog({ store, toast, textareaRef, onClose }) {
+  const [snippets, setSnippets] = React.useState([])
+  const [name, setName] = React.useState('')
+  const [text, setText] = React.useState('')
+  const [busy, setBusy] = React.useState(false)
+  const refresh = React.useCallback(() => {
+    listSnippets().then(items => setSnippets(items)).catch(() => setSnippets([]))
+  }, [])
+  React.useEffect(() => { refresh() }, [refresh])
+  const renderText = (value) => {
+    const current = store.getDoc()
+    const title = current?.meta?.title?.trim() || parseArticle(current?.text ?? '').title || ''
+    const date = new Date()
+    const stamp = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    return String(value)
+      .replace(/\{\{title\}\}/g, title)
+      .replace(/\{\{author\}\}/g, current?.meta?.author?.trim() || '')
+      .replace(/\{\{brand\}\}/g, current?.meta?.brand?.trim() || '')
+      .replace(/\{\{date\}\}/g, stamp)
+  }
+  const insert = (snippet) => {
+    const element = textareaRef.current
+    if (!element) { toast(t('先把光标放到正文里')); return }
+    const start = element.selectionStart
+    const end = element.selectionEnd
+    const value = renderText(snippet.text)
+    store.updateDoc(current => ({ ...current, text: `${current.text.slice(0, start)}${value}${current.text.slice(end)}` }), { coalesce: 'insert' })
+    requestAnimationFrame(() => {
+      element.focus()
+      const caret = start + value.length
+      element.setSelectionRange(caret, caret)
+    })
+    toast(t('已插入片段「{name}」', { name: snippet.name }), 'success')
+    onClose()
+  }
+  const save = async () => {
+    if (name.trim() === '' || text.trim() === '') { toast(t('片段名称和内容都不能为空')); return }
+    setBusy(true)
+    try {
+      const ok = await saveSnippet({ name, text })
+      if (!ok) throw new Error(t('片段保存失败，检查浏览器存储是否可用'))
+      setName('')
+      setText('')
+      refresh()
+      toast(t('片段已保存'), 'success')
+    } catch (error) {
+      toast(error.message || t('片段保存失败'), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const remove = async (id) => {
+    await deleteSnippet(id)
+    refresh()
+  }
+  return h('div', { className: 'ws-modal-scrim', onClick: event => { if (event.target === event.currentTarget) onClose() } },
+    h('div', { className: 'ws-modal ws-snippet-modal', role: 'dialog', 'aria-modal': 'true' },
+      h('div', { className: 'ws-modal-head' },
+        h(Icon, { name: 'doc', size: 16 }),
+        h('strong', null, t('片段库')),
+        h(IconButton, { icon: 'close', title: t('关闭'), onClick: onClose }),
+      ),
+      h('p', { className: 'ws-hint' }, t('插入作者简介、关注引导、免责声明等常用块；支持 {{title}}、{{author}}、{{date}}、{{brand}} 变量。')),
+      h('div', { className: 'ws-snippet-create' },
+        h('input', { className: 'ws-input', value: name, placeholder: t('片段名称'), onChange: event => setName(event.target.value) }),
+        h('textarea', { className: 'ws-input ws-textarea', rows: 3, value: text, placeholder: t('片段内容，支持 Markdown 和变量'), onChange: event => setText(event.target.value) }),
+        h('div', { className: 'ws-row' },
+          h(Button, { variant: 'primary', disabled: busy, onClick: save }, busy ? t('保存中…') : t('保存片段')),
+        ),
+      ),
+      h('div', { className: 'ws-snippet-section' },
+        h('div', { className: 'ws-snippet-section-title' }, t('内置片段')),
+        SNIPPET_BUILTINS.map(snippet => h('div', { key: snippet.id, className: 'ws-snippet-row' },
+          h('span', { className: 'ws-snippet-name' }, snippet.name),
+          h('button', { type: 'button', className: 'ws-link', onClick: () => insert(snippet) }, t('插入')),
+        )),
+      ),
+      h('div', { className: 'ws-snippet-section' },
+        h('div', { className: 'ws-snippet-section-title' }, t('我的片段')),
+        snippets.length === 0
+          ? h('p', { className: 'ws-hint' }, t('还没有保存的片段。'))
+          : snippets.map(snippet => h('div', { key: snippet.id, className: 'ws-snippet-row' },
+            h('span', { className: 'ws-snippet-name' }, snippet.name),
+            h('button', { type: 'button', className: 'ws-link', onClick: () => insert(snippet) }, t('插入')),
+            h('button', { type: 'button', className: 'ws-link danger', onClick: () => remove(snippet.id) }, t('删除')),
+          )),
+      ),
+    ),
+  )
+}
+
+function HelpDialog({ firstRun, onClose, onDiagnostics }) {
   React.useEffect(() => {
     const onKeyDown = (event) => { if (event.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKeyDown)
@@ -852,13 +1153,15 @@ function HelpDialog({ firstRun, onClose }) {
       ['⌘B / ⌘⇧H', '加粗 / 高亮'],
       ['⌘1 / ⌘2 / ⌘3', '标题层级'],
       ['⌘⇧7 / ⌘⇧8', '无序 / 有序列表'],
-      ['⌘K / ⌘F', '链接 / 查找替换'],
+      ['⌘K / ⌘⇧K', '命令面板 / 链接'],
+      ['⌘F', '查找替换'],
     ]],
     ['AI 修改', [
       ['选中段 / 本节 / 整篇', '控制改写范围'],
       ['更克制 / 更口语 / 更短', '语气预设'],
       ['应用修改', '先看 diff 再落盘'],
       ['取消', '生成中可中止'],
+      ['发布前质检', '汇总保真、规范、发布差异'],
     ]],
     ['发布', [
       ['更新当前草稿', '覆盖已关联的公众号草稿'],
@@ -872,6 +1175,8 @@ function HelpDialog({ firstRun, onClose }) {
       ['图片工具', '图注 / 裁剪'],
       ['主题收藏', '收藏与最近筛选'],
       ['段落锁', '锁定后 AI 不会改'],
+      ['片段库', '作者简介、关注引导等'],
+      ['品牌包', '导出主题、规范与片段'],
     ]],
   ]
   return h('div', { className: 'ws-modal-scrim', onClick: event => { if (event.target === event.currentTarget) onClose() } },
@@ -892,6 +1197,7 @@ function HelpDialog({ firstRun, onClose }) {
         )),
       ),
       h('div', { className: 'ws-modal-actions' },
+        h(Button, { variant: 'ghost', onClick: onDiagnostics }, t('诊断报告')),
         h(Button, { variant: 'primary', onClick: onClose }, firstRun ? t('开始使用') : t('知道了')),
       ),
     ),

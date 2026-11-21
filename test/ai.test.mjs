@@ -233,3 +233,18 @@ test('aiEdit 通过 onDelta 汇报生成进度', async () => {
   assert.ok(sizes.length >= 1)
   assert.equal(sizes.at(-1), JSON.stringify({ reply: '好', design: { themeId: 'column' } }).length)
 })
+
+test('aiEdit prompt carries the house style', async () => {
+  const { ctx, calls } = fakeContext({ chunks: jsonReply({ reply: '好' }) })
+  await createAiEditor({ ctx }).edit({
+    instruction: '润色',
+    text: ARTICLE,
+    styleGuide: { tone: 'spoken', bannedWords: ['赋能'], preferredWords: ['读者'], maxParagraphChars: 90, requireCaptions: true },
+  })
+  const prompt = calls[0].messages[0].content[0].text
+  assert.match(prompt, /语气 口语/)
+  assert.match(prompt, /禁用词（不要出现）：赋能/)
+  assert.match(prompt, /偏好词（优先使用）：读者/)
+  assert.match(prompt, /段落不超过 90 字/)
+  assert.match(prompt, /正文图片必须带图注/)
+})

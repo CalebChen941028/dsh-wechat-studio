@@ -648,6 +648,65 @@ export function paletteFromPixels(pixels) {
   }
 }
 
+/** Tone ids offered by the house style editor. */
+export const STYLE_TONES = ['restrained', 'spoken', 'professional', 'story']
+
+/** Default house style for a new document. */
+export const DEFAULT_STYLE_GUIDE = {
+  tone: 'restrained',
+  bannedWords: [],
+  preferredWords: [],
+  maxParagraphChars: 140,
+  requireCaptions: false,
+}
+
+/** Normalize a stored/user-entered style guide. */
+export function normalizeStyleGuide(value) {
+  const input = value && typeof value === 'object' ? value : {}
+  const list = (raw) => {
+    const items = Array.isArray(raw) ? raw : String(raw ?? '').split(/[,，、\s]+/)
+    return [...new Set(items.map(item => String(item).trim()).filter(Boolean))].slice(0, 40)
+  }
+  const max = Number(input.maxParagraphChars)
+  return {
+    tone: STYLE_TONES.includes(input.tone) ? input.tone : DEFAULT_STYLE_GUIDE.tone,
+    bannedWords: list(input.bannedWords),
+    preferredWords: list(input.preferredWords),
+    maxParagraphChars: Math.min(400, Math.max(60, Number.isFinite(max) ? Math.round(max) : DEFAULT_STYLE_GUIDE.maxParagraphChars)),
+    requireCaptions: input.requireCaptions === true,
+  }
+}
+
+/**
+ * Audit text against a house style.
+ * @param {Array<object>} blocks parsed article blocks.
+ * @param {string} text raw markdown.
+ * @param {object} rawGuide stored style guide.
+ * @returns {{guide: object, active: boolean, bannedHits: Array<{word: string, count: number}>, longParagraphs: number, missingCaptions: number, violations: number}}
+ */
+export function auditHouseStyle(blocks, text, rawGuide) {
+  const guide = normalizeStyleGuide(rawGuide)
+  const source = String(text ?? '')
+  const bannedHits = guide.bannedWords
+    .map(word => ({ word, count: source.split(word).length - 1 }))
+    .filter(item => item.count > 0)
+  let longParagraphs = 0
+  let missingCaptions = 0
+  for (const block of Array.isArray(blocks) ? blocks : []) {
+    if (block.type === 'paragraph' && plainText(block.text).length > guide.maxParagraphChars) longParagraphs += 1
+    if (block.type === 'image' && String(block.alt ?? '').trim() === '') missingCaptions += 1
+  }
+  const captions = guide.requireCaptions ? missingCaptions : 0
+  return {
+    guide,
+    active: guide.bannedWords.length > 0 || guide.preferredWords.length > 0 || guide.requireCaptions,
+    bannedHits,
+    longParagraphs,
+    missingCaptions: captions,
+    violations: bannedHits.length + longParagraphs + captions,
+  }
+}
+
 /** Stable short hash for a block's text, used for AI provenance and locks. */
 export function hashBlock(text) {
   const value = String(text ?? '').replace(/\s+/g, ' ').trim()

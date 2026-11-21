@@ -858,6 +858,24 @@ export function createStudioService({ ctx, fetchImpl = fetch, importUndici } = {
       })
     },
 
+    /** 读取发布复盘数据；没有数据统计权限时返回微信原始错误。 */
+    async articleStats(payload = {}) {
+      const account = await readAccount({ required: true })
+      const raw = Number(payload?.days)
+      const days = Number.isFinite(raw) ? Math.min(30, Math.max(1, Math.trunc(raw))) : 7
+      const end = new Date()
+      const begin = new Date(end.getTime() - (days - 1) * 24 * 60 * 60 * 1000)
+      const format = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+      return wechatCall(async () => {
+        const result = await withToken(account, (token) => client.getArticleSummary({
+          accessToken: token,
+          beginDate: format(begin),
+          endDate: format(end),
+        }))
+        return { days, items: Array.isArray(result.list) ? result.list : [] }
+      })
+    },
+
     /** 删除一篇公众号草稿。 */
     async deleteDraft(payload = {}) {
       const account = await readAccount({ required: true })

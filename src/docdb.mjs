@@ -10,6 +10,7 @@ const DOC_DB_NAME = 'dsh-wechat-studio-docs'
 const DOC_STORE_NAME = 'state'
 const DOC_SNAPSHOT_STORE = 'snapshots'
 const DOC_LEDGER_STORE = 'ledger'
+const DOC_SNIPPET_STORE = 'snippets'
 const DOC_ROW_ID = 'docs'
 
 let docDbPromise
@@ -28,12 +29,13 @@ function openDocDb() {
   docDbPromise = new Promise((resolve) => {
     if (!hasDocIndexedDb()) { resolve(null); return }
     let request
-    try { request = indexedDB.open(DOC_DB_NAME, 3) } catch { resolve(null); return }
+    try { request = indexedDB.open(DOC_DB_NAME, 4) } catch { resolve(null); return }
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(DOC_STORE_NAME)) db.createObjectStore(DOC_STORE_NAME, { keyPath: 'id' })
       if (!db.objectStoreNames.contains(DOC_SNAPSHOT_STORE)) db.createObjectStore(DOC_SNAPSHOT_STORE, { keyPath: 'id' })
       if (!db.objectStoreNames.contains(DOC_LEDGER_STORE)) db.createObjectStore(DOC_LEDGER_STORE, { keyPath: 'id' })
+      if (!db.objectStoreNames.contains(DOC_SNIPPET_STORE)) db.createObjectStore(DOC_SNIPPET_STORE, { keyPath: 'id' })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => resolve(null)
@@ -173,4 +175,28 @@ export async function listLedgerEvents(docId, limit = 20) {
   const all = await withDocStore('readonly', store => store.getAll(), DOC_LEDGER_STORE)
   if (!Array.isArray(all)) return []
   return all.filter(item => item.docId === docId).sort((a, b) => b.at - a.at).slice(0, limit)
+}
+
+
+/** Save a reusable snippet. */
+export async function saveSnippet(snippet) {
+  if (snippet === null || typeof snippet !== 'object' || typeof snippet.name !== 'string' || typeof snippet.text !== 'string') return false
+  const id = typeof snippet.id === 'string' && snippet.id !== '' ? snippet.id : `snippet-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+  const now = Date.now()
+  const entry = { id, name: snippet.name.trim().slice(0, 60), text: snippet.text, createdAt: Number(snippet.createdAt) || now, updatedAt: now }
+  const saved = await withDocStore('readwrite', store => store.put(entry), DOC_SNIPPET_STORE)
+  return saved !== null && saved !== undefined
+}
+
+/** List saved snippets, newest first. */
+export async function listSnippets() {
+  const all = await withDocStore('readonly', store => store.getAll(), DOC_SNIPPET_STORE)
+  if (!Array.isArray(all)) return []
+  return all.sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+/** Delete one snippet. */
+export async function deleteSnippet(id) {
+  const deleted = await withDocStore('readwrite', store => store.delete(id), DOC_SNIPPET_STORE)
+  return deleted !== null
 }

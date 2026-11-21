@@ -983,3 +983,138 @@ test('双窗口通过 BroadcastChannel 提示并载入另一版本', async () =>
     first.dom.window.close()
   }
 })
+
+test('编辑部规范会被质检和发布检查读取', async () => {
+  const seed = [{
+    id: 'doc-style',
+    text: '# 标题\n\n这段出现赋能，还出现了抓手。',
+    design: { themeId: 'column', variantId: 'essay', overrides: {} },
+    meta: {
+      title: '标题', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '',
+      styleGuide: { tone: 'spoken', bannedWords: ['赋能', '抓手'], preferredWords: [], maxParagraphChars: 80, requireCaptions: false },
+      needOpenComment: false, onlyFansCanComment: false,
+    },
+    createdAt: 1,
+    updatedAt: 1,
+  }]
+  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
+  try {
+    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '发布')
+    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 200))
+    assert.ok(container.querySelector('.ws-qa'), 'QA summary renders')
+    assert.ok(container.querySelector('.ws-qa').textContent.includes('建议改'))
+    assert.ok(container.textContent.includes('禁用词出现'))
+    const typeTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '排版')
+    typeTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.ok(container.textContent.includes('编辑部规范'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('⌘K 命令面板可以打开片段库并插入带变量的片段', async () => {
+  const seed = [{
+    id: 'doc-snippet',
+    text: '# 标题\n\n正文。',
+    design: { themeId: 'column', variantId: 'essay', overrides: {} },
+    meta: { title: '标题', author: '亮亮', digest: '', sourceUrl: '', brand: '公众号', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false },
+    createdAt: 1,
+    updatedAt: 1,
+  }]
+  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
+  try {
+    const start = [...container.querySelectorAll('.ws-modal button')].find(button => button.textContent.trim() === '开始使用')
+    if (start) start.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.ok(container.querySelector('.ws-palette'))
+    const snippets = [...container.querySelectorAll('.ws-palette-item')].find(button => button.textContent.includes('打开片段库'))
+    assert.ok(snippets)
+    snippets.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 150))
+    assert.ok(container.querySelector('.ws-snippet-modal'))
+
+    const bioRow = [...container.querySelectorAll('.ws-snippet-row')].find(row => row.textContent.includes('作者简介'))
+    const insert = [...bioRow.querySelectorAll('button')].find(button => button.textContent.trim() === '插入')
+    insert.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 200))
+    assert.match(container.querySelector('.ws-editor').value, /亮亮，写作者/)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('发布复盘可以读取近 7 天文章数据', async () => {
+  const fetchImpl = async (url, init) => {
+    const body = init === undefined ? {} : JSON.parse(init.body)
+    if (body.action === 'status') {
+      return { ok: true, status: 200, async json() { return { ok: true, value: { configured: true, phase: 'ready', appIdPreview: 'wx123', message: '' } } } }
+    }
+    if (body.action === 'articleStats') {
+      return { ok: true, status: 200, async json() { return { ok: true, value: { days: 7, items: [{ ref_date: '2026-11-20', title: '一篇旧文', read_num: 120, share_num: 3 }] } } } }
+    }
+    return { ok: true, status: 200, async json() { return { ok: true, value: { configured: true } } } }
+  }
+  const { dom, window, container, root } = await mountPanel({ fetchImpl })
+  try {
+    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '发布')
+    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 180))
+    const load = [...container.querySelectorAll('button')].find(button => button.textContent.trim() === '读取近 7 天')
+    assert.ok(load)
+    load.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 250))
+    assert.ok(container.textContent.includes('一篇旧文'))
+    assert.ok(container.textContent.includes('120'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('诊断报告显示存储与最近错误', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    window.dispatchEvent(new window.ErrorEvent('error', { error: new Error('boom-test'), message: 'boom-test' }))
+    await new Promise(resolve => setTimeout(resolve, 80))
+    const diagnostics = [...container.querySelectorAll('.ws-modal button')].find(button => button.textContent.trim() === '诊断报告')
+    assert.ok(diagnostics)
+    diagnostics.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 150))
+    assert.ok(container.textContent.includes('浏览器存储'))
+    assert.ok(container.textContent.includes('boom-test'))
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('品牌包可以导入收藏与版式预设', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const group = [...container.querySelectorAll('.ws-group')].find(node => node.textContent.includes('品牌包'))
+    assert.ok(group)
+    const input = group.querySelector('input[type="file"]')
+    const kit = {
+      format: 'dsh-wechat-brand-kit', version: 1,
+      favorites: ['amber'], recent: [], dnaPresets: [{ id: 'dna-x', name: '导入版式', overrides: { accent: '#123456' } }],
+      styleGuide: { tone: 'professional', bannedWords: ['赋能'], preferredWords: [], maxParagraphChars: 100, requireCaptions: false }, snippets: [],
+    }
+    const file = new window.File([JSON.stringify(kit)], 'brand.json', { type: 'application/json' })
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] })
+    input.dispatchEvent(new window.Event('change', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 350))
+    const favorites = JSON.parse(window.localStorage.getItem('dsh.wechat-studio.themeFavorites.v1'))
+    assert.ok(favorites.includes('amber'))
+    assert.match(container.textContent, /导入版式|已导入品牌包/)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})

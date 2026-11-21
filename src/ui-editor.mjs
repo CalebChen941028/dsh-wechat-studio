@@ -165,7 +165,7 @@ function TopBar(props) {
  * ------------------------------------------------------------------ */
 
 function DocRail(props) {
-  const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onGoToBlock, onEditorCaret, onImportDocument, onContentPasted, onOpenAi, onImagesChanged } = props
+  const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onGoToBlock, onEditorCaret, onOpenSnippets, onImportDocument, onContentPasted, onOpenAi, onImagesChanged } = props
   const { doc } = store
   const [docMenu, setDocMenu] = React.useState(false)
   React.useEffect(() => {
@@ -393,6 +393,7 @@ function DocRail(props) {
           : null,
       ),
       h('div', { className: 'ws-left-actions' },
+        h(IconButton, { icon: 'doc', title: t('片段库'), onClick: onOpenSnippets }),
         h(IconButton, { icon: 'search', title: t('查找与替换'), onClick: () => setSearchOpen(value => !value) }),
         h(IconButton, { icon: 'chat', title: t('AI 对话修改'), onClick: onOpenAi }),
         h(IconButton, { icon: 'upload', title: t('上传文档（.md / .txt / .docx / .html）'), onClick: () => uploadRef.current?.click() }),
@@ -533,7 +534,7 @@ function DocRail(props) {
         if (event.code === 'KeyF' && !event.shiftKey) { event.preventDefault(); setSearchOpen(true); return }
         if (event.code === 'KeyB' && !event.shiftKey) { event.preventDefault(); insert('**', '**', t('加粗文字')); return }
         if (event.code === 'KeyH' && event.shiftKey) { event.preventDefault(); insert('==', '==', t('高亮文字')); return }
-        if (event.code === 'KeyK') { event.preventDefault(); insert('[', '](https://)', t('链接文字')); return }
+        if (event.code === 'KeyK' && event.shiftKey) { event.preventDefault(); insert('[', '](https://)', t('链接文字')); return }
         if (event.code === 'Digit1' || event.code === 'Digit2' || event.code === 'Digit3') {
           if (event.shiftKey) return
           event.preventDefault()

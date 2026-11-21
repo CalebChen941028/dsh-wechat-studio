@@ -5,7 +5,7 @@ import { indexedDB as fakeIndexedDB } from 'fake-indexeddb'
 
 globalThis.indexedDB = fakeIndexedDB
 
-const { saveDocsToDb, loadDocsFromDb, saveSnapshot, listSnapshots, clearSnapshots, appendLedgerEvent, listLedgerEvents } = await import('../src/docdb.mjs')
+const { saveDocsToDb, loadDocsFromDb, saveSnapshot, listSnapshots, clearSnapshots, appendLedgerEvent, listLedgerEvents, saveSnippet, listSnippets, deleteSnippet } = await import('../src/docdb.mjs')
 
 test('saveDocsToDb / loadDocsFromDb 保留顺序与长正文', async () => {
   const longText = '长文正文。'.repeat(12000)
@@ -52,4 +52,15 @@ test('appendLedgerEvent / listLedgerEvents 保留发布事件', async () => {
   assert.equal(list[0].type, 'published')
   assert.equal(list[0].publishId, 'P1')
   assert.equal(list[0].text, '第二版')
+})
+
+
+test('snippet 增删查', async () => {
+  const snippet = { id: 'snip-1', name: '作者简介', text: '{{author}} 是一名写作者。' }
+  assert.equal(await saveSnippet(snippet), true)
+  const list = await listSnippets()
+  assert.equal(list.length, 1)
+  assert.equal(list[0].name, '作者简介')
+  assert.equal(await deleteSnippet('snip-1'), true)
+  assert.deepEqual(await listSnippets(), [])
 })

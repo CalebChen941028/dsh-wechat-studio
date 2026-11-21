@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import {
   parseArticle, parseInline, plainText, detectTopic, measure, composeDesign,
   autoCompose, rankThemes, nextVariant, mixHex, readableOn, splitMarkdownChunks,
-  auditTypography, splitLongParagraphs, normalizeCjkPunctuation, tidyMarkdown, diffTextLines, replaceImageCaption, replaceImageSource, hashBlock, paletteFromPixels, replaceAllOccurrences,
+  auditTypography, splitLongParagraphs, normalizeCjkPunctuation, tidyMarkdown, diffTextLines, replaceImageCaption, replaceImageSource, hashBlock, paletteFromPixels, replaceAllOccurrences, normalizeStyleGuide, auditHouseStyle, DEFAULT_STYLE_GUIDE,
 } from '../src/engine.mjs'
 import { THEMES } from '../src/themes.mjs'
 import {
@@ -426,4 +426,21 @@ test('replaceAllOccurrences 替换全部并返回数量', () => {
   assert.equal(result.text, '橙子和橙子。')
   assert.equal(result.count, 2)
   assert.deepEqual(replaceAllOccurrences('abc', '', 'x'), { text: 'abc', count: 0 })
+})
+
+
+test('auditHouseStyle 检查禁用词、长段与图注', () => {
+  const longText = `禁用词出现了两次，禁用词。${'这一段很长。'.repeat(12)}`
+  const text = `${longText}\n\n![图片](https://example.com/a.png)`
+  const blocks = [
+    { type: 'paragraph', text: longText },
+    { type: 'image', alt: '', text: '图片' },
+  ]
+  const audit = auditHouseStyle(blocks, text, { bannedWords: ['禁用词'], maxParagraphChars: 60, requireCaptions: true })
+  assert.equal(audit.bannedHits[0].count, 2)
+  assert.equal(audit.longParagraphs, 1)
+  assert.equal(audit.missingCaptions, 1)
+  assert.ok(audit.violations >= 3)
+  assert.deepEqual(normalizeStyleGuide({ bannedWords: '甲，乙 甲' }).bannedWords, ['甲', '乙'])
+  assert.equal(DEFAULT_STYLE_GUIDE.tone, 'restrained')
 })

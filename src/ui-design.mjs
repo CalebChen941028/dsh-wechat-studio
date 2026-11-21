@@ -112,6 +112,7 @@ function AiSection(props) {
             design: doc.design,
             meta: { author: doc.meta.author, digest: doc.meta.digest },
             history: [],
+            styleGuide: doc.meta.styleGuide ?? DEFAULT_STYLE_GUIDE,
           }, { timeoutMs: 150000 })
           if (typeof part.text !== 'string' || part.text.trim() === '') {
             throw Object.assign(new Error(`第 ${index + 1} 段没有返回改写结果，已取消，正文未改。`), { code: 'chunk-missing' })
@@ -135,6 +136,7 @@ function AiSection(props) {
           design: doc.design,
           meta: { author: doc.meta.author, digest: doc.meta.digest },
           history: messages.slice(-6).map(message => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
+          styleGuide: doc.meta.styleGuide ?? DEFAULT_STYLE_GUIDE,
         }, { timeoutMs: 150000, onProgress: chars => setProgress(chars), signal: controller?.signal })
       }
 
@@ -476,6 +478,7 @@ function ThemeSection(props) {
   const [dnaPresets, setDnaPresets] = React.useState(() => loadDnaPresets())
   const [dnaBusy, setDnaBusy] = React.useState(false)
   const dnaInputRef = React.useRef(null)
+  const brandInputRef = React.useRef(null)
   const saveDnaPreset = (candidate) => {
     const preset = {
       id: `dna-${Date.now().toString(36)}`,
@@ -497,6 +500,58 @@ function ThemeSection(props) {
       return next
     })
   }
+  const exportBrandKit = async () => {
+    const snippets = await listSnippets().catch(() => [])
+    const kit = createBrandKit({
+      favorites,
+      recent,
+      dnaPresets,
+      styleGuide: normalizeStyleGuide(doc.meta.styleGuide),
+      snippets,
+    })
+    downloadFile('wechat-studio-brand-kit.json', JSON.stringify(kit, null, 2), 'application/json;charset=utf-8')
+    toast(t('品牌包已导出'), 'success')
+  }
+  const importBrandKit = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    try {
+      const text = typeof file.text === 'function'
+        ? await file.text()
+        : await new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(String(reader.result ?? ''))
+          reader.onerror = () => reject(new Error(t('品牌包读取失败')))
+          reader.readAsText(file)
+        })
+      const raw = JSON.parse(text)
+      const incoming = parseBrandKit(raw)
+      if (incoming === null) throw new Error(t('这不是公众号排版工作台的品牌包'))
+      const current = createBrandKit({
+        favorites,
+        recent,
+        dnaPresets,
+        styleGuide: normalizeStyleGuide(doc.meta.styleGuide),
+        snippets: await listSnippets().catch(() => []),
+      })
+      const merged = mergeBrandKits(current, incoming)
+      setFavorites(merged.favorites)
+      setRecent(merged.recent)
+      setDnaPresets(merged.dnaPresets)
+      try {
+        localStorage.setItem(THEME_FAVORITES_KEY, JSON.stringify(merged.favorites))
+        localStorage.setItem(THEME_RECENT_KEY, JSON.stringify(merged.recent))
+        localStorage.setItem(THEME_DNA_KEY, JSON.stringify(merged.dnaPresets))
+      } catch { /* private mode */ }
+      if (merged.styleGuide !== null) store.updateMeta({ styleGuide: merged.styleGuide })
+      for (const snippet of merged.snippets) await saveSnippet(snippet).catch(() => false)
+      toast(t('已导入品牌包'), 'success')
+    } catch (error) {
+      toast(error.message || t('品牌包导入失败'), 'error')
+    }
+  }
+
   const applyDnaOverrides = (overrides) => {
     store.updateDesign(current => ({ ...current, overrides: { ...(current.overrides ?? {}), ...overrides } }))
   }
@@ -695,6 +750,15 @@ function ThemeSection(props) {
         : null,
     ),
     h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' }, h('span', null, t('品牌包'))),
+      h('p', { className: 'ws-hint' }, t('把收藏、最近主题、版式 DNA、写作规范和片段一起导出，换机器时导入即可。')),
+      h('div', { className: 'ws-row' },
+        h(Button, { onClick: exportBrandKit }, t('导出品牌包')),
+        h(Button, { onClick: () => brandInputRef.current?.click() }, t('导入品牌包')),
+        h('input', { ref: brandInputRef, type: 'file', accept: '.json,application/json', style: { display: 'none' }, onChange: importBrandKit }),
+      ),
+    ),
+    h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('主色'))),
       h('div', { className: 'ws-swatches' },
         ACCENT_SWATCHES.map(color => h('button', {
@@ -749,6 +813,8 @@ function withoutOverrideKeys(design, keys) {
 function TypeSection(props) {
   const { store, design, doc, parsed, toast } = props
   const set = (patch) => store.updateDesign(current => ({ ...current, overrides: { ...(current.overrides ?? {}), ...patch } }))
+  const guide = normalizeStyleGuide(doc.meta.styleGuide)
+  const updateGuide = (patch) => store.updateMeta({ styleGuide: normalizeStyleGuide({ ...guide, ...patch }) })
   const rows = [
     { key: 'titleSize', label: t('标题字号'), value: design.type.titleSize, min: 20, max: 40, step: 1, unit: 'px' },
     { key: 'bodySize', label: t('正文字号'), value: design.type.bodySize, min: 13, max: 20, step: 0.5, unit: 'px' },
@@ -876,6 +942,32 @@ function TypeSection(props) {
         ),
       ),
       h('p', { className: 'ws-hint' }, t('图注即图片说明（alt），标题层级跳级需要手动调整。')),
+    ),
+    h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' }, h('span', null, t('编辑部规范')), h('span', { className: 'ws-group-note' }, t('随文档保存'))),
+      h('div', { className: 'ws-chips' },
+        [['restrained', t('克制')], ['spoken', t('口语')], ['professional', t('专业')], ['story', t('故事')]].map(([id, label]) => h('button', {
+          key: id,
+          type: 'button',
+          className: 'ws-chip' + (guide.tone === id ? ' on' : ''),
+          onClick: () => updateGuide({ tone: id }),
+        }, label)),
+      ),
+      h('div', { className: 'ws-field-row' },
+        h('span', { className: 'ws-field-label' }, t('禁用词')),
+        h('input', { className: 'ws-input', value: guide.bannedWords.join('、'), placeholder: t('用逗号分隔，例如：赋能、抓手'), onChange: event => updateGuide({ bannedWords: event.target.value }) }),
+      ),
+      h('div', { className: 'ws-field-row' },
+        h('span', { className: 'ws-field-label' }, t('偏好词')),
+        h('input', { className: 'ws-input', value: guide.preferredWords.join('、'), placeholder: t('希望出现的称呼或术语'), onChange: event => updateGuide({ preferredWords: event.target.value }) }),
+      ),
+      h('div', { className: 'ws-field-row' },
+        h('span', { className: 'ws-field-label' }, t('段落上限')),
+        h('input', { className: 'ws-input ws-input-narrow', type: 'number', min: 60, max: 400, value: guide.maxParagraphChars, onChange: event => updateGuide({ maxParagraphChars: Number(event.target.value) }) }),
+        h('span', { className: 'ws-hint' }, t('字')),
+      ),
+      h(Toggle, { label: t('正文图片必须带图注'), checked: guide.requireCaptions, onChange: value => updateGuide({ requireCaptions: value }) }),
+      h('p', { className: 'ws-hint' }, t('规范会随文档保存，AI 修改和发布检查都会读取。')),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('字号与节奏')), h('button', { type: 'button', className: 'ws-link', onClick: reset }, t('恢复默认'))),
@@ -1042,6 +1134,8 @@ function PublishSection(props) {
   const [ledger, setLedger] = React.useState([])
   const [ledgerVersion, setLedgerVersion] = React.useState(0)
   const [compareLedger, setCompareLedger] = React.useState(null)
+  const [stats, setStats] = React.useState({ phase: 'idle', items: [], days: 7, error: '' })
+  const [statsBusy, setStatsBusy] = React.useState(false)
   const [networkState, setNetworkState] = React.useState({ phase: 'loading', mode: 'system', proxyUrl: '', error: '' })
   const [networkMode, setNetworkMode] = React.useState('system')
   const [networkProxy, setNetworkProxy] = React.useState('')
@@ -1085,6 +1179,18 @@ function PublishSection(props) {
     listLedgerEvents(doc.id, 20).then(items => { if (!cancelled) setLedger(items) }).catch(() => { if (!cancelled) setLedger([]) })
     return () => { cancelled = true }
   }, [doc.id, ledgerVersion])
+  const loadArticleStats = async () => {
+    setStatsBusy(true)
+    try {
+      const value = await callHost('articleStats', { days: 7 }, { timeoutMs: 60000 })
+      setStats({ phase: 'ready', items: Array.isArray(value.items) ? value.items : [], days: value.days ?? 7, error: '' })
+    } catch (failure) {
+      setStats({ phase: 'error', items: [], days: 7, error: localizeError(failure.code, failure.message || t('读取发布数据失败')) })
+    } finally {
+      setStatsBusy(false)
+    }
+  }
+
   const recordLedger = async (type, extra = {}) => {
     const current = store.getDoc()
     if (!current) return
@@ -1136,6 +1242,8 @@ function PublishSection(props) {
 
   const previewHtmlLength = React.useMemo(() => serializeNodes(article.nodes).length, [article])
 
+  const houseStyle = React.useMemo(() => auditHouseStyle(parsed.blocks, doc.text, doc.meta.styleGuide), [parsed.blocks, doc.text, doc.meta.styleGuide])
+
   const preflight = React.useMemo(() => {
     const checks = []
     const push = (level, label, detail) => checks.push({ level, label, detail })
@@ -1160,6 +1268,9 @@ function PublishSection(props) {
     const htmlLength = previewHtmlLength
     if (htmlLength > 950 * 1024) push('error', t('正文 HTML 超过 950KB，删掉图片或缩短正文'), formatSize(htmlLength))
     else if (htmlLength > 800 * 1024) push('warn', t('正文 HTML 约 {size}，接近微信上限', { size: formatSize(htmlLength) }), '')
+    if (houseStyle.bannedHits.length > 0) push('warn', t('禁用词出现 {count} 次', { count: houseStyle.bannedHits.reduce((sum, item) => sum + item.count, 0) }), houseStyle.bannedHits.map(item => item.word).join('、'))
+    if (houseStyle.longParagraphs > 0) push('warn', t('超过段落上限 {count} 段', { count: houseStyle.longParagraphs }), `${houseStyle.guide.maxParagraphChars} ${t('字')}`)
+    if (houseStyle.missingCaptions > 0) push('warn', t('缺图注 {count} 张', { count: houseStyle.missingCaptions }), t('规范要求正文图片带图注'))
     const measured = fidelityFor(doc.design.themeId)
     if (measured === null) push('warn', t('这个主题还没有真实账号实测'), '')
     else if (measured.ok) push('ok', t('主题实测保真 {score}', { score: measured.score }), `${measured.testedAt.slice(0, 10)} · ${t('真实草稿读回')}`)
@@ -1168,7 +1279,22 @@ function PublishSection(props) {
     else push('warn', t('封面还在生成'), t('等封面出现或手动上传'))
     if (bundleIds.length > 0) push('ok', t('合集共 {count} 篇', { count: bundleIds.length + 1 }), t('保存时会逐篇上传'))
     return checks
-  }, [previewHtmlLength, article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length, doc.design.themeId])
+  }, [previewHtmlLength, article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length, doc.design.themeId, houseStyle])
+
+  const qa = React.useMemo(() => {
+    const errors = preflight.filter(item => item.level === 'error').length
+    const warnings = preflight.filter(item => item.level === 'warn').length
+    const aiHashes = Array.isArray(doc.meta.aiHashes) ? doc.meta.aiHashes : []
+    const lockedHashes = Array.isArray(doc.meta.lockedHashes) ? doc.meta.lockedHashes : []
+    const aiCount = parsed.blocks.filter(block => aiHashes.includes(hashBlock(block.text))).length
+    const lockedCount = parsed.blocks.filter(block => lockedHashes.includes(hashBlock(block.text))).length
+    const titleText = title
+    const digestText = digest
+    const distributionCount = (titleText.length > 36 ? 1 : 0) + (digestText.length > 54 ? 1 : 0) + (coverDataUrl === '' ? 1 : 0)
+    const issues = errors + warnings + houseStyle.violations + distributionCount
+    const status = errors > 0 ? 'blocked' : issues > 0 ? 'review' : 'ready'
+    return { errors, warnings, aiCount, lockedCount, distributionCount, issues, status }
+  }, [preflight, parsed.blocks, doc.meta.aiHashes, doc.meta.lockedHashes, title, digest, coverDataUrl, houseStyle])
 
   React.useEffect(() => {
     // Keep the generated cover in step with the current theme; a cover the user
@@ -1712,6 +1838,20 @@ function PublishSection(props) {
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },
+        h('span', null, t('发布复盘')),
+        h('button', { type: 'button', className: 'ws-link', disabled: statsBusy || hostStatus.configured !== true, onClick: loadArticleStats }, statsBusy ? t('读取中…') : t('读取近 7 天')),
+      ),
+      stats.phase === 'error' ? h('p', { className: 'ws-hint ws-error-text' }, stats.error) : null,
+      stats.phase === 'ready' && stats.items.length === 0 ? h('p', { className: 'ws-hint' }, t('近 {days} 天没有读到发布数据；公众号可能还没有数据统计权限。', { days: stats.days })) : null,
+      stats.items.slice(0, 6).map((item, index) => h('div', { key: `${item.ref_date ?? index}-${item.title ?? index}`, className: 'ws-stat-row' },
+        h('span', { className: 'ws-stat-title' }, item.title ?? t('未命名文章')),
+        h('span', { className: 'ws-stat-num' }, `${t('阅读')} ${item.read_num ?? item.readNum ?? 0}`),
+        h('span', { className: 'ws-stat-num' }, `${t('分享')} ${item.share_num ?? item.shareNum ?? 0}`),
+      )),
+      h('p', { className: 'ws-hint' }, t('需要公众号的数据统计权限；没有权限时只显示发布对账单。')),
+    ),
+    h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' },
         h('span', null, t('发布对账单')),
         h('span', { className: 'ws-group-note' }, ledger.length === 0 ? t('还没有发布记录') : t('最近 {count} 条', { count: ledger.length })),
       ),
@@ -1784,6 +1924,38 @@ function PublishSection(props) {
           }),
         ),
       h('p', { className: 'ws-hint' }, t('快照存在浏览器 IndexedDB，最多保留最近 20 个版本。')),
+    ),
+    h('div', { className: 'ws-card ws-qa' },
+      h('div', { className: 'ws-card-head' },
+        h('span', null, t('发布前质检')),
+        h('span', { className: 'ws-badge ' + qa.status }, qa.status === 'blocked' ? t('先别发') : qa.status === 'review' ? t('建议改 {count} 处', { count: qa.issues }) : t('可以发')),
+      ),
+      h('div', { className: 'ws-qa-grid' },
+        h('div', { className: 'ws-qa-item' },
+          h('span', { className: 'ws-qa-label' }, t('实测保真')),
+          h('strong', null, fidelityFor(doc.design.themeId) === null ? t('未实测') : `${fidelityFor(doc.design.themeId).score}/100`),
+        ),
+        h('div', { className: 'ws-qa-item' },
+          h('span', { className: 'ws-qa-label' }, t('AI 改写 / 锁定')),
+          h('strong', null, `${qa.aiCount} / ${qa.lockedCount}`),
+        ),
+        h('div', { className: 'ws-qa-item' },
+          h('span', { className: 'ws-qa-label' }, t('规范违规')),
+          h('strong', null, houseStyle.violations),
+        ),
+        h('div', { className: 'ws-qa-item' },
+          h('span', { className: 'ws-qa-label' }, t('分发提示')),
+          h('strong', null, qa.distributionCount),
+        ),
+        h('div', { className: 'ws-qa-item' },
+          h('span', { className: 'ws-qa-label' }, t('发布检查')),
+          h('strong', null, `${qa.errors} ${t('错误')} · ${qa.warnings} ${t('提醒')}`),
+        ),
+      ),
+      qa.issues > 0
+        ? h('div', { className: 'ws-qa-issues' }, preflight.filter(item => item.level !== 'ok').slice(0, 4).map((item, index) => h('span', { key: index, className: 'ws-qa-issue ' + item.level }, item.label)))
+        : h('p', { className: 'ws-hint' }, t('没有发现会阻断发布的问题。')),
+      h('p', { className: 'ws-hint' }, t('质检汇总发布检查、实测保真、AI 来源、段落锁与分发场景；下面的细节仍可逐条查看。')),
     ),
     h('div', { className: 'ws-card ws-preflight' },
       h('div', { className: 'ws-card-head' },

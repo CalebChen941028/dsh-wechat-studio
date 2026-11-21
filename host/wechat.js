@@ -479,6 +479,23 @@ export function createWechatClient({ fetchImpl = fetch, timeoutMs = DEFAULT_TIME
     },
 
     /**
+     * 读取图文群发每日数据（需要公众号的数据统计权限）。
+     * @param {{ accessToken: string, beginDate: string, endDate: string }} input 日期范围。
+     * @returns {Promise<object>} 微信原始响应。
+     */
+    async getArticleSummary({ accessToken, beginDate, endDate } = {}) {
+      const endpoint = 'cgi-bin/datacube/getarticlesummary'
+      requireToken(accessToken, endpoint)
+      return await call({
+        url: withAccessToken(`${WECHAT_API_BASE}/${endpoint}`, accessToken),
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ begin_date: beginDate, end_date: endDate }),
+        endpoint,
+      })
+    },
+
+    /**
      * 查询发布任务状态，返回微信原始 JSON。
      * @param {{ accessToken: string, publishId: string }} input 发布任务 id。
      * @returns {Promise<object>} 微信原始响应。

@@ -1189,3 +1189,22 @@ test('fetchRemoteImage：拒绝非 HTTP 与本机/内网地址', async () => {
   await assert.rejects(() => service.fetchRemoteImage({ url: 'http://127.0.0.1/a.png' }), error => error.code === 'image-url-invalid')
   await assert.rejects(() => service.fetchRemoteImage({ url: 'http://192.168.1.2/a.png' }), error => error.code === 'image-url-invalid')
 })
+
+
+test('articleStats：按日期范围读取发布复盘，无权限时透出错误', async () => {
+  const { service, calls } = makeService({
+    routes: [
+      ['/cgi-bin/token', () => jsonResponse({ access_token: 'TOKEN-1', expires_in: 7200 })],
+      ['/cgi-bin/datacube/getarticlesummary', () => jsonResponse({
+        list: [{ ref_date: '2026-11-20', title: '一篇旧文', read_num: 120, share_num: 3, likes_num: 8 }],
+      })],
+    ],
+  })
+  const result = await service.articleStats({ days: 7 })
+  assert.equal(result.days, 7)
+  assert.equal(result.items[0].read_num, 120)
+  const request = calls.find(call => call.url.includes('/cgi-bin/datacube/getarticlesummary'))
+  const body = JSON.parse(request.init.body)
+  assert.match(body.begin_date, /^\d{4}-\d{2}-\d{2}$/)
+  assert.match(body.end_date, /^\d{4}-\d{2}-\d{2}$/)
+})

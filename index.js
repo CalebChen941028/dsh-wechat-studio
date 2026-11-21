@@ -31,6 +31,7 @@ const KNOWN_ACTIONS = new Set([
   'saveNetwork',
   'probeNetwork',
   'fetchRemoteImage',
+  'articleStats',
   'probeWechatEgress',
   'uploadImages',
   'importImages',

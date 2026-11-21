@@ -665,6 +665,85 @@ const UI_EN = {
   '范围里有锁定段落；先在预览里解锁': 'Locked blocks in range; unlock them first',
   '全文有锁定段落；先解锁或只改选中段/本节': 'Locked blocks in the article; unlock or narrow the scope',
 
+  '编辑部规范': 'Editorial style',
+  '随文档保存': 'Saved with the document',
+  '克制': 'Restrained',
+  '口语': 'Spoken',
+  '专业': 'Professional',
+  '故事': 'Story',
+  '禁用词': 'Banned words',
+  '用逗号分隔，例如：赋能、抓手': 'Comma-separated, e.g. leverage, synergy',
+  '偏好词': 'Preferred words',
+  '希望出现的称呼或术语': 'Preferred terms or forms of address',
+  '段落上限': 'Paragraph cap',
+  '正文图片必须带图注': 'Content images must have captions',
+  '规范会随文档保存，AI 修改和发布检查都会读取。': 'The style is saved with the draft; AI edits and publish checks read it.',
+
+  '搜索动作、草稿、主题…': 'Search actions, drafts, themes…',
+  '没有匹配的命令': 'No matching command',
+  '⌘K 开关': '⌘K toggles',
+  '命令面板': 'Command palette',
+  '片段库': 'Snippets',
+  '先把光标放到正文里': 'Place the cursor in the text first',
+  '已插入片段「{name}」': 'Inserted snippet “{name}”',
+  '片段名称和内容都不能为空': 'Snippet name and content are required',
+  '片段保存失败，检查浏览器存储是否可用': 'Could not save the snippet; check browser storage',
+  '片段已保存': 'Snippet saved',
+  '片段保存失败': 'Could not save snippet',
+  '片段名称': 'Snippet name',
+  '片段内容，支持 Markdown 和变量': 'Snippet content, Markdown and variables supported',
+  '保存片段': 'Save snippet',
+  '内置片段': 'Built-in snippets',
+  '我的片段': 'My snippets',
+  '还没有保存的片段。': 'No saved snippets yet.',
+  '插入': 'Insert',
+  '打开片段库': 'Open snippets',
+
+  '编辑器遇到错误': 'The editor hit an error',
+  '这一轮修改还在浏览器存储里。先刷新页面；如果反复出现，打开诊断报告看看最近的错误。': 'This round of edits is still in browser storage. Refresh first; if it repeats, open the diagnostics report.',
+  '刷新页面': 'Reload',
+  '清除错误并刷新': 'Clear errors and reload',
+  '诊断报告': 'Diagnostics',
+  '浏览器存储': 'Browser storage',
+  '暂时无法读取存储用量': 'Storage usage is unavailable',
+  '已用 {used} / 配额 {quota}': '{used} of {quota} used',
+  '最近错误': 'Recent errors',
+  '最近没有记录到错误。': 'No recent errors recorded.',
+  '清空错误': 'Clear errors',
+  '复制报告并关闭': 'Copy report and close',
+
+  '品牌包': 'Brand kit',
+  '把收藏、最近主题、版式 DNA、写作规范和片段一起导出，换机器时导入即可。': 'Export favorites, recent themes, layout DNA, house style and snippets together.',
+  '品牌包已导出': 'Brand kit exported',
+  '导出品牌包': 'Export brand kit',
+  '导入品牌包': 'Import brand kit',
+  '这不是公众号排版工作台的品牌包': 'This is not a WeChat studio brand kit',
+  '已导入品牌包': 'Brand kit imported',
+  '品牌包导入失败': 'Could not import brand kit',
+  '品牌包读取失败': 'Could not read brand kit file',
+
+  '发布复盘': 'Post-publish review',
+  '读取近 7 天': 'Load last 7 days',
+  '读取发布数据失败': 'Could not load post-publish data',
+  '近 {days} 天没有读到发布数据；公众号可能还没有数据统计权限。': 'No post data for the last {days} days; the account may lack data permissions.',
+  '未命名文章': 'Untitled article',
+  '阅读': 'Reads',
+  '分享': 'Shares',
+  '需要公众号的数据统计权限；没有权限时只显示发布对账单。': 'Requires the account data permission; without it only the publish ledger is shown.',
+
+  '发布前质检': 'Pre-publish QA',
+  '先别发': 'Do not publish yet',
+  '建议改 {count} 处': 'Fix {count} thing(s)',
+  '实测保真': 'Measured fidelity',
+  'AI 改写 / 锁定': 'AI edits / locks',
+  '规范违规': 'Style violations',
+  '分发提示': 'Distribution hints',
+  '发布检查': 'Publish checks',
+  '错误': 'errors',
+  '提醒': 'warnings',
+  '没有发现会阻断发布的问题。': 'Nothing blocks publishing.',
+  '质检汇总发布检查、实测保真、AI 来源、段落锁与分发场景；下面的细节仍可逐条查看。': 'QA combines publish checks, measured fidelity, AI provenance, block locks and distribution surfaces; details are listed below.',
+
 }
 
 
@@ -1679,6 +1758,65 @@ function paletteFromPixels(pixels) {
     accent: accentColor === null ? '' : toHex(accentColor),
     dark: sorted.length > 0 ? luminance(sorted[0]) < 0.45 : false,
     palette: sorted.slice(0, 5).map(toHex),
+  }
+}
+
+/** Tone ids offered by the house style editor. */
+const STYLE_TONES = ['restrained', 'spoken', 'professional', 'story']
+
+/** Default house style for a new document. */
+const DEFAULT_STYLE_GUIDE = {
+  tone: 'restrained',
+  bannedWords: [],
+  preferredWords: [],
+  maxParagraphChars: 140,
+  requireCaptions: false,
+}
+
+/** Normalize a stored/user-entered style guide. */
+function normalizeStyleGuide(value) {
+  const input = value && typeof value === 'object' ? value : {}
+  const list = (raw) => {
+    const items = Array.isArray(raw) ? raw : String(raw ?? '').split(/[,，、\s]+/)
+    return [...new Set(items.map(item => String(item).trim()).filter(Boolean))].slice(0, 40)
+  }
+  const max = Number(input.maxParagraphChars)
+  return {
+    tone: STYLE_TONES.includes(input.tone) ? input.tone : DEFAULT_STYLE_GUIDE.tone,
+    bannedWords: list(input.bannedWords),
+    preferredWords: list(input.preferredWords),
+    maxParagraphChars: Math.min(400, Math.max(60, Number.isFinite(max) ? Math.round(max) : DEFAULT_STYLE_GUIDE.maxParagraphChars)),
+    requireCaptions: input.requireCaptions === true,
+  }
+}
+
+/**
+ * Audit text against a house style.
+ * @param {Array<object>} blocks parsed article blocks.
+ * @param {string} text raw markdown.
+ * @param {object} rawGuide stored style guide.
+ * @returns {{guide: object, active: boolean, bannedHits: Array<{word: string, count: number}>, longParagraphs: number, missingCaptions: number, violations: number}}
+ */
+function auditHouseStyle(blocks, text, rawGuide) {
+  const guide = normalizeStyleGuide(rawGuide)
+  const source = String(text ?? '')
+  const bannedHits = guide.bannedWords
+    .map(word => ({ word, count: source.split(word).length - 1 }))
+    .filter(item => item.count > 0)
+  let longParagraphs = 0
+  let missingCaptions = 0
+  for (const block of Array.isArray(blocks) ? blocks : []) {
+    if (block.type === 'paragraph' && plainText(block.text).length > guide.maxParagraphChars) longParagraphs += 1
+    if (block.type === 'image' && String(block.alt ?? '').trim() === '') missingCaptions += 1
+  }
+  const captions = guide.requireCaptions ? missingCaptions : 0
+  return {
+    guide,
+    active: guide.bannedWords.length > 0 || guide.preferredWords.length > 0 || guide.requireCaptions,
+    bannedHits,
+    longParagraphs,
+    missingCaptions: captions,
+    violations: bannedHits.length + longParagraphs + captions,
   }
 }
 
@@ -3344,6 +3482,7 @@ const DOC_DB_NAME = 'dsh-wechat-studio-docs'
 const DOC_STORE_NAME = 'state'
 const DOC_SNAPSHOT_STORE = 'snapshots'
 const DOC_LEDGER_STORE = 'ledger'
+const DOC_SNIPPET_STORE = 'snippets'
 const DOC_ROW_ID = 'docs'
 
 let docDbPromise
@@ -3362,12 +3501,13 @@ function openDocDb() {
   docDbPromise = new Promise((resolve) => {
     if (!hasDocIndexedDb()) { resolve(null); return }
     let request
-    try { request = indexedDB.open(DOC_DB_NAME, 3) } catch { resolve(null); return }
+    try { request = indexedDB.open(DOC_DB_NAME, 4) } catch { resolve(null); return }
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(DOC_STORE_NAME)) db.createObjectStore(DOC_STORE_NAME, { keyPath: 'id' })
       if (!db.objectStoreNames.contains(DOC_SNAPSHOT_STORE)) db.createObjectStore(DOC_SNAPSHOT_STORE, { keyPath: 'id' })
       if (!db.objectStoreNames.contains(DOC_LEDGER_STORE)) db.createObjectStore(DOC_LEDGER_STORE, { keyPath: 'id' })
+      if (!db.objectStoreNames.contains(DOC_SNIPPET_STORE)) db.createObjectStore(DOC_SNIPPET_STORE, { keyPath: 'id' })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => resolve(null)
@@ -3507,6 +3647,72 @@ async function listLedgerEvents(docId, limit = 20) {
   const all = await withDocStore('readonly', store => store.getAll(), DOC_LEDGER_STORE)
   if (!Array.isArray(all)) return []
   return all.filter(item => item.docId === docId).sort((a, b) => b.at - a.at).slice(0, limit)
+}
+
+
+/** Save a reusable snippet. */
+async function saveSnippet(snippet) {
+  if (snippet === null || typeof snippet !== 'object' || typeof snippet.name !== 'string' || typeof snippet.text !== 'string') return false
+  const id = typeof snippet.id === 'string' && snippet.id !== '' ? snippet.id : `snippet-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+  const now = Date.now()
+  const entry = { id, name: snippet.name.trim().slice(0, 60), text: snippet.text, createdAt: Number(snippet.createdAt) || now, updatedAt: now }
+  const saved = await withDocStore('readwrite', store => store.put(entry), DOC_SNIPPET_STORE)
+  return saved !== null && saved !== undefined
+}
+
+/** List saved snippets, newest first. */
+async function listSnippets() {
+  const all = await withDocStore('readonly', store => store.getAll(), DOC_SNIPPET_STORE)
+  if (!Array.isArray(all)) return []
+  return all.sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+/** Delete one snippet. */
+async function deleteSnippet(id) {
+  const deleted = await withDocStore('readwrite', store => store.delete(id), DOC_SNIPPET_STORE)
+  return deleted !== null
+}
+
+/* ===== src/brandkit.mjs ===== */
+/** Brand kit: portable theme presets, favorites, house style and snippets. */
+
+const BRAND_KIT_VERSION = 1
+
+/** Build a stable, serializable brand kit from app state. */
+function createBrandKit({ favorites = [], recent = [], dnaPresets = [], styleGuide = null, snippets = [] } = {}) {
+  return {
+    format: 'dsh-wechat-brand-kit',
+    version: BRAND_KIT_VERSION,
+    exportedAt: new Date().toISOString(),
+    favorites: [...new Set(favorites.filter(id => typeof id === 'string'))].slice(0, 30),
+    recent: [...new Set(recent.filter(id => typeof id === 'string'))].slice(0, 10),
+    dnaPresets: dnaPresets.filter(item => item && typeof item.id === 'string' && item.overrides).slice(0, 20),
+    styleGuide: styleGuide ?? null,
+    snippets: snippets.filter(item => item && typeof item.name === 'string' && typeof item.text === 'string').slice(0, 50),
+  }
+}
+
+/** Validate an imported kit; returns null when the file is not a brand kit. */
+function parseBrandKit(raw) {
+  if (raw === null || typeof raw !== 'object' || raw.format !== 'dsh-wechat-brand-kit') return null
+  const kit = createBrandKit(raw)
+  if (kit.favorites.length === 0 && kit.recent.length === 0 && kit.dnaPresets.length === 0 && kit.snippets.length === 0 && kit.styleGuide === null) return null
+  return kit
+}
+
+/** Merge two kits without duplicating favorite ids, presets or snippets. */
+function mergeBrandKits(current, incoming) {
+  if (incoming === null) return current
+  if (current === null) return incoming
+  const presetIds = new Set(current.dnaPresets.map(item => item.id))
+  const snippetIds = new Set(current.snippets.map(item => item.id))
+  return createBrandKit({
+    favorites: [...current.favorites, ...incoming.favorites],
+    recent: [...incoming.recent, ...current.recent],
+    dnaPresets: [...current.dnaPresets, ...incoming.dnaPresets.filter(item => !presetIds.has(item.id))],
+    styleGuide: incoming.styleGuide ?? current.styleGuide,
+    snippets: [...current.snippets, ...incoming.snippets.filter(item => !snippetIds.has(item.id))],
+  })
 }
 
 /* ===== src/bridge.mjs ===== */
@@ -3778,6 +3984,7 @@ const PANEL_ID = 'wechat-studio'
 const STORAGE_KEY = 'dsh.wechat-studio.docs.v1'
 const ACTIVE_KEY = 'dsh.wechat-studio.active.v1'
 const HELP_SEEN_KEY = 'dsh.wechat-studio.helpSeen.v1'
+const DIAGNOSTICS_KEY = 'dsh.wechat-studio.errors.v1'
 const APPEARANCE_KEY = 'dsh.wechat-studio.appearance.v1'
 const LONG_TEXT_CHUNK_THRESHOLD = 7000
 const DEVICE_KEY = 'dsh.wechat-studio.device.v1'
@@ -3910,7 +4117,7 @@ function createDocument(seedText, design, meta) {
     id: docId(),
     text,
     design: composed,
-    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', coverLayout: 'left', draftMediaId: '', draftArticleCount: 0, aiHashes: [], lockedHashes: [], needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
+    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', coverLayout: 'left', draftMediaId: '', draftArticleCount: 0, aiHashes: [], lockedHashes: [], styleGuide: DEFAULT_STYLE_GUIDE, needOpenComment: false, onlyFansCanComment: false, ...(meta ?? {}) },
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }
@@ -4220,7 +4427,34 @@ function StudioPanel(props) {
   const [imageVersion, setImageVersion] = React.useState(0)
   const [snapshotVersion, setSnapshotVersion] = React.useState(0)
   const [helpOpen, setHelpOpen] = React.useState(() => { try { return localStorage.getItem(HELP_SEEN_KEY) !== '1' } catch { return false } })
+  const [snippetsOpen, setSnippetsOpen] = React.useState(false)
+  const [paletteOpen, setPaletteOpen] = React.useState(false)
+  const [diagnosticsOpen, setDiagnosticsOpen] = React.useState(false)
   const [helpFirstRun, setHelpFirstRun] = React.useState(() => { try { return localStorage.getItem(HELP_SEEN_KEY) !== '1' } catch { return false } })
+  React.useEffect(() => {
+    const onKey = (event) => {
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setPaletteOpen(value => !value)
+      }
+      if (event.key === 'Escape') {
+        setPaletteOpen(false)
+        setSnippetsOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
+  React.useEffect(() => {
+    const onError = (event) => recordDiagnostic(event.error ?? event.message, 'window')
+    const onRejection = (event) => recordDiagnostic(event.reason, 'promise')
+    window.addEventListener('error', onError)
+    window.addEventListener('unhandledrejection', onRejection)
+    return () => {
+      window.removeEventListener('error', onError)
+      window.removeEventListener('unhandledrejection', onRejection)
+    }
+  }, [])
   const bumpImages = React.useCallback(() => setImageVersion(value => value + 1), [])
   React.useEffect(() => {
     let cancelled = false
@@ -4550,6 +4784,26 @@ function StudioPanel(props) {
     else setRightOpen(false)
   }
 
+  const paletteCommands = [
+    { id: 'compose', label: t('自动编排'), hint: t('按内容选主题与版式'), run: runCompose },
+    { id: 'reshuffle', label: t('换一版'), hint: t('当前主题内换版式'), run: reshuffle },
+    { id: 'copy', label: t('复制 HTML'), hint: t('复制带内联样式的正文'), run: copyArticle },
+    { id: 'theme', label: t('打开主题面板'), hint: t('主题、版式、版式 DNA'), run: () => openDesign('theme') },
+    { id: 'publish', label: t('打开发布面板'), hint: t('草稿、对账单、发布检查'), run: () => openDesign('publish') },
+    { id: 'ai', label: t('打开 AI 修改'), hint: t('对话修改正文或版式'), run: () => openDesign('ai') },
+    { id: 'snapshot', label: t('保存版本快照'), hint: t('当前正文存入历史版本'), run: () => takeSnapshot('manual', true) },
+    { id: 'new', label: t('新建草稿'), hint: t('从空白开始'), run: () => { store.addDoc(''); setSelectedBlock(null); toast(t('已新建草稿')) } },
+    { id: 'snippets', label: t('打开片段库'), hint: t('插入作者简介、引导等常用块'), run: () => setSnippetsOpen(true) },
+    { id: 'help', label: t('使用提示与快捷键'), hint: t('查看隐藏操作'), run: () => setHelpOpen(true) },
+    { id: 'diagnostics', label: t('诊断报告'), hint: t('存储用量与最近错误'), run: () => setDiagnosticsOpen(true) },
+    ...store.docs.map(entry => ({
+      id: `doc-${entry.id}`,
+      label: `${t('切换草稿')}：${entry.meta.title.trim() || parseArticle(entry.text).title || t('未命名草稿')}`,
+      hint: t('当前窗口载入这篇草稿'),
+      run: () => { store.selectDoc(entry.id); setSelectedBlock(null) },
+    })),
+  ]
+
   const rootClassNames = [
     'ws-root',
     narrow ? 'ws-narrow' : compact ? 'ws-compact' : 'ws-wide',
@@ -4581,7 +4835,7 @@ function StudioPanel(props) {
     h('div', { className: 'ws-body' },
       h(DocRail, {
         store, parsed, features, textareaRef, toast, narrow, selectedBlock, setSelectedBlock,
-        onGoToBlock: goToBlock, onEditorCaret: syncBlockFromCaret,
+        onGoToBlock: goToBlock, onEditorCaret: syncBlockFromCaret, onOpenSnippets: () => setSnippetsOpen(true),
         onImportDocument: importDocument, onContentPasted: () => scheduleAutoCompose(true),
         onImagesChanged: bumpImages,
         onOpenAi: () => openDesign('ai'),
@@ -4597,7 +4851,10 @@ function StudioPanel(props) {
         takeSnapshot, snapshotVersion,
       }),
     ),
-    helpOpen ? h(HelpDialog, { firstRun: helpFirstRun, onClose: closeHelp }) : null,
+    paletteOpen ? h(CommandPalette, { commands: paletteCommands, onClose: () => setPaletteOpen(false) }) : null,
+    snippetsOpen ? h(SnippetDialog, { store, toast, textareaRef, onClose: () => setSnippetsOpen(false) }) : null,
+    helpOpen ? h(HelpDialog, { firstRun: helpFirstRun, onClose: closeHelp, onDiagnostics: () => { setHelpOpen(false); setDiagnosticsOpen(true) } }) : null,
+    diagnosticsOpen ? h(DiagnosticsDialog, { onClose: () => setDiagnosticsOpen(false) }) : null,
     refining
       ? h('div', { className: 'ws-refining' },
         h('span', { className: 'ws-typing-dot' }),
@@ -4610,7 +4867,257 @@ function StudioPanel(props) {
   )
 }
 
-function HelpDialog({ firstRun, onClose }) {
+function recordDiagnostic(error, source = 'runtime') {
+  try {
+    const items = JSON.parse(localStorage.getItem(DIAGNOSTICS_KEY) ?? '[]')
+    const list = Array.isArray(items) ? items : []
+    list.unshift({
+      at: new Date().toISOString(),
+      source,
+      message: error?.message ?? String(error),
+      stack: typeof error?.stack === 'string' ? error.stack.slice(0, 4000) : '',
+    })
+    localStorage.setItem(DIAGNOSTICS_KEY, JSON.stringify(list.slice(0, 20)))
+  } catch { /* storage unavailable */ }
+}
+
+function readDiagnostics() {
+  try {
+    const items = JSON.parse(localStorage.getItem(DIAGNOSTICS_KEY) ?? '[]')
+    return Array.isArray(items) ? items : []
+  } catch {
+    return []
+  }
+}
+
+let ErrorBoundaryClass = null
+function getErrorBoundaryClass() {
+  if (ErrorBoundaryClass !== null) return ErrorBoundaryClass
+  ErrorBoundaryClass = class StudioErrorBoundary extends React.Component {
+    constructor(props) {
+      super(props)
+      this.state = { error: null }
+    }
+    static getDerivedStateFromError(error) { return { error } }
+    componentDidCatch(error) { recordDiagnostic(error, 'render') }
+    render() {
+      if (this.state.error === null) return this.props.children
+      return h('div', { className: 'ws-root ws-crash', style: { padding: 24, fontFamily: 'system-ui', color: 'inherit' } },
+        h('h2', { style: { fontSize: 16, margin: '0 0 8px' } }, t('编辑器遇到错误')),
+        h('p', { style: { fontSize: 12, opacity: 0.7, lineHeight: 1.6 } }, t('这一轮修改还在浏览器存储里。先刷新页面；如果反复出现，打开诊断报告看看最近的错误。')),
+        h('div', { style: { display: 'flex', gap: 8, marginTop: 12 } },
+          h('button', { type: 'button', className: 'ws-btn primary', onClick: () => location.reload() }, t('刷新页面')),
+          h('button', { type: 'button', className: 'ws-btn', onClick: () => { try { localStorage.removeItem(DIAGNOSTICS_KEY) } catch { /* ignore */ } location.reload() } }, t('清除错误并刷新')),
+        ),
+      )
+    }
+  }
+  return ErrorBoundaryClass
+}
+
+
+function StudioShell(props) {
+  return h(getErrorBoundaryClass(), null, h(StudioPanel, props))
+}
+
+function DiagnosticsDialog({ onClose }) {
+  const [errors, setErrors] = React.useState(() => readDiagnostics())
+  const [storage, setStorage] = React.useState(null)
+  React.useEffect(() => {
+    let cancelled = false
+    if (navigator?.storage?.estimate) {
+      navigator.storage.estimate().then(value => { if (!cancelled) setStorage(value) }).catch(() => {})
+    }
+    return () => { cancelled = true }
+  }, [])
+  const clear = () => {
+    try { localStorage.removeItem(DIAGNOSTICS_KEY) } catch { /* ignore */ }
+    setErrors([])
+  }
+  const copy = async () => {
+    const report = JSON.stringify({ generatedAt: new Date().toISOString(), storage, errors }, null, 2)
+    try { await navigator.clipboard.writeText(report) } catch { /* clipboard may be blocked */ }
+    onClose()
+  }
+  const mb = (bytes) => typeof bytes === 'number' ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : '—'
+  return h('div', { className: 'ws-modal-scrim', onClick: event => { if (event.target === event.currentTarget) onClose() } },
+    h('div', { className: 'ws-modal', role: 'dialog', 'aria-modal': 'true' },
+      h('div', { className: 'ws-modal-head' },
+        h(Icon, { name: 'help', size: 16 }),
+        h('strong', null, t('诊断报告')),
+        h(IconButton, { icon: 'close', title: t('关闭'), onClick: onClose }),
+      ),
+      h('div', { className: 'ws-help-section' },
+        h('h4', null, t('浏览器存储')),
+        h('p', { className: 'ws-hint' }, storage === null ? t('暂时无法读取存储用量') : t('已用 {used} / 配额 {quota}', { used: mb(storage.usage), quota: mb(storage.quota) })),
+      ),
+      h('div', { className: 'ws-help-section' },
+        h('h4', null, t('最近错误')),
+        errors.length === 0
+          ? h('p', { className: 'ws-hint' }, t('最近没有记录到错误。'))
+          : errors.slice(0, 6).map((item, index) => h('div', { key: index, className: 'ws-help-row' },
+            h('span', { className: 'ws-help-key' }, item.at.slice(11, 19)),
+            h('span', null, `${item.source} · ${item.message}`),
+          )),
+      ),
+      h('div', { className: 'ws-modal-actions' },
+        h(Button, { variant: 'ghost', onClick: clear }, t('清空错误')),
+        h(Button, { onClick: copy }, t('复制报告并关闭')),
+        h(Button, { variant: 'primary', onClick: onClose }, t('关闭')),
+      ),
+    ),
+  )
+}
+
+function CommandPalette({ commands, onClose }) {
+  const [query, setQuery] = React.useState('')
+  const [index, setIndex] = React.useState(0)
+  const filtered = commands.filter(command => `${command.label} ${command.hint ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()))
+  React.useEffect(() => { setIndex(0) }, [query])
+  const run = (command) => { onClose(); command.run() }
+  const onKeyDown = (event) => {
+    if (event.key === 'Escape') { event.preventDefault(); onClose() }
+    else if (event.key === 'ArrowDown') { event.preventDefault(); setIndex(value => Math.min(filtered.length - 1, value + 1)) }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); setIndex(value => Math.max(0, value - 1)) }
+    else if (event.key === 'Enter') {
+      event.preventDefault()
+      const command = filtered[index]
+      if (command !== undefined) run(command)
+    }
+  }
+  return h('div', { className: 'ws-modal-scrim', onClick: event => { if (event.target === event.currentTarget) onClose() } },
+    h('div', { className: 'ws-modal ws-palette', role: 'dialog', 'aria-modal': 'true', onKeyDown },
+      h('div', { className: 'ws-palette-search' },
+        h(Icon, { name: 'search', size: 15 }),
+        h('input', {
+          className: 'ws-palette-input',
+          autoFocus: true,
+          value: query,
+          placeholder: t('搜索动作、草稿、主题…'),
+          onChange: event => setQuery(event.target.value),
+        }),
+        h('span', { className: 'ws-kbd' }, 'Esc'),
+      ),
+      h('div', { className: 'ws-palette-list' },
+        filtered.length === 0
+          ? h('p', { className: 'ws-hint' }, t('没有匹配的命令'))
+          : filtered.map((command, commandIndex) => h('button', {
+            key: command.id,
+            type: 'button',
+            className: 'ws-palette-item' + (commandIndex === index ? ' on' : ''),
+            onMouseEnter: () => setIndex(commandIndex),
+            onClick: () => run(command),
+          },
+          h('span', { className: 'ws-palette-label' }, command.label),
+          command.hint ? h('span', { className: 'ws-palette-hint' }, command.hint) : null,
+          )),
+      ),
+      h('div', { className: 'ws-palette-foot' },
+        h('span', null, '↑↓ 选择 · Enter 执行'),
+        h('span', null, '⌘K 开关'),
+      ),
+    ),
+  )
+}
+
+const SNIPPET_BUILTINS = [
+  { id: 'builtin-outro', name: '关注引导', text: '如果这篇对你有用，点个「在看」，或者转给正在需要它的人。' },
+  { id: 'builtin-bio', name: '作者简介', text: '{{author}}，写作者。这里放一句你希望读者记住的话。' },
+  { id: 'builtin-disclaimer', name: '免责声明', text: '本文只代表个人经验，不构成专业建议；涉及具体决策请结合自身情况判断。' },
+]
+
+function SnippetDialog({ store, toast, textareaRef, onClose }) {
+  const [snippets, setSnippets] = React.useState([])
+  const [name, setName] = React.useState('')
+  const [text, setText] = React.useState('')
+  const [busy, setBusy] = React.useState(false)
+  const refresh = React.useCallback(() => {
+    listSnippets().then(items => setSnippets(items)).catch(() => setSnippets([]))
+  }, [])
+  React.useEffect(() => { refresh() }, [refresh])
+  const renderText = (value) => {
+    const current = store.getDoc()
+    const title = current?.meta?.title?.trim() || parseArticle(current?.text ?? '').title || ''
+    const date = new Date()
+    const stamp = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    return String(value)
+      .replace(/\{\{title\}\}/g, title)
+      .replace(/\{\{author\}\}/g, current?.meta?.author?.trim() || '')
+      .replace(/\{\{brand\}\}/g, current?.meta?.brand?.trim() || '')
+      .replace(/\{\{date\}\}/g, stamp)
+  }
+  const insert = (snippet) => {
+    const element = textareaRef.current
+    if (!element) { toast(t('先把光标放到正文里')); return }
+    const start = element.selectionStart
+    const end = element.selectionEnd
+    const value = renderText(snippet.text)
+    store.updateDoc(current => ({ ...current, text: `${current.text.slice(0, start)}${value}${current.text.slice(end)}` }), { coalesce: 'insert' })
+    requestAnimationFrame(() => {
+      element.focus()
+      const caret = start + value.length
+      element.setSelectionRange(caret, caret)
+    })
+    toast(t('已插入片段「{name}」', { name: snippet.name }), 'success')
+    onClose()
+  }
+  const save = async () => {
+    if (name.trim() === '' || text.trim() === '') { toast(t('片段名称和内容都不能为空')); return }
+    setBusy(true)
+    try {
+      const ok = await saveSnippet({ name, text })
+      if (!ok) throw new Error(t('片段保存失败，检查浏览器存储是否可用'))
+      setName('')
+      setText('')
+      refresh()
+      toast(t('片段已保存'), 'success')
+    } catch (error) {
+      toast(error.message || t('片段保存失败'), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const remove = async (id) => {
+    await deleteSnippet(id)
+    refresh()
+  }
+  return h('div', { className: 'ws-modal-scrim', onClick: event => { if (event.target === event.currentTarget) onClose() } },
+    h('div', { className: 'ws-modal ws-snippet-modal', role: 'dialog', 'aria-modal': 'true' },
+      h('div', { className: 'ws-modal-head' },
+        h(Icon, { name: 'doc', size: 16 }),
+        h('strong', null, t('片段库')),
+        h(IconButton, { icon: 'close', title: t('关闭'), onClick: onClose }),
+      ),
+      h('p', { className: 'ws-hint' }, t('插入作者简介、关注引导、免责声明等常用块；支持 {{title}}、{{author}}、{{date}}、{{brand}} 变量。')),
+      h('div', { className: 'ws-snippet-create' },
+        h('input', { className: 'ws-input', value: name, placeholder: t('片段名称'), onChange: event => setName(event.target.value) }),
+        h('textarea', { className: 'ws-input ws-textarea', rows: 3, value: text, placeholder: t('片段内容，支持 Markdown 和变量'), onChange: event => setText(event.target.value) }),
+        h('div', { className: 'ws-row' },
+          h(Button, { variant: 'primary', disabled: busy, onClick: save }, busy ? t('保存中…') : t('保存片段')),
+        ),
+      ),
+      h('div', { className: 'ws-snippet-section' },
+        h('div', { className: 'ws-snippet-section-title' }, t('内置片段')),
+        SNIPPET_BUILTINS.map(snippet => h('div', { key: snippet.id, className: 'ws-snippet-row' },
+          h('span', { className: 'ws-snippet-name' }, snippet.name),
+          h('button', { type: 'button', className: 'ws-link', onClick: () => insert(snippet) }, t('插入')),
+        )),
+      ),
+      h('div', { className: 'ws-snippet-section' },
+        h('div', { className: 'ws-snippet-section-title' }, t('我的片段')),
+        snippets.length === 0
+          ? h('p', { className: 'ws-hint' }, t('还没有保存的片段。'))
+          : snippets.map(snippet => h('div', { key: snippet.id, className: 'ws-snippet-row' },
+            h('span', { className: 'ws-snippet-name' }, snippet.name),
+            h('button', { type: 'button', className: 'ws-link', onClick: () => insert(snippet) }, t('插入')),
+            h('button', { type: 'button', className: 'ws-link danger', onClick: () => remove(snippet.id) }, t('删除')),
+          )),
+      ),
+    ),
+  )
+}
+
+function HelpDialog({ firstRun, onClose, onDiagnostics }) {
   React.useEffect(() => {
     const onKeyDown = (event) => { if (event.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKeyDown)
@@ -4621,13 +5128,15 @@ function HelpDialog({ firstRun, onClose }) {
       ['⌘B / ⌘⇧H', '加粗 / 高亮'],
       ['⌘1 / ⌘2 / ⌘3', '标题层级'],
       ['⌘⇧7 / ⌘⇧8', '无序 / 有序列表'],
-      ['⌘K / ⌘F', '链接 / 查找替换'],
+      ['⌘K / ⌘⇧K', '命令面板 / 链接'],
+      ['⌘F', '查找替换'],
     ]],
     ['AI 修改', [
       ['选中段 / 本节 / 整篇', '控制改写范围'],
       ['更克制 / 更口语 / 更短', '语气预设'],
       ['应用修改', '先看 diff 再落盘'],
       ['取消', '生成中可中止'],
+      ['发布前质检', '汇总保真、规范、发布差异'],
     ]],
     ['发布', [
       ['更新当前草稿', '覆盖已关联的公众号草稿'],
@@ -4641,6 +5150,8 @@ function HelpDialog({ firstRun, onClose }) {
       ['图片工具', '图注 / 裁剪'],
       ['主题收藏', '收藏与最近筛选'],
       ['段落锁', '锁定后 AI 不会改'],
+      ['片段库', '作者简介、关注引导等'],
+      ['品牌包', '导出主题、规范与片段'],
     ]],
   ]
   return h('div', { className: 'ws-modal-scrim', onClick: event => { if (event.target === event.currentTarget) onClose() } },
@@ -4661,6 +5172,7 @@ function HelpDialog({ firstRun, onClose }) {
         )),
       ),
       h('div', { className: 'ws-modal-actions' },
+        h(Button, { variant: 'ghost', onClick: onDiagnostics }, t('诊断报告')),
         h(Button, { variant: 'primary', onClick: onClose }, firstRun ? t('开始使用') : t('知道了')),
       ),
     ),
@@ -4839,7 +5351,7 @@ function TopBar(props) {
  * ------------------------------------------------------------------ */
 
 function DocRail(props) {
-  const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onGoToBlock, onEditorCaret, onImportDocument, onContentPasted, onOpenAi, onImagesChanged } = props
+  const { store, parsed, features, textareaRef, toast, selectedBlock, setSelectedBlock, onGoToBlock, onEditorCaret, onOpenSnippets, onImportDocument, onContentPasted, onOpenAi, onImagesChanged } = props
   const { doc } = store
   const [docMenu, setDocMenu] = React.useState(false)
   React.useEffect(() => {
@@ -5067,6 +5579,7 @@ function DocRail(props) {
           : null,
       ),
       h('div', { className: 'ws-left-actions' },
+        h(IconButton, { icon: 'doc', title: t('片段库'), onClick: onOpenSnippets }),
         h(IconButton, { icon: 'search', title: t('查找与替换'), onClick: () => setSearchOpen(value => !value) }),
         h(IconButton, { icon: 'chat', title: t('AI 对话修改'), onClick: onOpenAi }),
         h(IconButton, { icon: 'upload', title: t('上传文档（.md / .txt / .docx / .html）'), onClick: () => uploadRef.current?.click() }),
@@ -5207,7 +5720,7 @@ function DocRail(props) {
         if (event.code === 'KeyF' && !event.shiftKey) { event.preventDefault(); setSearchOpen(true); return }
         if (event.code === 'KeyB' && !event.shiftKey) { event.preventDefault(); insert('**', '**', t('加粗文字')); return }
         if (event.code === 'KeyH' && event.shiftKey) { event.preventDefault(); insert('==', '==', t('高亮文字')); return }
-        if (event.code === 'KeyK') { event.preventDefault(); insert('[', '](https://)', t('链接文字')); return }
+        if (event.code === 'KeyK' && event.shiftKey) { event.preventDefault(); insert('[', '](https://)', t('链接文字')); return }
         if (event.code === 'Digit1' || event.code === 'Digit2' || event.code === 'Digit3') {
           if (event.shiftKey) return
           event.preventDefault()
@@ -5873,6 +6386,7 @@ function AiSection(props) {
             design: doc.design,
             meta: { author: doc.meta.author, digest: doc.meta.digest },
             history: [],
+            styleGuide: doc.meta.styleGuide ?? DEFAULT_STYLE_GUIDE,
           }, { timeoutMs: 150000 })
           if (typeof part.text !== 'string' || part.text.trim() === '') {
             throw Object.assign(new Error(`第 ${index + 1} 段没有返回改写结果，已取消，正文未改。`), { code: 'chunk-missing' })
@@ -5896,6 +6410,7 @@ function AiSection(props) {
           design: doc.design,
           meta: { author: doc.meta.author, digest: doc.meta.digest },
           history: messages.slice(-6).map(message => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
+          styleGuide: doc.meta.styleGuide ?? DEFAULT_STYLE_GUIDE,
         }, { timeoutMs: 150000, onProgress: chars => setProgress(chars), signal: controller?.signal })
       }
 
@@ -6237,6 +6752,7 @@ function ThemeSection(props) {
   const [dnaPresets, setDnaPresets] = React.useState(() => loadDnaPresets())
   const [dnaBusy, setDnaBusy] = React.useState(false)
   const dnaInputRef = React.useRef(null)
+  const brandInputRef = React.useRef(null)
   const saveDnaPreset = (candidate) => {
     const preset = {
       id: `dna-${Date.now().toString(36)}`,
@@ -6258,6 +6774,58 @@ function ThemeSection(props) {
       return next
     })
   }
+  const exportBrandKit = async () => {
+    const snippets = await listSnippets().catch(() => [])
+    const kit = createBrandKit({
+      favorites,
+      recent,
+      dnaPresets,
+      styleGuide: normalizeStyleGuide(doc.meta.styleGuide),
+      snippets,
+    })
+    downloadFile('wechat-studio-brand-kit.json', JSON.stringify(kit, null, 2), 'application/json;charset=utf-8')
+    toast(t('品牌包已导出'), 'success')
+  }
+  const importBrandKit = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    try {
+      const text = typeof file.text === 'function'
+        ? await file.text()
+        : await new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(String(reader.result ?? ''))
+          reader.onerror = () => reject(new Error(t('品牌包读取失败')))
+          reader.readAsText(file)
+        })
+      const raw = JSON.parse(text)
+      const incoming = parseBrandKit(raw)
+      if (incoming === null) throw new Error(t('这不是公众号排版工作台的品牌包'))
+      const current = createBrandKit({
+        favorites,
+        recent,
+        dnaPresets,
+        styleGuide: normalizeStyleGuide(doc.meta.styleGuide),
+        snippets: await listSnippets().catch(() => []),
+      })
+      const merged = mergeBrandKits(current, incoming)
+      setFavorites(merged.favorites)
+      setRecent(merged.recent)
+      setDnaPresets(merged.dnaPresets)
+      try {
+        localStorage.setItem(THEME_FAVORITES_KEY, JSON.stringify(merged.favorites))
+        localStorage.setItem(THEME_RECENT_KEY, JSON.stringify(merged.recent))
+        localStorage.setItem(THEME_DNA_KEY, JSON.stringify(merged.dnaPresets))
+      } catch { /* private mode */ }
+      if (merged.styleGuide !== null) store.updateMeta({ styleGuide: merged.styleGuide })
+      for (const snippet of merged.snippets) await saveSnippet(snippet).catch(() => false)
+      toast(t('已导入品牌包'), 'success')
+    } catch (error) {
+      toast(error.message || t('品牌包导入失败'), 'error')
+    }
+  }
+
   const applyDnaOverrides = (overrides) => {
     store.updateDesign(current => ({ ...current, overrides: { ...(current.overrides ?? {}), ...overrides } }))
   }
@@ -6456,6 +7024,15 @@ function ThemeSection(props) {
         : null,
     ),
     h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' }, h('span', null, t('品牌包'))),
+      h('p', { className: 'ws-hint' }, t('把收藏、最近主题、版式 DNA、写作规范和片段一起导出，换机器时导入即可。')),
+      h('div', { className: 'ws-row' },
+        h(Button, { onClick: exportBrandKit }, t('导出品牌包')),
+        h(Button, { onClick: () => brandInputRef.current?.click() }, t('导入品牌包')),
+        h('input', { ref: brandInputRef, type: 'file', accept: '.json,application/json', style: { display: 'none' }, onChange: importBrandKit }),
+      ),
+    ),
+    h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('主色'))),
       h('div', { className: 'ws-swatches' },
         ACCENT_SWATCHES.map(color => h('button', {
@@ -6510,6 +7087,8 @@ function withoutOverrideKeys(design, keys) {
 function TypeSection(props) {
   const { store, design, doc, parsed, toast } = props
   const set = (patch) => store.updateDesign(current => ({ ...current, overrides: { ...(current.overrides ?? {}), ...patch } }))
+  const guide = normalizeStyleGuide(doc.meta.styleGuide)
+  const updateGuide = (patch) => store.updateMeta({ styleGuide: normalizeStyleGuide({ ...guide, ...patch }) })
   const rows = [
     { key: 'titleSize', label: t('标题字号'), value: design.type.titleSize, min: 20, max: 40, step: 1, unit: 'px' },
     { key: 'bodySize', label: t('正文字号'), value: design.type.bodySize, min: 13, max: 20, step: 0.5, unit: 'px' },
@@ -6637,6 +7216,32 @@ function TypeSection(props) {
         ),
       ),
       h('p', { className: 'ws-hint' }, t('图注即图片说明（alt），标题层级跳级需要手动调整。')),
+    ),
+    h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' }, h('span', null, t('编辑部规范')), h('span', { className: 'ws-group-note' }, t('随文档保存'))),
+      h('div', { className: 'ws-chips' },
+        [['restrained', t('克制')], ['spoken', t('口语')], ['professional', t('专业')], ['story', t('故事')]].map(([id, label]) => h('button', {
+          key: id,
+          type: 'button',
+          className: 'ws-chip' + (guide.tone === id ? ' on' : ''),
+          onClick: () => updateGuide({ tone: id }),
+        }, label)),
+      ),
+      h('div', { className: 'ws-field-row' },
+        h('span', { className: 'ws-field-label' }, t('禁用词')),
+        h('input', { className: 'ws-input', value: guide.bannedWords.join('、'), placeholder: t('用逗号分隔，例如：赋能、抓手'), onChange: event => updateGuide({ bannedWords: event.target.value }) }),
+      ),
+      h('div', { className: 'ws-field-row' },
+        h('span', { className: 'ws-field-label' }, t('偏好词')),
+        h('input', { className: 'ws-input', value: guide.preferredWords.join('、'), placeholder: t('希望出现的称呼或术语'), onChange: event => updateGuide({ preferredWords: event.target.value }) }),
+      ),
+      h('div', { className: 'ws-field-row' },
+        h('span', { className: 'ws-field-label' }, t('段落上限')),
+        h('input', { className: 'ws-input ws-input-narrow', type: 'number', min: 60, max: 400, value: guide.maxParagraphChars, onChange: event => updateGuide({ maxParagraphChars: Number(event.target.value) }) }),
+        h('span', { className: 'ws-hint' }, t('字')),
+      ),
+      h(Toggle, { label: t('正文图片必须带图注'), checked: guide.requireCaptions, onChange: value => updateGuide({ requireCaptions: value }) }),
+      h('p', { className: 'ws-hint' }, t('规范会随文档保存，AI 修改和发布检查都会读取。')),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('字号与节奏')), h('button', { type: 'button', className: 'ws-link', onClick: reset }, t('恢复默认'))),
@@ -6803,6 +7408,8 @@ function PublishSection(props) {
   const [ledger, setLedger] = React.useState([])
   const [ledgerVersion, setLedgerVersion] = React.useState(0)
   const [compareLedger, setCompareLedger] = React.useState(null)
+  const [stats, setStats] = React.useState({ phase: 'idle', items: [], days: 7, error: '' })
+  const [statsBusy, setStatsBusy] = React.useState(false)
   const [networkState, setNetworkState] = React.useState({ phase: 'loading', mode: 'system', proxyUrl: '', error: '' })
   const [networkMode, setNetworkMode] = React.useState('system')
   const [networkProxy, setNetworkProxy] = React.useState('')
@@ -6846,6 +7453,18 @@ function PublishSection(props) {
     listLedgerEvents(doc.id, 20).then(items => { if (!cancelled) setLedger(items) }).catch(() => { if (!cancelled) setLedger([]) })
     return () => { cancelled = true }
   }, [doc.id, ledgerVersion])
+  const loadArticleStats = async () => {
+    setStatsBusy(true)
+    try {
+      const value = await callHost('articleStats', { days: 7 }, { timeoutMs: 60000 })
+      setStats({ phase: 'ready', items: Array.isArray(value.items) ? value.items : [], days: value.days ?? 7, error: '' })
+    } catch (failure) {
+      setStats({ phase: 'error', items: [], days: 7, error: localizeError(failure.code, failure.message || t('读取发布数据失败')) })
+    } finally {
+      setStatsBusy(false)
+    }
+  }
+
   const recordLedger = async (type, extra = {}) => {
     const current = store.getDoc()
     if (!current) return
@@ -6897,6 +7516,8 @@ function PublishSection(props) {
 
   const previewHtmlLength = React.useMemo(() => serializeNodes(article.nodes).length, [article])
 
+  const houseStyle = React.useMemo(() => auditHouseStyle(parsed.blocks, doc.text, doc.meta.styleGuide), [parsed.blocks, doc.text, doc.meta.styleGuide])
+
   const preflight = React.useMemo(() => {
     const checks = []
     const push = (level, label, detail) => checks.push({ level, label, detail })
@@ -6921,6 +7542,9 @@ function PublishSection(props) {
     const htmlLength = previewHtmlLength
     if (htmlLength > 950 * 1024) push('error', t('正文 HTML 超过 950KB，删掉图片或缩短正文'), formatSize(htmlLength))
     else if (htmlLength > 800 * 1024) push('warn', t('正文 HTML 约 {size}，接近微信上限', { size: formatSize(htmlLength) }), '')
+    if (houseStyle.bannedHits.length > 0) push('warn', t('禁用词出现 {count} 次', { count: houseStyle.bannedHits.reduce((sum, item) => sum + item.count, 0) }), houseStyle.bannedHits.map(item => item.word).join('、'))
+    if (houseStyle.longParagraphs > 0) push('warn', t('超过段落上限 {count} 段', { count: houseStyle.longParagraphs }), `${houseStyle.guide.maxParagraphChars} ${t('字')}`)
+    if (houseStyle.missingCaptions > 0) push('warn', t('缺图注 {count} 张', { count: houseStyle.missingCaptions }), t('规范要求正文图片带图注'))
     const measured = fidelityFor(doc.design.themeId)
     if (measured === null) push('warn', t('这个主题还没有真实账号实测'), '')
     else if (measured.ok) push('ok', t('主题实测保真 {score}', { score: measured.score }), `${measured.testedAt.slice(0, 10)} · ${t('真实草稿读回')}`)
@@ -6929,7 +7553,22 @@ function PublishSection(props) {
     else push('warn', t('封面还在生成'), t('等封面出现或手动上传'))
     if (bundleIds.length > 0) push('ok', t('合集共 {count} 篇', { count: bundleIds.length + 1 }), t('保存时会逐篇上传'))
     return checks
-  }, [previewHtmlLength, article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length, doc.design.themeId])
+  }, [previewHtmlLength, article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length, doc.design.themeId, houseStyle])
+
+  const qa = React.useMemo(() => {
+    const errors = preflight.filter(item => item.level === 'error').length
+    const warnings = preflight.filter(item => item.level === 'warn').length
+    const aiHashes = Array.isArray(doc.meta.aiHashes) ? doc.meta.aiHashes : []
+    const lockedHashes = Array.isArray(doc.meta.lockedHashes) ? doc.meta.lockedHashes : []
+    const aiCount = parsed.blocks.filter(block => aiHashes.includes(hashBlock(block.text))).length
+    const lockedCount = parsed.blocks.filter(block => lockedHashes.includes(hashBlock(block.text))).length
+    const titleText = title
+    const digestText = digest
+    const distributionCount = (titleText.length > 36 ? 1 : 0) + (digestText.length > 54 ? 1 : 0) + (coverDataUrl === '' ? 1 : 0)
+    const issues = errors + warnings + houseStyle.violations + distributionCount
+    const status = errors > 0 ? 'blocked' : issues > 0 ? 'review' : 'ready'
+    return { errors, warnings, aiCount, lockedCount, distributionCount, issues, status }
+  }, [preflight, parsed.blocks, doc.meta.aiHashes, doc.meta.lockedHashes, title, digest, coverDataUrl, houseStyle])
 
   React.useEffect(() => {
     // Keep the generated cover in step with the current theme; a cover the user
@@ -7473,6 +8112,20 @@ function PublishSection(props) {
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },
+        h('span', null, t('发布复盘')),
+        h('button', { type: 'button', className: 'ws-link', disabled: statsBusy || hostStatus.configured !== true, onClick: loadArticleStats }, statsBusy ? t('读取中…') : t('读取近 7 天')),
+      ),
+      stats.phase === 'error' ? h('p', { className: 'ws-hint ws-error-text' }, stats.error) : null,
+      stats.phase === 'ready' && stats.items.length === 0 ? h('p', { className: 'ws-hint' }, t('近 {days} 天没有读到发布数据；公众号可能还没有数据统计权限。', { days: stats.days })) : null,
+      stats.items.slice(0, 6).map((item, index) => h('div', { key: `${item.ref_date ?? index}-${item.title ?? index}`, className: 'ws-stat-row' },
+        h('span', { className: 'ws-stat-title' }, item.title ?? t('未命名文章')),
+        h('span', { className: 'ws-stat-num' }, `${t('阅读')} ${item.read_num ?? item.readNum ?? 0}`),
+        h('span', { className: 'ws-stat-num' }, `${t('分享')} ${item.share_num ?? item.shareNum ?? 0}`),
+      )),
+      h('p', { className: 'ws-hint' }, t('需要公众号的数据统计权限；没有权限时只显示发布对账单。')),
+    ),
+    h('div', { className: 'ws-group' },
+      h('div', { className: 'ws-group-head' },
         h('span', null, t('发布对账单')),
         h('span', { className: 'ws-group-note' }, ledger.length === 0 ? t('还没有发布记录') : t('最近 {count} 条', { count: ledger.length })),
       ),
@@ -7545,6 +8198,38 @@ function PublishSection(props) {
           }),
         ),
       h('p', { className: 'ws-hint' }, t('快照存在浏览器 IndexedDB，最多保留最近 20 个版本。')),
+    ),
+    h('div', { className: 'ws-card ws-qa' },
+      h('div', { className: 'ws-card-head' },
+        h('span', null, t('发布前质检')),
+        h('span', { className: 'ws-badge ' + qa.status }, qa.status === 'blocked' ? t('先别发') : qa.status === 'review' ? t('建议改 {count} 处', { count: qa.issues }) : t('可以发')),
+      ),
+      h('div', { className: 'ws-qa-grid' },
+        h('div', { className: 'ws-qa-item' },
+          h('span', { className: 'ws-qa-label' }, t('实测保真')),
+          h('strong', null, fidelityFor(doc.design.themeId) === null ? t('未实测') : `${fidelityFor(doc.design.themeId).score}/100`),
+        ),
+        h('div', { className: 'ws-qa-item' },
+          h('span', { className: 'ws-qa-label' }, t('AI 改写 / 锁定')),
+          h('strong', null, `${qa.aiCount} / ${qa.lockedCount}`),
+        ),
+        h('div', { className: 'ws-qa-item' },
+          h('span', { className: 'ws-qa-label' }, t('规范违规')),
+          h('strong', null, houseStyle.violations),
+        ),
+        h('div', { className: 'ws-qa-item' },
+          h('span', { className: 'ws-qa-label' }, t('分发提示')),
+          h('strong', null, qa.distributionCount),
+        ),
+        h('div', { className: 'ws-qa-item' },
+          h('span', { className: 'ws-qa-label' }, t('发布检查')),
+          h('strong', null, `${qa.errors} ${t('错误')} · ${qa.warnings} ${t('提醒')}`),
+        ),
+      ),
+      qa.issues > 0
+        ? h('div', { className: 'ws-qa-issues' }, preflight.filter(item => item.level !== 'ok').slice(0, 4).map((item, index) => h('span', { key: index, className: 'ws-qa-issue ' + item.level }, item.label)))
+        : h('p', { className: 'ws-hint' }, t('没有发现会阻断发布的问题。')),
+      h('p', { className: 'ws-hint' }, t('质检汇总发布检查、实测保真、AI 来源、段落锁与分发场景；下面的细节仍可逐条查看。')),
     ),
     h('div', { className: 'ws-card ws-preflight' },
       h('div', { className: 'ws-card-head' },
@@ -8107,6 +8792,10 @@ const STUDIO_CSS = `
 .ws-textarea{height:auto;padding:7px 9px;resize:vertical;line-height:1.7}
 .ws-field{display:flex;flex-direction:column;gap:4px}
 .ws-field-label{font-size:11.5px;color:var(--ws-muted)}
+.ws-field-row{display:flex;align-items:center;gap:6px;margin:4px 0}
+.ws-field-label{font-size:11px;color:var(--ws-muted);flex:none;width:52px}
+.ws-field-row .ws-input{height:28px;font-size:12px;flex:1}
+.ws-input-narrow{max-width:74px}
 .ws-slider-row{display:grid;grid-template-columns:52px 1fr 52px;align-items:center;gap:8px}
 .ws-slider-label{font-size:11.5px;color:var(--ws-muted)}
 .ws-slider-value{font-size:11.5px;color:var(--ws-text);text-align:right;font-variant-numeric:tabular-nums}
@@ -8150,6 +8839,17 @@ const STUDIO_CSS = `
 .ws-draft-search{height:28px;font-size:12px;margin:0 0 6px}
 .ws-draft-pager{display:flex;align-items:center;gap:8px;justify-content:space-between;padding-top:4px}
 .ws-draft-pager .ws-hint{flex:1;text-align:center;margin:0}
+.ws-qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.ws-qa-item{display:flex;flex-direction:column;gap:1px;padding:6px 7px;border:1px solid var(--ws-border);border-radius:7px;background:var(--ws-surface2)}
+.ws-qa-label{font-size:10px;color:var(--ws-muted)}
+.ws-qa-item strong{font-size:12px;color:var(--ws-text);font-variant-numeric:tabular-nums}
+.ws-qa-issues{display:flex;flex-wrap:wrap;gap:4px}
+.ws-qa-issue{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--ws-surface2);color:var(--ws-muted)}
+.ws-qa-issue.warn{color:#8a5a00;background:#fff3d8}
+.ws-qa-issue.error{color:#a32424;background:#fde8e8}
+.ws-badge.ready{background:#e6f4ea;color:#1e6b35}
+.ws-badge.review{background:#fff3d8;color:#8a5a00}
+.ws-badge.blocked{background:#fde8e8;color:#a32424}
 .ws-dna-candidates{display:flex;flex-direction:column;gap:5px;margin:6px 0}
 .ws-dna-card{display:flex;align-items:center;gap:8px;padding:6px;border:1px solid var(--ws-border);border-radius:8px;background:var(--ws-bg);cursor:pointer;font:inherit;text-align:left}
 .ws-dna-card:hover{border-color:var(--ws-border2);background:var(--ws-surface2)}
@@ -8161,6 +8861,9 @@ const STUDIO_CSS = `
 .ws-dna-presets{display:flex;flex-direction:column;gap:2px;margin-top:6px;border-top:1px solid var(--ws-border);padding-top:6px}
 .ws-dna-preset{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ws-muted)}
 .ws-dna-preset-name{flex:1;color:var(--ws-text)}
+.ws-stat-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ws-muted);padding:4px 0;border-bottom:1px solid var(--ws-border)}
+.ws-stat-title{flex:1;color:var(--ws-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-stat-num{font-variant-numeric:tabular-nums}
 .ws-ledger{display:flex;flex-direction:column;gap:2px}
 .ws-ledger-summary{display:flex;flex-direction:column;gap:2px;padding:7px 8px;border:1px solid var(--ws-border);border-radius:8px;background:var(--ws-surface2);font-size:11px;color:var(--ws-muted);margin-bottom:3px}
 .ws-ledger-summary strong{font-size:11.5px;color:var(--ws-text)}
@@ -8425,6 +9128,26 @@ const STUDIO_CSS = `
 .ws-root[data-skin="dark"] .ws-toasts .ws-toast{background:#222329;color:#f2f2f4}
 .ws-root[data-skin="sand"] .ws-toasts .ws-toast{background:#3a2f24;color:#fdf6ec}
 .ws-root[data-skin="dark"] .ws-btn.solid{box-shadow:0 8px 20px rgba(0,0,0,.5)}
+.ws-palette{width:min(520px,100%);padding:0;gap:0;overflow:hidden}
+.ws-palette-search{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--ws-border)}
+.ws-palette-input{flex:1;border:0;background:transparent;font:inherit;font-size:14px;color:var(--ws-text);outline:none}
+.ws-kbd{font-size:10px;border:1px solid var(--ws-border);border-radius:4px;padding:1px 5px;color:var(--ws-muted)}
+.ws-palette-list{max-height:340px;overflow:auto;padding:5px}
+.ws-palette-item{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;border-radius:7px;padding:8px 9px;text-align:left;font:inherit;cursor:pointer;color:var(--ws-text)}
+.ws-palette-item.on{background:var(--ws-surface2)}
+.ws-palette-label{font-size:12.5px}
+.ws-palette-hint{font-size:10.5px;color:var(--ws-muted);margin-left:auto}
+.ws-palette-foot{display:flex;justify-content:space-between;padding:7px 12px;border-top:1px solid var(--ws-border);font-size:10px;color:var(--ws-muted)}
+.ws-snippet-modal{width:min(560px,100%)}
+.ws-snippet-create{display:flex;flex-direction:column;gap:6px;padding:9px;border:1px solid var(--ws-border);border-radius:9px;background:var(--ws-surface2)}
+.ws-snippet-section{display:flex;flex-direction:column;gap:3px;margin-top:4px}
+.ws-snippet-section-title{font-size:10.5px;color:var(--ws-muted);letter-spacing:.06em}
+.ws-snippet-row{display:flex;align-items:center;gap:8px;padding:5px 7px;border-bottom:1px solid var(--ws-border);font-size:12px}
+.ws-snippet-name{flex:1;color:var(--ws-text)}
+.ws-crash{min-height:100%;display:flex;flex-direction:column;justify-content:center;max-width:520px}
+.ws-btn{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--ws-border);border-radius:7px;background:var(--ws-surface);color:var(--ws-text);padding:6px 10px;font:inherit;font-size:12px;cursor:pointer}
+.ws-btn.primary{background:var(--ws-accent);border-color:var(--ws-accent);color:var(--ws-accent-ink)}
+.ws-root :focus-visible{outline:2px solid var(--ws-accent);outline-offset:2px}
 .ws-modal-scrim{position:absolute;inset:0;background:rgba(17,17,17,.32);z-index:80;display:flex;align-items:center;justify-content:center;padding:24px;border-radius:inherit}
 .ws-modal{width:min(580px,100%);max-height:calc(100% - 32px);overflow:auto;background:var(--ws-surface);border:1px solid var(--ws-border);border-radius:14px;box-shadow:0 24px 80px rgba(0,0,0,.28);padding:16px;display:flex;flex-direction:column;gap:12px}
 .ws-modal-head{display:flex;align-items:center;gap:8px}
@@ -8516,7 +9239,7 @@ return {
     ctx.effect(() => ctx.slots.inject('main', () => ctx.slots.register({
       name: 'main',
       key: PANEL_ID,
-    }, StudioPanel)), 'wechat-studio: studio panel')
+    }, StudioShell)), 'wechat-studio: studio panel')
   },
 }
   },
