@@ -121,6 +121,10 @@ WX_APPID=... WX_SECRET=... WX_COVER_PATH=/path/cover.png WX_ALLOW_PUBLISH=1 npm 
 
 ![分发镜](screenshots/wechat-studio-v2-surfaces.png)
 
+### 多账号与账号迁移
+
+![多账号](screenshots/wechat-studio-v2.2-accounts.png)
+
 ### 主题库与实测保真
 
 ![主题库](screenshots/wechat-studio-theme-thumbnails.png)
