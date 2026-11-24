@@ -532,14 +532,15 @@ export function createStudioService({ ctx, fetchImpl = fetch, importUndici } = {
     )
   }
 
-  /** 流式读取响应体并计数，超过 5MB 立刻停止。 */
-  async function readBoundedImageBody(response, rawUrl) {
+  /** 流式读取响应体并计数，超过上限立刻停止。 */
+  async function readBoundedImageBody(response, rawUrl, { maxBytes = REMOTE_IMAGE_MAX_BYTES, onTooLarge } = {}) {
+    const makeTooLargeError = onTooLarge ?? ((bytes) => tooLargeRemoteImage(rawUrl, bytes))
     const chunks = []
     let total = 0
     const take = (chunk) => {
       const view = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk)
       total += view.byteLength
-      if (total > REMOTE_IMAGE_MAX_BYTES) throw tooLargeRemoteImage(rawUrl, total)
+      if (total > maxBytes) throw makeTooLargeError(total)
       chunks.push(Buffer.from(view))
     }
     const body = response.body
@@ -571,7 +572,7 @@ export function createStudioService({ ctx, fetchImpl = fetch, importUndici } = {
       } catch (error) {
         throw new StudioError('image-fetch-failed', `下载图片失败（${rawUrl}）：读取图片数据时出错：${error instanceof Error ? error.message : String(error)}`)
       }
-      if (buffer.length > REMOTE_IMAGE_MAX_BYTES) throw tooLargeRemoteImage(rawUrl, buffer.length)
+      if (buffer.length > maxBytes) throw makeTooLargeError(buffer.length)
       chunks.push(buffer)
       total = buffer.length
     }
@@ -660,6 +661,7 @@ export function createStudioService({ ctx, fetchImpl = fetch, importUndici } = {
      * @returns {Promise<{ dataUrl: string, mime: string }>} 图片 data URL。
      */
     async fetchRemoteImage(payload = {}) {
+      const maxBytes = 8 * 1024 * 1024
       const raw = typeof payload?.url === 'string' ? payload.url.trim() : ''
       let url
       try {
@@ -670,27 +672,45 @@ export function createStudioService({ ctx, fetchImpl = fetch, importUndici } = {
       if (url.protocol !== 'http:' && url.protocol !== 'https:') {
         throw new StudioError('image-url-invalid', '只支持 http/https 图片地址')
       }
-      const host = url.hostname.toLowerCase()
-      const privateHost = host === 'localhost' || host.endsWith('.local')
-        || /^127\./.test(host) || /^10\./.test(host)
-        || /^192\.168\./.test(host) || /^169\.254\./.test(host)
-        || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
-        || host === '::1' || host === '[::1]'
-      if (privateHost) throw new StudioError('image-url-invalid', '不允许读取本机或内网地址')
+      if (isPrivateHostname(url.hostname)) {
+        throw new StudioError('image-url-invalid', '不允许读取本机或内网地址')
+      }
       let response
       try {
-        response = await networkFetch(url.toString(), { redirect: 'follow' })
+        response = await networkFetch(url.toString(), {
+          redirect: 'follow',
+          signal: AbortSignal.timeout(REMOTE_IMAGE_TIMEOUT_MS),
+        })
       } catch (error) {
-        throw new StudioError('image-fetch-failed', `图片下载失败：${error instanceof Error ? error.message : String(error)}`)
+        const failed = error instanceof Error
+        const reason = failed && (error.name === 'TimeoutError' || error.name === 'AbortError')
+          ? '下载超时（15 秒）'
+          : (failed ? error.message : String(error))
+        throw new StudioError('image-fetch-failed', `图片下载失败：${reason}`)
       }
       if (!response.ok) throw new StudioError('image-fetch-failed', `图片下载失败（HTTP ${response.status}）`)
-      const mime = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
+      if (typeof response.url === 'string' && response.url !== '') {
+        let finalUrl
+        try {
+          finalUrl = new URL(response.url)
+        } catch {
+          throw new StudioError('image-url-invalid', '图片重定向后的地址不合法')
+        }
+        if ((finalUrl.protocol !== 'http:' && finalUrl.protocol !== 'https:') || isPrivateHostname(finalUrl.hostname)) {
+          throw new StudioError('image-url-invalid', '不允许读取本机或内网地址')
+        }
+      }
+      const mime = (response.headers?.get?.('content-type') ?? '').split(';')[0].trim().toLowerCase()
       if (!mime.startsWith('image/')) throw new StudioError('image-fetch-failed', '这个地址返回的不是图片')
-      const declared = Number(response.headers.get('content-length') ?? 0)
-      if (declared > 8 * 1024 * 1024) throw new StudioError('image-too-large', '远程图片超过 8MB，先压缩或换一张')
-      const buffer = Buffer.from(await response.arrayBuffer())
-      if (buffer.length > 8 * 1024 * 1024) throw new StudioError('image-too-large', '远程图片超过 8MB，先压缩或换一张')
-      return { dataUrl: `data:${mime};base64,${buffer.toString('base64')}`, mime }
+      const declared = Number(response.headers?.get?.('content-length') ?? 0)
+      if (Number.isFinite(declared) && declared > maxBytes) {
+        throw new StudioError('image-too-large', '远程图片超过 8MB，先压缩或换一张')
+      }
+      const bytes = await readBoundedImageBody(response, raw, {
+        maxBytes,
+        onTooLarge: () => new StudioError('image-too-large', '远程图片超过 8MB，先压缩或换一张'),
+      })
+      return { dataUrl: `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`, mime }
     },
 
     /** 保存出站网络设置；只写本机凭据库，不写浏览器存储。 */
@@ -776,12 +796,14 @@ export function createStudioService({ ctx, fetchImpl = fetch, importUndici } = {
       const appSecret = normalizeAppSecret(payload?.appSecret)
       const existing = state.accounts.find(entry => entry.id === state.activeId)
       if (existing === undefined) {
-        state.accounts.push({ id: `acct-${Date.now().toString(36)}`, name: '默认账号', appId, appSecret })
+        const created = { id: `acct-${Date.now().toString(36)}`, name: '默认账号', appId, appSecret }
+        state.accounts.push(created)
+        state.activeId = created.id
       } else {
         existing.appId = appId
         existing.appSecret = appSecret
+        state.activeId = existing.id
       }
-      state.activeId = state.accounts[0].id
       await writeAccountsState(state)
       tokenCache.clear()
       tokenPending.clear()

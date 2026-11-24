@@ -41,8 +41,12 @@
     "type": "git",
     "url": "https://github.com/CalebChen941028/dsh-wechat-studio.git"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "node build.mjs",
+    "build:check": "node build.mjs && git diff --exit-code client.js",
     "test": "node --test test/*.test.mjs",
     "e2e:wechat": "node scripts/wechat-fidelity.mjs",
     "e2e:publish": "node scripts/wechat-publish-e2e.mjs"

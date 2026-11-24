@@ -1,5 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { t, uiLanguage, setUiLanguage, localizeError } from '../src/i18n.mjs'
 
@@ -32,4 +35,20 @@ test('localizeError：英文模式翻译错误码，未知码保留原文', () =
   assert.equal(localizeError('unknown-code', '中文兜底'), '中文兜底')
   setUiLanguage('zh')
   assert.equal(localizeError('title-required', '中文兜底'), '中文兜底')
+})
+
+test('UI_EN：词典不包含重复键', () => {
+  const root = dirname(dirname(fileURLToPath(import.meta.url)))
+  const source = readFileSync(join(root, 'src', 'i18n.mjs'), 'utf8')
+  const match = /const UI_EN = \{([\s\S]*?)\n\}/.exec(source)
+  assert.ok(match !== null, 'UI_EN catalog should exist')
+  const seen = new Set()
+  const duplicates = []
+  for (const line of match[1].split('\n')) {
+    const entry = /^\s*'((?:\\'|[^'])+)'\s*:/.exec(line)
+    if (!entry) continue
+    if (seen.has(entry[1])) duplicates.push(entry[1])
+    seen.add(entry[1])
+  }
+  assert.deepEqual(duplicates, [])
 })

@@ -72,7 +72,6 @@ const UI_EN = {
   '导入 .md / .txt / .json': 'Import .md / .txt / .json',
   '删除当前草稿': 'Delete this draft',
   '草稿已删除': 'Draft deleted',
-  '未命名草稿': 'Untitled draft',
   'AI 精排中…': 'AI refining…',
   '插入图片': 'Insert image',
   '悬停段落可上移、下移或删除': 'Hover a block to move or delete it',
@@ -85,7 +84,6 @@ const UI_EN = {
   '装饰': 'Design',
   'AI': 'AI',
   '发送': 'Send',
-  '修改中…': 'Editing…',
   '修改中': 'Editing',
   '走当前默认模型': 'Default model',
   '内容分析': 'Content analysis',
@@ -105,8 +103,6 @@ const UI_EN = {
   '背景与图形': 'Background & art',
   '底纹': 'Texture',
   '矢量角标': 'Vector mark',
-  '显示项': 'Display',
-  '文末签名': 'Footer',
   '标题下方显示作者与日期': 'Show author and date',
   '首段作为导语放大': 'Larger lead paragraph',
   '显示文末引导': 'Show closing note',
@@ -127,11 +123,9 @@ const UI_EN = {
   '保存': 'Save',
   '取消': 'Cancel',
   '清除': 'Clear',
-  '保存中…': 'Saving…',
   '测试中…': 'Testing…',
   '文章信息': 'Article',
   '标题': 'Title',
-  '公众号名称': 'Account name',
   '作者': 'Author',
   '摘要': 'Summary',
   '原文链接': 'Source link',
@@ -141,26 +135,16 @@ const UI_EN = {
   '合集（可选）': 'Bundle (optional)',
   '封面（2.35:1）': 'Cover (2.35:1)',
   '按主题重绘': 'Regenerate',
-  '上传图片': 'Upload image',
   '保存到草稿箱': 'Save draft',
   '直接发布': 'Publish now',
   '确认发布': 'Confirm publish',
   '再想想': 'Cancel',
   '公众号草稿箱': 'Draft box',
   '读取最近 10 篇': 'Load recent 10',
-  '读取中…': 'Loading…',
-  '删除': 'Delete',
-  '确认删除': 'Confirm delete',
-  '已提交发布': 'Submitted',
   '已进入草稿箱': 'Saved as draft',
   '打开公众号后台': 'Open WeChat backend',
-  '插入本地图片': 'Insert local image',
-  '上传文档（.md / .txt / .docx / .html）': 'Upload document',
-  '新建草稿': 'New draft',
-  '已新建草稿': 'New draft created',
   '阅读原文': 'Read original',
   '写留言': 'Comment',
-  '分享': 'Share',
   '在看': 'Wow',
   '赞': 'Like',
   '小节': 'Section',
@@ -175,7 +159,6 @@ const UI_EN = {
   '加粗文字': 'Bold text',
   '高亮': 'Highlight',
   '高亮文字': 'Highlighted text',
-  '行内代码': 'Inline code',
   '上传文档（.md / .txt / .docx / .html）': 'Upload .md / .txt / .docx / .html',
   '新建草稿': 'New draft',
   '已新建草稿': 'New draft created',
@@ -186,11 +169,9 @@ const UI_EN = {
   '有序列表': 'Numbered list',
   '分割线': 'Divider',
   '图': 'Image',
-  '码': 'Code',
   '高': 'H',
   '导入失败': 'Import failed',
   '复制失败': 'Copy failed',
-  '已复制带样式的正文，粘到公众号编辑器即可': 'Styled HTML copied. Paste it into the WeChat editor.',
   '已复制，样式可能不完整': 'Copied, but styling may be incomplete',
   '图片已替换': 'Image replaced',
   '插图已加到正文末尾': 'Image appended to the article',
@@ -199,7 +180,6 @@ const UI_EN = {
   '修改失败': 'Edit failed',
   '已修改': 'Updated',
   '模型生成中': 'Model is writing',
-  '正在按你的要求修改…': 'Editing as requested…',
   '按内容重新精排': 'Re-layout from content',
   '标题更有冲击力': 'Stronger title',
   '第二段压缩到两行': 'Trim paragraph 2 to two lines',
@@ -277,20 +257,15 @@ const UI_EN = {
   '留空自动取首段': 'Empty uses the first paragraph',
   '可选，https://': 'Optional, https://',
   '评论设置会写进草稿；公众号后台仍可再改。': 'Comment settings are saved in the draft and can be changed in WeChat later.',
-  '当前是自定义封面': 'Custom cover',
   '自动按主题生成': 'Auto from theme',
   '封面预览': 'Cover preview',
   '封面生成中…': 'Generating cover…',
-  '处理中…': 'Working…',
   '直接发布会占用当天发布次数，确认？': 'Publishing now uses today’s publish quota. Continue?',
   '草稿箱是空的。': 'The draft box is empty.',
-  '（无标题）': '(Untitled)',
   '时间未知': 'Unknown time',
   '删除会直接移除公众号后台的草稿，不影响已发布的文章。': 'This removes the draft in WeChat; published articles are unaffected.',
   '先在上方填写 AppID 和 AppSecret。': 'Fill in AppID and AppSecret above first.',
-  '更新密钥': 'Update credentials',
   '填写密钥': 'Add credentials',
-  '保存中…': 'Saving…',
 
   '公众号': 'Account',
   '图片处理失败': 'Image failed',
@@ -306,21 +281,18 @@ const UI_EN = {
   '这份分析只看标题、结构、关键词与篇幅，不联网，也不改动你的正文。': 'This analysis only reads the title, structure, keywords and length. No network, no edits.',
   '粘贴或上传文档后，先本地按内容套一版（不联网、立即出效果），随后可让 AI 再精排一次。': 'Paste or upload a document: a layout is applied locally first, then AI can refine it once.',
   '粘贴 / 上传后让 AI 精排': 'Let AI refine after paste / upload',
-  'AI 正在精排…': 'AI is refining…',
   '现在就 AI 精排': 'Refine with AI now',
   '显示在标题上方的标签位：封面、环形与居中版式会用到。': 'The tag above the title; used by cover, ring and centered layouts.',
   '底纹与角标都会写进复制/发布的 HTML；深色背景会自动换成浅色文字。': 'Texture and marks are written into copied/published HTML; dark backgrounds switch to light text.',
   '图片样式选「通栏」时会忽略宽度。悬停图片可以点工具条里的图标换图。': 'Full-width image style ignores width. Hover an image to replace it from its toolbar.',
   '署名，例如：文 / 张三': 'Byline, e.g. Text / San Zhang',
   '状态查询失败，发布可能仍在继续，稍后到公众号后台确认': 'Status check failed; publishing may still be running. Check the WeChat backend later.',
-  '已提交发布，结果见下方状态': 'Submitted for publishing; status below',
   '在公众号后台「设置与开发 → 基本配置」拿到 AppID 与 AppSecret。还需要把本机出口 IP 加进白名单。': 'Get AppID and AppSecret from WeChat “Settings & Development → Basic config”. Add this machine’s public IP to the allowlist.',
   '只有当前草稿。新建几篇本地草稿后，可以把它们一起保存成多图文草稿。': 'Only this draft exists. Create more local drafts to bundle them.',
   '把其他本地草稿加入，一起保存成公众号多图文草稿（最多 8 篇，含当前这篇）。': 'Pick other local drafts to save as one WeChat bundle (up to 8, including this one).',
   '打开公众号后台 → 设置与开发 → 基本配置 → IP白名单，加入提示里的 IP 后重试。': 'Open WeChat backend → Settings & Development → Basic config → IP allowlist, add the IP from the message, then retry.',
   '未认证的订阅号通常没有发布接口，改用「保存到草稿箱」或「复制 HTML」。': 'Unverified accounts usually have no publish API; use “Save draft” or “Copy HTML”.',
   '当前环境无法生成封面': 'Cover cannot be generated in this environment',
-  '未命名文章': 'Untitled article',
   '当前环境无法处理封面': 'Cover cannot be processed in this environment',
   '文章标题（也可以直接写 # 标题）': 'Article title (or start the text with #)',
   '把公众号文案粘到这里。支持 Markdown：## 小节、> 引用、- 列表、![图片](url)、--- 分割线、**加粗**、==高亮==。': 'Paste your copy here. Markdown is supported: ## section, > quote, - list, ![image](url), --- divider, **bold**, ==highlight==.',
@@ -431,7 +403,6 @@ const UI_EN = {
   '已把富文本转换为 Markdown': 'Converted rich text to Markdown',
   '富文本转换失败': 'Rich-text conversion failed',
 
-  '发布检查': 'Preflight',
   '可以发布': 'Ready',
   '{count} 个问题': '{count} issue(s)',
   '{count} 项提醒': '{count} warning(s)',
@@ -482,7 +453,6 @@ const UI_EN = {
   '应用修改': 'Apply changes',
   '放弃': 'Discard',
   '先应用或放弃当前建议': 'Apply or discard the current suggestion first',
-  '新增 {added} 行 · 删除 {removed} 行': '+{added} / -{removed} lines',
   '还有 {count} 行改动未显示': '{count} more changed lines hidden',
   '只调整版式与标题摘要，不改正文': 'Only layout and title/summary change; the text stays as is',
   '版式：{theme}': 'Layout: {theme}',
@@ -780,7 +750,6 @@ const UI_EN = {
   '发布计划': 'Publish plan',
   '计划日期': 'Planned date',
   '计划日期只是本地排期，不会自动发布；到时间在发布面板手动发送。': 'This is a local schedule only; it does not auto-publish. Send manually when the time comes.',
-
 }
 
 
@@ -3054,9 +3023,11 @@ function childText(node) {
 
 const SIG_EOCD = 0x06054b50
 const SIG_CENTRAL = 0x02014b50
+const MAX_DOCX_ENTRY_BYTES = 25 * 1024 * 1024
 
 /** Read the central directory of a ZIP archive. */
 function readZipEntries(bytes) {
+  if (bytes.length < 22) throw new Error('文件不是有效的 .docx（找不到 ZIP 目录）')
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   let eocd = -1
   const lowest = Math.max(0, bytes.length - 66000)
@@ -3071,15 +3042,17 @@ function readZipEntries(bytes) {
   let pointer = view.getUint32(eocd + 16, true)
   const entries = []
   for (let index = 0; index < total; index += 1) {
-    if (view.getUint32(pointer, true) !== SIG_CENTRAL) break
+    if (pointer + 46 > bytes.length || view.getUint32(pointer, true) !== SIG_CENTRAL) break
     const method = view.getUint16(pointer + 10, true)
     const compressedSize = view.getUint32(pointer + 20, true)
+    const uncompressedSize = view.getUint32(pointer + 24, true)
     const nameLength = view.getUint16(pointer + 28, true)
     const extraLength = view.getUint16(pointer + 30, true)
     const commentLength = view.getUint16(pointer + 32, true)
     const localOffset = view.getUint32(pointer + 42, true)
+    if (pointer + 46 + nameLength > bytes.length) break
     const name = new TextDecoder().decode(bytes.subarray(pointer + 46, pointer + 46 + nameLength))
-    entries.push({ name, method, compressedSize, localOffset })
+    entries.push({ name, method, compressedSize, uncompressedSize, localOffset })
     pointer += 46 + nameLength + extraLength + commentLength
   }
   return entries
@@ -3088,19 +3061,53 @@ function readZipEntries(bytes) {
 async function readZipEntry(bytes, entry) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const localOffset = entry.localOffset
-  if (view.getUint32(localOffset, true) !== 0x04034b50) throw new Error('docx 压缩包损坏（本地头无效）')
+  if (localOffset + 30 > bytes.length || view.getUint32(localOffset, true) !== 0x04034b50) {
+    throw new Error('docx 压缩包损坏（本地头无效）')
+  }
+  if (entry.uncompressedSize > MAX_DOCX_ENTRY_BYTES) {
+    throw new Error('docx 内单个文件体积超过 25MB 上限，无法解析')
+  }
   const nameLength = view.getUint16(localOffset + 26, true)
   const extraLength = view.getUint16(localOffset + 28, true)
   const start = localOffset + 30 + nameLength + extraLength
   const size = entry.compressedSize > 0
     ? entry.compressedSize
     : view.getUint32(localOffset + 22, true)
+  if (start > bytes.length || start + size > bytes.length) {
+    throw new Error('docx 压缩包损坏（数据越界）')
+  }
   const payload = bytes.subarray(start, start + size)
-  if (entry.method === 0) return payload
+  if (entry.method === 0) {
+    if (payload.byteLength > MAX_DOCX_ENTRY_BYTES) throw new Error('docx 内单个文件体积超过 25MB 上限，无法解析')
+    return payload
+  }
   if (entry.method !== 8) throw new Error('docx 使用了不支持的压缩方式')
   if (typeof DecompressionStream !== 'function') throw new Error('当前环境无法解压 .docx')
   const stream = new Blob([payload]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
-  return new Uint8Array(await new Response(stream).arrayBuffer())
+  const reader = stream.getReader()
+  const chunks = []
+  let total = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > MAX_DOCX_ENTRY_BYTES) {
+        await reader.cancel().catch(() => {})
+        throw new Error('docx 内单个文件解压后超过 25MB 上限，已中止解析')
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  const output = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    output.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return output
 }
 
 /** Convert a .docx ArrayBuffer to Markdown. */

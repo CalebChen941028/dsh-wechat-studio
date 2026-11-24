@@ -191,9 +191,11 @@ function childText(node) {
 
 const SIG_EOCD = 0x06054b50
 const SIG_CENTRAL = 0x02014b50
+const MAX_DOCX_ENTRY_BYTES = 25 * 1024 * 1024
 
 /** Read the central directory of a ZIP archive. */
 function readZipEntries(bytes) {
+  if (bytes.length < 22) throw new Error('文件不是有效的 .docx（找不到 ZIP 目录）')
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   let eocd = -1
   const lowest = Math.max(0, bytes.length - 66000)
@@ -208,15 +210,17 @@ function readZipEntries(bytes) {
   let pointer = view.getUint32(eocd + 16, true)
   const entries = []
   for (let index = 0; index < total; index += 1) {
-    if (view.getUint32(pointer, true) !== SIG_CENTRAL) break
+    if (pointer + 46 > bytes.length || view.getUint32(pointer, true) !== SIG_CENTRAL) break
     const method = view.getUint16(pointer + 10, true)
     const compressedSize = view.getUint32(pointer + 20, true)
+    const uncompressedSize = view.getUint32(pointer + 24, true)
     const nameLength = view.getUint16(pointer + 28, true)
     const extraLength = view.getUint16(pointer + 30, true)
     const commentLength = view.getUint16(pointer + 32, true)
     const localOffset = view.getUint32(pointer + 42, true)
+    if (pointer + 46 + nameLength > bytes.length) break
     const name = new TextDecoder().decode(bytes.subarray(pointer + 46, pointer + 46 + nameLength))
-    entries.push({ name, method, compressedSize, localOffset })
+    entries.push({ name, method, compressedSize, uncompressedSize, localOffset })
     pointer += 46 + nameLength + extraLength + commentLength
   }
   return entries
@@ -225,19 +229,53 @@ function readZipEntries(bytes) {
 async function readZipEntry(bytes, entry) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const localOffset = entry.localOffset
-  if (view.getUint32(localOffset, true) !== 0x04034b50) throw new Error('docx 压缩包损坏（本地头无效）')
+  if (localOffset + 30 > bytes.length || view.getUint32(localOffset, true) !== 0x04034b50) {
+    throw new Error('docx 压缩包损坏（本地头无效）')
+  }
+  if (entry.uncompressedSize > MAX_DOCX_ENTRY_BYTES) {
+    throw new Error('docx 内单个文件体积超过 25MB 上限，无法解析')
+  }
   const nameLength = view.getUint16(localOffset + 26, true)
   const extraLength = view.getUint16(localOffset + 28, true)
   const start = localOffset + 30 + nameLength + extraLength
   const size = entry.compressedSize > 0
     ? entry.compressedSize
     : view.getUint32(localOffset + 22, true)
+  if (start > bytes.length || start + size > bytes.length) {
+    throw new Error('docx 压缩包损坏（数据越界）')
+  }
   const payload = bytes.subarray(start, start + size)
-  if (entry.method === 0) return payload
+  if (entry.method === 0) {
+    if (payload.byteLength > MAX_DOCX_ENTRY_BYTES) throw new Error('docx 内单个文件体积超过 25MB 上限，无法解析')
+    return payload
+  }
   if (entry.method !== 8) throw new Error('docx 使用了不支持的压缩方式')
   if (typeof DecompressionStream !== 'function') throw new Error('当前环境无法解压 .docx')
   const stream = new Blob([payload]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
-  return new Uint8Array(await new Response(stream).arrayBuffer())
+  const reader = stream.getReader()
+  const chunks = []
+  let total = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > MAX_DOCX_ENTRY_BYTES) {
+        await reader.cancel().catch(() => {})
+        throw new Error('docx 内单个文件解压后超过 25MB 上限，已中止解析')
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  const output = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    output.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return output
 }
 
 /** Convert a .docx ArrayBuffer to Markdown. */
