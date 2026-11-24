@@ -57,7 +57,7 @@ function TopBar(props) {
     h('div', { className: 'ws-brand' },
       h(Icon, { name: 'pen', size: 17 }),
       h('span', null, t('公众号排版')),
-      compact ? null : h('span', { className: 'ws-badge' }, design.themeName + ' · ' + design.variantName),
+      compact ? null : h('span', { className: 'ws-badge' }, [t(design.themeName), t(design.variantName)].join(' · ')),
       refining ? h('span', { className: 'ws-badge busy' }, t('AI 精排中…')) : null,
     ),
     narrow

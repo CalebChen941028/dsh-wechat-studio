@@ -659,13 +659,14 @@ function StudioPanel(props) {
     store.updateDoc(current => ({ ...current, design: result.design, meta: current.meta }))
     setTab('theme')
     if (narrow) setNarrowView('design')
-    toast(`已按「${result.analysis.label}」编排：${composeDesign(result.design).themeName} · ${composeDesign(result.design).variantName}`, 'success')
+    const composed = composeDesign(result.design)
+    toast(`已按「${result.analysis.label}」编排：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
   }
 
   const reshuffle = () => {
     store.updateDesign(current => nextVariant(current))
     const next = composeDesign(nextVariant(doc.design))
-    toast(`换了一版：${next.themeName} · ${next.variantName}`)
+    toast(`换了一版：${t(next.themeName)} · ${t(next.variantName)}`)
   }
 
   const copyArticle = async () => {
@@ -701,7 +702,7 @@ function StudioPanel(props) {
     store.updateDoc(entry => ({ ...entry, design: designNow }))
     if (announce) {
       const composed = composeDesign(designNow)
-      toast(`已按内容自动编排：${composed.themeName} · ${composed.variantName}`, 'success')
+      toast(`已按内容自动编排：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
     }
     return designNow
   }, [store, toast])
@@ -753,7 +754,7 @@ function StudioPanel(props) {
         }
       })
       const composed = composeDesign({ themeId: theme.id, variantId, overrides: value.design.overrides ?? {} })
-      toast(`AI 精排完成：${composed.themeName} · ${composed.variantName}`, 'success')
+      toast(`AI 精排完成：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
     } catch (error) {
       if (token === refineTokenRef.current) toast(`AI 精排没有完成（${error.message}），已保留自动编排的结果`)
     } finally {
@@ -785,7 +786,7 @@ function StudioPanel(props) {
       if (narrow) setNarrowView('preview')
       const composed = composeDesign(designNow)
       const imageNote = typeof images === 'number' && images > 0 ? t('，含 {count} 张插图', { count: images }) : ''
-      toast(`已导入「${parsedNow.title || file.name}」，自动编排为 ${composed.themeName} · ${composed.variantName}${imageNote}`, 'success')
+      toast(`已导入「${parsedNow.title || file.name}」，自动编排为 ${t(composed.themeName)} · ${t(composed.variantName)}${imageNote}`, 'success')
       if (autoRefine) {
         clearTimeout(refineTimerRef.current)
         refineTimerRef.current = setTimeout(() => { refineWithAi() }, 900)

@@ -754,6 +754,43 @@ const UI_EN = {
   '计划日期': 'Planned date',
   '计划日期只是本地排期，不会自动发布；到时间在发布面板手动发送。': 'This is a local schedule only; it does not auto-publish. Send manually when the time comes.',
 
+  // 主题与变体名称（数据标签，经 t() 渲染）
+  '专栏': 'Column',
+  '随笔': 'Essay',
+  '特稿': 'Feature',
+  '墨白': 'Ink',
+  '社论': 'Editorial',
+  '索引': 'Index',
+  '米纸': 'Paper',
+  '书信': 'Letter',
+  '卷轴': 'Scroll',
+  '青松': 'Pine',
+  '花园': 'Garden',
+  '深海蓝': 'Ocean',
+  '报告': 'Report',
+  '简报': 'Brief',
+  '摩登': 'Magazine',
+  '封面': 'Cover',
+  '特写': 'Close-up',
+  '玫瑰': 'Rose',
+  '软光': 'Soft light',
+  '缎面': 'Satin',
+  '暖橙': 'Amber',
+  '暖房': 'Warm room',
+  '口述': 'Oral history',
+  '夜幕': 'Nightfall',
+  '夜航': 'Night flight',
+  '静水': 'Still water',
+  '节庆': 'Festival',
+  '庆典': 'Celebration',
+  '贺卡': 'Greeting card',
+  '学术': 'Scholar',
+  '论文': 'Paper',
+  '笔记': 'Notebook',
+  '薄荷': 'Mint',
+  '清透': 'Clear',
+  '灰阶': 'Greyscale',
+  '素面': 'Plain',
   '画报': 'Zine',
   '跨页': 'Spread',
   '特辑': 'Dossier',
@@ -766,6 +803,26 @@ const UI_EN = {
   '策展': 'Gallery',
   '展签': 'Exhibit',
   '图录': 'Catalog',
+
+  // 主题描述
+  '衬线标题、细线与编号，克制的杂志内页': 'Serif headings, hairline rules and numbering: a restrained magazine spread',
+  '黑字、细线、大留白，让文章自己说话': 'Black type, thin rules and generous white space; the writing speaks for itself',
+  '旧纸的暖调，像一本翻旧了的随笔集': 'The warmth of old paper, like a well-thumbed essay collection',
+  '清爽的绿，适合讲方法、讲经验': 'Fresh green for methods and lessons learned',
+  '结构清楚、层级分明，适合分析与复盘': 'Clear structure and hierarchy for analysis and reviews',
+  '大标题、强对比，像一页封面': 'Big headlines and strong contrast, like a magazine cover',
+  '柔和的粉调，适合审美、人物与生活方式': 'Soft pink for aesthetics, people and lifestyle',
+  '暖色叙事，适合故事、经历与人物': 'Warm-toned storytelling for narratives, experience and people',
+  '深靛蓝配浅底，安静但有分量': 'Deep indigo on a light ground: quiet but weighty',
+  '红金配色，用在祝福、周年与节点': 'Red and gold for greetings, anniversaries and milestones',
+  '编号、脚注式引用，适合研究与长文': 'Numbering and footnote-style citations for research and long reads',
+  '干净的科学感，适合产品与工具说明': 'A clean, scientific feel for products and tool docs',
+  '无彩色，信息密度优先': 'No colour; information density comes first',
+  '独立杂志跨页感：衬线大标题、朱砂强调与隐约栏线': 'Independent magazine spread: serif display, cinnabar accent, faint column rules',
+  '水粉绘本与手账感：圆润标题、奶油纸底与淡彩叶形': 'Gouache picture book and journal: rounded headings, cream paper, pale leaf marks',
+  '精装书页质感：全衬线扉页、细腻纸纹与藏书印记': 'Hardcover page: all-serif title page, fine paper grain and an ex libris seal',
+  '美术馆展签与画册感：冷白墙面、微弱网格与青铜细线': 'Museum label and catalogue: cool white walls, faint grid, bronze-green hairlines',
+  '{count} 个版式': '{count} layouts',
 }
 
 
@@ -4821,13 +4878,14 @@ function StudioPanel(props) {
     store.updateDoc(current => ({ ...current, design: result.design, meta: current.meta }))
     setTab('theme')
     if (narrow) setNarrowView('design')
-    toast(`已按「${result.analysis.label}」编排：${composeDesign(result.design).themeName} · ${composeDesign(result.design).variantName}`, 'success')
+    const composed = composeDesign(result.design)
+    toast(`已按「${result.analysis.label}」编排：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
   }
 
   const reshuffle = () => {
     store.updateDesign(current => nextVariant(current))
     const next = composeDesign(nextVariant(doc.design))
-    toast(`换了一版：${next.themeName} · ${next.variantName}`)
+    toast(`换了一版：${t(next.themeName)} · ${t(next.variantName)}`)
   }
 
   const copyArticle = async () => {
@@ -4863,7 +4921,7 @@ function StudioPanel(props) {
     store.updateDoc(entry => ({ ...entry, design: designNow }))
     if (announce) {
       const composed = composeDesign(designNow)
-      toast(`已按内容自动编排：${composed.themeName} · ${composed.variantName}`, 'success')
+      toast(`已按内容自动编排：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
     }
     return designNow
   }, [store, toast])
@@ -4915,7 +4973,7 @@ function StudioPanel(props) {
         }
       })
       const composed = composeDesign({ themeId: theme.id, variantId, overrides: value.design.overrides ?? {} })
-      toast(`AI 精排完成：${composed.themeName} · ${composed.variantName}`, 'success')
+      toast(`AI 精排完成：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
     } catch (error) {
       if (token === refineTokenRef.current) toast(`AI 精排没有完成（${error.message}），已保留自动编排的结果`)
     } finally {
@@ -4947,7 +5005,7 @@ function StudioPanel(props) {
       if (narrow) setNarrowView('preview')
       const composed = composeDesign(designNow)
       const imageNote = typeof images === 'number' && images > 0 ? t('，含 {count} 张插图', { count: images }) : ''
-      toast(`已导入「${parsedNow.title || file.name}」，自动编排为 ${composed.themeName} · ${composed.variantName}${imageNote}`, 'success')
+      toast(`已导入「${parsedNow.title || file.name}」，自动编排为 ${t(composed.themeName)} · ${t(composed.variantName)}${imageNote}`, 'success')
       if (autoRefine) {
         clearTimeout(refineTimerRef.current)
         refineTimerRef.current = setTimeout(() => { refineWithAi() }, 900)
@@ -5513,7 +5571,7 @@ function TopBar(props) {
     h('div', { className: 'ws-brand' },
       h(Icon, { name: 'pen', size: 17 }),
       h('span', null, t('公众号排版')),
-      compact ? null : h('span', { className: 'ws-badge' }, design.themeName + ' · ' + design.variantName),
+      compact ? null : h('span', { className: 'ws-badge' }, [t(design.themeName), t(design.variantName)].join(' · ')),
       refining ? h('span', { className: 'ws-badge busy' }, t('AI 精排中…')) : null,
     ),
     narrow
@@ -6882,7 +6940,7 @@ function AiSection(props) {
           ? h('p', { className: 'ws-hint' }, t('版式：{theme}', { theme: (() => {
             const theme = THEMES.find(entry => entry.id === pending.design.themeId)
             const variant = theme?.variants.find(entry => entry.id === pending.design.variantId)
-            return `${theme?.name ?? pending.design.themeId}${variant === undefined ? '' : ` · ${variant.name}`}`
+            return `${t(theme?.name ?? pending.design.themeId)}${variant === undefined ? '' : ` · ${t(variant.name)}`}`
           })() }))
           : null,
         h('div', { className: 'ws-row' },
@@ -7197,7 +7255,7 @@ function ThemeSection(props) {
       ),
       h('ul', { className: 'ws-reasons' },
         analysis.reasons.slice(0, 3).map((reason, index) => h('li', { key: index }, reason)),
-        h('li', { key: 'current' }, `当前使用「${design.themeName}」·「${design.variantName}」`),
+        h('li', { key: 'current' }, `当前使用「${t(design.themeName)}」·「${t(design.variantName)}」`),
       ),
       h('p', { className: 'ws-hint' }, t('这份分析只看标题、结构、关键词与篇幅，不联网，也不改动你的正文。')),
     ),
@@ -7208,7 +7266,7 @@ function ThemeSection(props) {
       h(Button, { onClick: onRefineNow, disabled: refining }, refining ? t('AI 正在精排…') : t('现在就 AI 精排')),
     ),
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, t('主题库')), h('span', { className: 'ws-group-note' }, `${THEMES.reduce((count, entry) => count + entry.variants.length, 0)} 个版式`)),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('主题库')), h('span', { className: 'ws-group-note' }, t('{count} 个版式', { count: THEMES.reduce((count, entry) => count + entry.variants.length, 0) }))),
       h('div', { className: 'ws-chips ws-theme-filter' },
         [['all', t('全部')], ['favorites', t('收藏')], ['recent', t('最近')]].map(([id, label]) => h('button', {
           key: id,
@@ -7231,7 +7289,7 @@ function ThemeSection(props) {
           h(ThemeMiniPreview, { theme }),
           h('span', { className: 'ws-theme-meta' },
             h('span', { className: 'ws-theme-name-row' },
-              h('span', { className: 'ws-theme-name' }, theme.name),
+              h('span', { className: 'ws-theme-name' }, t(theme.name)),
               h('button', {
                 type: 'button',
                 className: 'ws-theme-fav' + (favorites.includes(theme.id) ? ' on' : ''),
@@ -7239,7 +7297,7 @@ function ThemeSection(props) {
                 onClick: event => { event.stopPropagation(); toggleFavorite(theme.id) },
               }, favorites.includes(theme.id) ? '★' : '☆'),
             ),
-            h('span', { className: 'ws-theme-tag' }, theme.tagline.slice(0, 14)),
+            h('span', { className: 'ws-theme-tag' }, t(theme.tagline)),
             fidelityFor(theme.id) !== null
               ? h('span', { className: 'ws-theme-fidelity', title: t('真实账号实测：{date}', { date: fidelityFor(theme.id).testedAt.slice(0, 10) }) }, `${t('实测')} ${fidelityFor(theme.id).score}`)
               : null,
@@ -7266,10 +7324,10 @@ function ThemeSection(props) {
         h('span', { className: 'ws-variant-line', style: { background: activeTheme.palette.secondary } }),
         h('span', { className: 'ws-variant-line short', style: { background: activeTheme.palette.secondary } }),
         ),
-        h('span', { className: 'ws-variant-name' }, variant.name),
+        h('span', { className: 'ws-variant-name' }, t(variant.name)),
         )),
       ),
-      h('p', { className: 'ws-hint' }, activeTheme.tagline),
+      h('p', { className: 'ws-hint' }, t(activeTheme.tagline)),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },
@@ -7355,6 +7413,13 @@ function ThemeSection(props) {
       h('p', { className: 'ws-hint' }, t('显示在标题上方的标签位：封面、环形与居中版式会用到。')),
     ),
   )
+}
+
+/** Translate a stored "theme · variant" label while keeping the stored form stable. */
+function localizeThemeLabel(label) {
+  const [themeName, variantName] = String(label ?? '').split(' · ')
+  if (themeName === '') return ''
+  return [t(themeName), variantName === undefined ? '' : t(variantName)].filter(Boolean).join(' · ')
 }
 
 function formatSlider(value) {
@@ -8518,7 +8583,7 @@ function PublishSection(props) {
             h('div', { className: 'ws-ledger-summary' },
               h('strong', null, t('当前与「{type}」的差异', { type: ledgerLabel(latest.type) })),
               h('span', null, t('新增 {added} 行 · 删除 {removed} 行', { added, removed })),
-              latest.theme !== '' && latest.theme !== currentTheme ? h('span', null, t('主题已从 {old} 改为 {now}', { old: latest.theme, now: currentTheme })) : null,
+              latest.theme !== '' && latest.theme !== currentTheme ? h('span', null, t('主题已从 {old} 改为 {now}', { old: localizeThemeLabel(latest.theme), now: localizeThemeLabel(currentTheme) })) : null,
             ),
             ledger.map(event => h(React.Fragment, { key: event.id },
               h('div', { className: 'ws-ledger-row' },
@@ -8805,7 +8870,7 @@ function renderCover({ title, design, layout = 'left' }) {
     context.fillStyle = ink
     context.globalAlpha = 0.78
     context.font = '600 20px "PingFang SC", "Microsoft YaHei", sans-serif'
-    context.fillText(design.decor.eyebrow || design.themeName, x, 100)
+    context.fillText(t(design.decor.eyebrow || design.themeName), x, 100)
     context.globalAlpha = 1
   }
 
@@ -8824,7 +8889,7 @@ function renderCover({ title, design, layout = 'left' }) {
   if (out !== 'minimal') {
     context.globalAlpha = 0.7
     context.font = '400 18px "PingFang SC", "Microsoft YaHei", sans-serif'
-    context.fillText(design.themeName + ' · ' + design.variantName, x, 348)
+    context.fillText(t(design.themeName) + ' · ' + t(design.variantName), x, 348)
     context.globalAlpha = 1
   }
   return canvas.toDataURL('image/png')

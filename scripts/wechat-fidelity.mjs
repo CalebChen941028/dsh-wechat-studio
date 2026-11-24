@@ -2,37 +2,29 @@
 /**
  * Optional real-account fidelity check.
  *
- * Requires WX_APPID and WX_SECRET. Creates one temporary draft per theme,
+ * Requires WX_APPID and WX_SECRET. Creates one temporary draft per variant,
  * reads it back with draft/get, compares the returned HTML with what the
  * renderer produced, then deletes every draft and the temporary cover.
  *
- * Not part of CI: this writes to the real Official Account for a few seconds.
+ * Set WX_FIDELITY_ALL=1 to cover all 17 themes × 2 variants. Without it, a
+ * four-theme sample runs. Set WX_FIDELITY_DRY_RUN=1 to generate and inspect
+ * every variant locally without calling WeChat.
+ *
+ * Not part of CI: the default mode writes to the real Official Account for a
+ * few seconds.
  */
-import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
-import { parseArticle, composeDesign } from '../src/engine.mjs'
 import { THEMES } from '../src/themes.mjs'
-import { buildArticle, serializeNodes } from '../src/render.mjs'
+import { compareHtml, fidelitySuite, summarizeFidelity, themeHtml } from './fidelity-lib.mjs'
 
 const BASE = 'https://api.weixin.qq.com'
 const APPID = process.env.WX_APPID ?? ''
 const SECRET = process.env.WX_SECRET ?? ''
 const COVER_PATH = process.env.WX_COVER_PATH ?? ''
+const ALL = process.env.WX_FIDELITY_ALL === '1'
+const DRY_RUN = process.env.WX_FIDELITY_DRY_RUN === '1'
+const SUITE = fidelitySuite(ALL)
 const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)
-const LEAN_THEMES = [
-  ['column', 'essay'],
-  ['ink', 'index'],
-  ['pine', 'clean'],
-  ['magazine', 'cover'],
-]
-const SUITE = process.env.WX_FIDELITY_ALL === '1'
-  ? THEMES.map(theme => [theme.id, theme.variants[0].id])
-  : LEAN_THEMES
-
-if (APPID === '' || SECRET === '') {
-  console.error('设置 WX_APPID / WX_SECRET 后再运行：npm run e2e:wechat')
-  process.exit(2)
-}
 
 function request(url, body, headers = {}) {
   return fetch(url, {
@@ -84,65 +76,80 @@ async function uploadContentImage(token) {
   }).then(res => res.json())
   return check(response, '上传测试正文图').url
 }
-function themeHtml(themeId, variantId, imageUrl) {
-  const text = `# 回归测试标题 ${stamp}\n\n开头段落，用来检查正文字体与行高是否保留。\n\n## 第一节\n\n这是第二节之前的正文，包含**加粗**与==高亮==。\n\n> 一句引文，检查引用样式是否保留。\n\n- 列表第一项\n- 列表第二项\n\n![测试配图](${imageUrl})\n\n## 第二节\n\n结尾段落，检查分割线与段落间距。`
-  const parsed = parseArticle(text)
-  const design = composeDesign({ themeId, variantId, overrides: {} })
-  return serializeNodes(buildArticle({
-    blocks: parsed.blocks,
-    design,
-    meta: { title: `回归测试标题 ${stamp}`, author: 'DSH', date: stamp.slice(0, 8), readingMinutes: 1 },
-  }).nodes)
+
+/** Local structural pass: no network, no cover, no credentials. */
+function runDry() {
+  const report = SUITE.map(([themeId, variantId]) => {
+    const html = themeHtml(themeId, variantId, 'https://example.com/fidelity.png', stamp)
+    const theme = THEMES.find(entry => entry.id === themeId)
+    const expects = {
+      background: true,
+      backgroundImage: Boolean(theme?.surface?.pattern && theme.surface.pattern !== 'none'),
+      svg: Boolean(theme?.surface?.ornament && theme.surface.ornament !== 'none'),
+    }
+    const hasBackgroundImage = /background-image\s*:/i.test(html)
+    const hasSvg = /<svg[\s>]/i.test(html)
+    const compared = compareHtml(`${themeId}/${variantId}`, html, html)
+    return {
+      ...compared,
+      ok: compared.ok && hasBackgroundImage === expects.backgroundImage && hasSvg === expects.svg,
+      bytes: html.length,
+      expects,
+      hasSvg,
+      hasBackgroundImage,
+    }
+  })
+  const summary = { ...summarizeFidelity(report, ALL ? 'all' : 'sample'), dryRun: true }
+  console.log(JSON.stringify(summary, null, 2))
+  process.exitCode = summary.ok ? 0 : 1
 }
 
-function compare(theme, original, returned) {
-  const checks = {
-    lengthRatio: returned.length / original.length,
-    hasBackground: /background/i.test(returned),
-    hasFontFamily: /font-family/i.test(returned),
-    hasSection: /<section/i.test(returned),
-    hasImage: /<img/i.test(returned),
-    svgDropped: /<svg/i.test(original) && !/<svg/i.test(returned),
-    scriptFree: !/<script/i.test(returned),
-    sameHash: createHash('sha1').update(original).digest('hex') === createHash('sha1').update(returned).digest('hex'),
+async function runReal() {
+  if (APPID === '' || SECRET === '') {
+    console.error('设置 WX_APPID / WX_SECRET 后再运行：npm run e2e:wechat')
+    process.exitCode = 2
+    return
   }
-  return { theme, ...checks, ok: checks.scriptFree && checks.lengthRatio > 0.8 && checks.lengthRatio < 1.25 }
+  const token = check(await request(`${BASE}/cgi-bin/stable_token`, {
+    grant_type: 'client_credential', appid: APPID, secret: SECRET,
+  }), '获取 access_token').access_token
+  const coverId = await uploadCover(token)
+  const imageUrl = await uploadContentImage(token)
+  const created = []
+  const report = []
+  try {
+    for (const [themeId, variantId] of SUITE) {
+      const html = themeHtml(themeId, variantId, imageUrl, stamp)
+      const title = `DSH 保真回归 ${stamp} ${themeId} ${variantId}`
+      const createdDraft = check(await request(`${BASE}/cgi-bin/draft/add?access_token=${token}`, {
+        articles: [{
+          title,
+          author: 'DSH',
+          digest: '真实账号版式保真回归，完成后删除。',
+          content: html,
+          thumb_media_id: coverId,
+          need_open_comment: 0,
+          only_fans_can_comment: 0,
+        }],
+      }), '新建草稿')
+      created.push(createdDraft.media_id)
+      const fetched = check(await request(`${BASE}/cgi-bin/draft/get?access_token=${token}`, { media_id: createdDraft.media_id }), '读取草稿')
+      const returned = fetched.news_item?.[0]?.content ?? ''
+      report.push(compareHtml(`${themeId}/${variantId}`, html, returned))
+    }
+  } finally {
+    for (const mediaId of created) {
+      try { await request(`${BASE}/cgi-bin/draft/delete?access_token=${token}`, { media_id: mediaId }) } catch { /* best effort */ }
+    }
+    try { await request(`${BASE}/cgi-bin/material/del_material?access_token=${token}`, { media_id: coverId }) } catch { /* best effort */ }
+  }
+  const summary = summarizeFidelity(report, ALL ? 'all' : 'sample')
+  if (typeof process.env.WX_FIDELITY_OUT === 'string' && process.env.WX_FIDELITY_OUT !== '') {
+    writeFileSync(process.env.WX_FIDELITY_OUT, JSON.stringify(summary, null, 2))
+  }
+  console.log(JSON.stringify(summary, null, 2))
+  if (!summary.ok) process.exitCode = 1
 }
 
-const token = check(await request(`${BASE}/cgi-bin/stable_token`, {
-  grant_type: 'client_credential', appid: APPID, secret: SECRET,
-}), '获取 access_token').access_token
-const coverId = await uploadCover(token)
-const imageUrl = await uploadContentImage(token)
-const created = []
-const report = []
-try {
-  for (const [themeId, variantId] of SUITE) {
-    const html = themeHtml(themeId, variantId, imageUrl)
-    const title = `DSH 保真回归 ${stamp} ${themeId}`
-    const createdDraft = check(await request(`${BASE}/cgi-bin/draft/add?access_token=${token}`, {
-      articles: [{
-        title,
-        author: 'DSH',
-        digest: '真实账号版式保真回归，完成后删除。',
-        content: html,
-        thumb_media_id: coverId,
-        need_open_comment: 0,
-        only_fans_can_comment: 0,
-      }],
-    }), '新建草稿')
-    created.push(createdDraft.media_id)
-    const fetched = check(await request(`${BASE}/cgi-bin/draft/get?access_token=${token}`, { media_id: createdDraft.media_id }), '读取草稿')
-    const returned = fetched.news_item?.[0]?.content ?? ''
-    report.push(compare(`${themeId}/${variantId}`, html, returned))
-  }
-} finally {
-  for (const mediaId of created) {
-    try { await request(`${BASE}/cgi-bin/draft/delete?access_token=${token}`, { media_id: mediaId }) } catch { /* best effort */ }
-  }
-  try { await request(`${BASE}/cgi-bin/material/del_material?access_token=${token}`, { media_id: coverId }) } catch { /* best effort */ }
-}
-const summary = { generatedAt: new Date().toISOString(), suite: process.env.WX_FIDELITY_ALL === '1' ? 'all' : 'sample', ok: report.every(item => item.ok), report }
-if (typeof process.env.WX_FIDELITY_OUT === 'string' && process.env.WX_FIDELITY_OUT !== '') writeFileSync(process.env.WX_FIDELITY_OUT, JSON.stringify(summary, null, 2))
-console.log(JSON.stringify(summary, null, 2))
-if (!report.every(item => item.ok)) process.exitCode = 1
+if (DRY_RUN) runDry()
+else await runReal()

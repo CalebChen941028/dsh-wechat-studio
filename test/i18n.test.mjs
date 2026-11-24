@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { t, uiLanguage, setUiLanguage, localizeError } from '../src/i18n.mjs'
+import { THEMES } from '../src/themes.mjs'
 
 test('t：中文模式原样返回，英文模式查词典', () => {
   setUiLanguage('zh')
@@ -51,4 +52,20 @@ test('UI_EN：词典不包含重复键', () => {
     seen.add(entry[1])
   }
   assert.deepEqual(duplicates, [])
+})
+
+test('主题与变体名称、描述都有英文翻译', () => {
+  setUiLanguage('en')
+  try {
+    for (const theme of THEMES) {
+      assert.notEqual(t(theme.name), theme.name, `theme name: ${theme.name}`)
+      assert.notEqual(t(theme.tagline), theme.tagline, `tagline: ${theme.id}`)
+      for (const variant of theme.variants) {
+        assert.notEqual(t(variant.name), variant.name, `variant name: ${theme.id}/${variant.id}`)
+      }
+    }
+    assert.equal(t('{count} 个版式', { count: 34 }), '34 layouts')
+  } finally {
+    setUiLanguage('zh')
+  }
 })

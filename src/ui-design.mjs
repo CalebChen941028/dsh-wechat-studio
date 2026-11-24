@@ -337,7 +337,7 @@ function AiSection(props) {
           ? h('p', { className: 'ws-hint' }, t('版式：{theme}', { theme: (() => {
             const theme = THEMES.find(entry => entry.id === pending.design.themeId)
             const variant = theme?.variants.find(entry => entry.id === pending.design.variantId)
-            return `${theme?.name ?? pending.design.themeId}${variant === undefined ? '' : ` · ${variant.name}`}`
+            return `${t(theme?.name ?? pending.design.themeId)}${variant === undefined ? '' : ` · ${t(variant.name)}`}`
           })() }))
           : null,
         h('div', { className: 'ws-row' },
@@ -652,7 +652,7 @@ function ThemeSection(props) {
       ),
       h('ul', { className: 'ws-reasons' },
         analysis.reasons.slice(0, 3).map((reason, index) => h('li', { key: index }, reason)),
-        h('li', { key: 'current' }, `当前使用「${design.themeName}」·「${design.variantName}」`),
+        h('li', { key: 'current' }, `当前使用「${t(design.themeName)}」·「${t(design.variantName)}」`),
       ),
       h('p', { className: 'ws-hint' }, t('这份分析只看标题、结构、关键词与篇幅，不联网，也不改动你的正文。')),
     ),
@@ -663,7 +663,7 @@ function ThemeSection(props) {
       h(Button, { onClick: onRefineNow, disabled: refining }, refining ? t('AI 正在精排…') : t('现在就 AI 精排')),
     ),
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, t('主题库')), h('span', { className: 'ws-group-note' }, `${THEMES.reduce((count, entry) => count + entry.variants.length, 0)} 个版式`)),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('主题库')), h('span', { className: 'ws-group-note' }, t('{count} 个版式', { count: THEMES.reduce((count, entry) => count + entry.variants.length, 0) }))),
       h('div', { className: 'ws-chips ws-theme-filter' },
         [['all', t('全部')], ['favorites', t('收藏')], ['recent', t('最近')]].map(([id, label]) => h('button', {
           key: id,
@@ -686,7 +686,7 @@ function ThemeSection(props) {
           h(ThemeMiniPreview, { theme }),
           h('span', { className: 'ws-theme-meta' },
             h('span', { className: 'ws-theme-name-row' },
-              h('span', { className: 'ws-theme-name' }, theme.name),
+              h('span', { className: 'ws-theme-name' }, t(theme.name)),
               h('button', {
                 type: 'button',
                 className: 'ws-theme-fav' + (favorites.includes(theme.id) ? ' on' : ''),
@@ -694,7 +694,7 @@ function ThemeSection(props) {
                 onClick: event => { event.stopPropagation(); toggleFavorite(theme.id) },
               }, favorites.includes(theme.id) ? '★' : '☆'),
             ),
-            h('span', { className: 'ws-theme-tag' }, theme.tagline.slice(0, 14)),
+            h('span', { className: 'ws-theme-tag' }, t(theme.tagline)),
             fidelityFor(theme.id) !== null
               ? h('span', { className: 'ws-theme-fidelity', title: t('真实账号实测：{date}', { date: fidelityFor(theme.id).testedAt.slice(0, 10) }) }, `${t('实测')} ${fidelityFor(theme.id).score}`)
               : null,
@@ -721,10 +721,10 @@ function ThemeSection(props) {
         h('span', { className: 'ws-variant-line', style: { background: activeTheme.palette.secondary } }),
         h('span', { className: 'ws-variant-line short', style: { background: activeTheme.palette.secondary } }),
         ),
-        h('span', { className: 'ws-variant-name' }, variant.name),
+        h('span', { className: 'ws-variant-name' }, t(variant.name)),
         )),
       ),
-      h('p', { className: 'ws-hint' }, activeTheme.tagline),
+      h('p', { className: 'ws-hint' }, t(activeTheme.tagline)),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },
@@ -810,6 +810,13 @@ function ThemeSection(props) {
       h('p', { className: 'ws-hint' }, t('显示在标题上方的标签位：封面、环形与居中版式会用到。')),
     ),
   )
+}
+
+/** Translate a stored "theme · variant" label while keeping the stored form stable. */
+function localizeThemeLabel(label) {
+  const [themeName, variantName] = String(label ?? '').split(' · ')
+  if (themeName === '') return ''
+  return [t(themeName), variantName === undefined ? '' : t(variantName)].filter(Boolean).join(' · ')
 }
 
 function formatSlider(value) {
@@ -1973,7 +1980,7 @@ function PublishSection(props) {
             h('div', { className: 'ws-ledger-summary' },
               h('strong', null, t('当前与「{type}」的差异', { type: ledgerLabel(latest.type) })),
               h('span', null, t('新增 {added} 行 · 删除 {removed} 行', { added, removed })),
-              latest.theme !== '' && latest.theme !== currentTheme ? h('span', null, t('主题已从 {old} 改为 {now}', { old: latest.theme, now: currentTheme })) : null,
+              latest.theme !== '' && latest.theme !== currentTheme ? h('span', null, t('主题已从 {old} 改为 {now}', { old: localizeThemeLabel(latest.theme), now: localizeThemeLabel(currentTheme) })) : null,
             ),
             ledger.map(event => h(React.Fragment, { key: event.id },
               h('div', { className: 'ws-ledger-row' },
@@ -2260,7 +2267,7 @@ function renderCover({ title, design, layout = 'left' }) {
     context.fillStyle = ink
     context.globalAlpha = 0.78
     context.font = '600 20px "PingFang SC", "Microsoft YaHei", sans-serif'
-    context.fillText(design.decor.eyebrow || design.themeName, x, 100)
+    context.fillText(t(design.decor.eyebrow || design.themeName), x, 100)
     context.globalAlpha = 1
   }
 
@@ -2279,7 +2286,7 @@ function renderCover({ title, design, layout = 'left' }) {
   if (out !== 'minimal') {
     context.globalAlpha = 0.7
     context.font = '400 18px "PingFang SC", "Microsoft YaHei", sans-serif'
-    context.fillText(design.themeName + ' · ' + design.variantName, x, 348)
+    context.fillText(t(design.themeName) + ' · ' + t(design.variantName), x, 348)
     context.globalAlpha = 1
   }
   return canvas.toDataURL('image/png')

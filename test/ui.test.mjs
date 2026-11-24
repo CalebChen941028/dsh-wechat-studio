@@ -190,6 +190,31 @@ test('英文语言包翻译核心导航与页签', async () => {
 })
 
 
+test('英文界面显示主题、变体与描述译文', async () => {
+  const { dom, window, container, root } = await mountPanel({ language: 'en' })
+  try {
+    const names = [...container.querySelectorAll('.ws-theme-name')].map(node => node.textContent)
+    assert.ok(names.includes('Zine'), `theme names: ${names.join(', ')}`)
+    assert.ok(names.includes('Storybook'))
+    assert.ok(!names.includes('画报'))
+    const taglines = [...container.querySelectorAll('.ws-theme-tag')].map(node => node.textContent)
+    assert.ok(taglines.some(text => text.startsWith('Independent magazine spread')), 'theme tagline translated')
+
+    const zine = [...container.querySelectorAll('.ws-theme')]
+      .find(node => node.querySelector('.ws-theme-name')?.textContent === 'Zine')
+    assert.ok(zine, 'Zine theme card')
+    zine.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 220))
+    const variants = [...container.querySelectorAll('.ws-variant-name')].map(node => node.textContent)
+    assert.deepEqual(variants, ['Spread', 'Dossier'])
+    assert.match(container.querySelector('.ws-brand .ws-badge').textContent, /Zine · Spread/)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+
 test('发布面板：读取草稿箱并导入为本地草稿', async () => {
   const calls = []
   const fetchImpl = async (url, init) => {

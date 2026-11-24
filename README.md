@@ -145,6 +145,7 @@ npm ci                    # 安装测试与构建依赖（jsdom、fake-indexeddb
 npm run build             # src/*.mjs -> client.js
 npm run build:check       # 校验已提交的 client.js 与 src/*.mjs 是否同步
 npm test                  # 解析、编排、渲染、Host 服务、AI、图片注册表、docx 解析测试
+WX_FIDELITY_DRY_RUN=1 WX_FIDELITY_ALL=1 node scripts/wechat-fidelity.mjs  # 本地检查 34 个变体的 SVG 与底纹
 ```
 
 打 `v*` tag 会触发 `.github/workflows/release.yml`：跑测试、打源码包、创建 GitHub Release。
