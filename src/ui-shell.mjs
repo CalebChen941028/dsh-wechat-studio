@@ -21,8 +21,8 @@ const SKINS = [
 ]
 const UI_ACCENTS = ['#0A84FF', '#3A3A3C', '#0E7C86', '#A2653B', '#B23A3A', '#6E6E73']
 const BG_CHOICES = [['', t('跟随主题')], ['#FFFFFF', t('纸白')], ['#F7F4EE', t('米色')], ['#F3F4F6', t('冷灰')], ['#161616', t('墨黑')]]
-const BG_PATTERNS = [['none', t('无底纹')], ['paper', t('纸纹')], ['grid', t('网格')], ['dots', t('点阵')], ['lines', t('竖线')], ['wash', t('淡彩')], ['watercolor', t('水彩')]]
-const ORNAMENTS = [['none', t('不加角标')], ['corner', t('边角线')], ['column', t('栏线')], ['seal', t('印记')], ['leaf', t('叶形')], ['sprig', t('枝叶')]]
+const BG_PATTERNS = [['none', t('无底纹')], ['paper', t('纸纹')], ['grid', t('网格')], ['dots', t('点阵')], ['lines', t('竖线')], ['wash', t('淡彩')], ['watercolor', t('水彩')], ['halftone', t('网点')]]
+const ORNAMENTS = [['none', t('不加角标')], ['corner', t('边角线')], ['column', t('栏线')], ['seal', t('印记')], ['leaf', t('叶形')], ['sprig', t('枝叶')], ['star', t('星标')]]
 
 /** Parse a CSS color and report whether it is dark. */
 function cssColorIsDark(value) {

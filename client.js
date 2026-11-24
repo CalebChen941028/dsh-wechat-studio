@@ -808,6 +808,27 @@ const UI_EN = {
   '手记': 'Journal',
   '枝叶': 'Sprig',
   '水彩横幅': 'Watercolor banner',
+  '海报': 'Poster',
+  '画册': 'Folio',
+  '构成': 'Composition',
+  '演出单': 'Playbill',
+  '宣言': 'Manifesto',
+  '图版': 'Plate',
+  '目录': 'Catalogue',
+  '轴线': 'Axis',
+  '整版海报': 'Poster title',
+  '错位叠排': 'Stacked',
+  '反白色带': 'Inverted band',
+  '页眉编号': 'Folio number',
+  '海报引文': 'Poster quote',
+  '页边注': 'Margin note',
+  '星号': 'Star',
+  '短横线': 'Dash',
+  '网点': 'Halftone',
+  '星标': 'Star mark',
+  '做成海报感': 'Make it poster-like',
+  '做成画册感': 'Make it art-book-like',
+  '做成构成感': 'Make it Bauhaus-like',
 
   // 主题描述
   '衬线标题、细线与编号，克制的杂志内页': 'Serif headings, hairline rules and numbering: a restrained magazine spread',
@@ -828,6 +849,9 @@ const UI_EN = {
   '精装书页质感：全衬线扉页、细腻纸纹与藏书印记': 'Hardcover page: all-serif title page, fine paper grain and an ex libris seal',
   '美术馆展签与画册感：冷白墙面、微弱网格与青铜细线': 'Museum label and catalogue: cool white walls, faint grid, bronze-green hairlines',
   '水彩绘本感：淡绿晕染、枝叶角标与手绘横幅': 'Watercolor picture book: pale green washes, leaf sprigs and hand-painted banners',
+  '大字号、撞色色块与网点，像一张演出海报': 'Large type, clashing colour blocks and halftone dots, like a gig poster',
+  '大留白、图版编号与衬线页眉，像一本展览画册': 'Wide margins, plate numbers and serif folios, like an exhibition catalogue',
+  '几何色块与不对称网格，包豪斯式招贴秩序': 'Geometric colour blocks and an asymmetric grid, Bauhaus poster order',
   '{count} 个版式': '{count} layouts',
 }
 
@@ -1236,6 +1260,57 @@ const THEMES = [
       { id: 'journal', name: '手记', titleStyle: 'rule', sectionStyle: 'brush', dividerStyle: 'dash', quoteStyle: 'card', listStyle: 'dot', imageStyle: 'polaroid' },
     ],
   },
+  {
+    id: 'poster',
+    name: '海报',
+    tagline: '大字号、撞色色块与网点，像一张演出海报',
+    mood: ['海报', '强视觉', '宣言'],
+    topics: { culture: 0.8, festival: 0.8, lifestyle: 0.7, business: 0.55, tech: 0.45, writing: 0.6 },
+    palette: {
+      bg: '#F3EDE2', card: '#E8DFD0', text: '#11100E', secondary: '#5E5A52',
+      accent: '#D6402A', accentSoft: '#F3DCD5', border: '#D8CFC1',
+    },
+    surface: { pattern: 'halftone', ornament: 'star' },
+    type: { titleFont: SANS, bodyFont: SANS, titleSize: 34, titleWeight: 800, titleTracking: '-0.01em', bodySize: 15.5, lineHeight: 1.72, letterSpacing: '0.005em', paraGap: 20, paddingX: 20 },
+    variants: [
+      { id: 'bill', name: '演出单', titleStyle: 'poster', sectionStyle: 'band', dividerStyle: 'star', quoteStyle: 'poster', listStyle: 'square', imageStyle: 'full' },
+      { id: 'manifesto', name: '宣言', titleStyle: 'stacked', sectionStyle: 'band', dividerStyle: 'line', quoteStyle: 'stamp', listStyle: 'num', imageStyle: 'plate' },
+    ],
+  },
+  {
+    id: 'folio',
+    name: '画册',
+    tagline: '大留白、图版编号与衬线页眉，像一本展览画册',
+    mood: ['画册', '展览', '留白'],
+    topics: { culture: 0.9, beauty: 0.85, travel: 0.7, writing: 0.6, lifestyle: 0.55, tech: 0.35 },
+    palette: {
+      bg: '#F7F3EA', card: '#EDE6D8', text: '#22201B', secondary: '#6E675B',
+      accent: '#5A6B4A', accentSoft: '#E4E9DC', border: '#DCD3C2',
+    },
+    surface: { pattern: 'paper', ornament: 'seal' },
+    type: { titleFont: SERIF, bodyFont: SERIF, titleSize: 30, titleWeight: 600, titleTracking: '0.04em', bodySize: 15.5, lineHeight: 1.95, letterSpacing: '0.02em', paraGap: 24, paddingX: 24 },
+    variants: [
+      { id: 'plate', name: '图版', titleStyle: 'stacked', sectionStyle: 'folio', dividerStyle: 'none', quoteStyle: 'margin', listStyle: 'dash', imageStyle: 'plate' },
+      { id: 'catalogue', name: '目录', titleStyle: 'centered', sectionStyle: 'folio', dividerStyle: 'line', quoteStyle: 'pull', listStyle: 'num', imageStyle: 'frame' },
+    ],
+  },
+  {
+    id: 'bauhaus',
+    name: '构成',
+    tagline: '几何色块与不对称网格，包豪斯式招贴秩序',
+    mood: ['构成', '几何', '招贴'],
+    topics: { beauty: 0.8, tech: 0.65, business: 0.6, culture: 0.7, lifestyle: 0.6, writing: 0.5 },
+    palette: {
+      bg: '#F2EFE6', card: '#E6E1D3', text: '#171614', secondary: '#5C584F',
+      accent: '#1F5FA8', accentSoft: '#DCE8F5', border: '#D5CFC0',
+    },
+    surface: { pattern: 'grid', ornament: 'corner' },
+    type: { titleFont: SANS, bodyFont: SANS, titleSize: 32, titleWeight: 800, titleTracking: '-0.01em', bodySize: 15.5, lineHeight: 1.75, letterSpacing: '0.01em', paraGap: 20, paddingX: 22 },
+    variants: [
+      { id: 'axis', name: '轴线', titleStyle: 'poster', sectionStyle: 'band', dividerStyle: 'line', quoteStyle: 'stamp', listStyle: 'square', imageStyle: 'plate' },
+      { id: 'grid', name: '网格', titleStyle: 'stacked', sectionStyle: 'folio', dividerStyle: 'star', quoteStyle: 'poster', listStyle: 'num', imageStyle: 'full' },
+    ],
+  },
 ]
 
 const THEME_IDS = THEMES.map(theme => theme.id)
@@ -1638,8 +1713,8 @@ function composeDesign(stored) {
   }
   colors.accentInk = readableOn(colors.accent)
 
-  const BG_PATTERNS = ['none', 'paper', 'grid', 'dots', 'lines', 'wash', 'watercolor']
-  const ORNAMENTS = ['none', 'corner', 'column', 'seal', 'leaf', 'sprig']
+  const BG_PATTERNS = ['none', 'paper', 'grid', 'dots', 'lines', 'wash', 'watercolor', 'halftone']
+  const ORNAMENTS = ['none', 'corner', 'column', 'seal', 'leaf', 'sprig', 'star']
   const defaultPattern = BG_PATTERNS.includes(theme.surface?.pattern) ? theme.surface.pattern : 'none'
   const defaultOrnament = ORNAMENTS.includes(theme.surface?.ornament) ? theme.surface.ornament : 'none'
   const surface = {
@@ -1788,7 +1863,7 @@ function rankThemes(topic, features) {
     if (features.avgParagraph > 0 && features.avgParagraph < 35 && ['magazine', 'zine', 'ink', 'pine'].includes(theme.id)) score += 0.06
     if (features.listItems >= 4 && ['pine', 'mint', 'mono'].includes(theme.id)) score += 0.06
     if (features.exclamations >= 2 && ['festival', 'amber', 'magazine', 'illustration'].includes(theme.id)) score += 0.08
-    if (features.images >= 2 && ['magazine', 'zine', 'illustration', 'gallery', 'watercolor', 'ocean', 'rose'].includes(theme.id)) score += 0.06
+    if (features.images >= 2 && ['magazine', 'zine', 'illustration', 'gallery', 'watercolor', 'poster', 'folio', 'bauhaus', 'ocean', 'rose'].includes(theme.id)) score += 0.06
     return { theme, score }
   })
   ranked.sort((a, b) => b.score - a.score)
@@ -2270,6 +2345,10 @@ function surfaceBackground(surface) {
       style.backgroundRepeat = 'no-repeat'
       style.backgroundSize = '100% 320px'
       break
+    case 'halftone':
+      style.backgroundImage = `radial-gradient(rgba(${ink},0.14) 1.4px, transparent 1.6px)`
+      style.backgroundSize = '10px 10px'
+      break
     default:
       break
   }
@@ -2320,6 +2399,13 @@ function ornamentNode(surface, colors) {
         shape('circle', { cx: '26', cy: '9', r: '0.9' }, { fill: accent, opacity: 0.3 }),
       ]
       viewBox = '0 0 28 22'
+      break
+    case 'star':
+      children = [
+        shape('path', { d: 'M14 1l2.7 8.3L25 12l-8.3 2.7L14 23l-2.7-8.3L3 12l8.3-2.7z' }, { fill: accent, opacity: 0.7 }),
+        shape('circle', { cx: '14', cy: '12', r: '1.4' }, { fill: accent, opacity: 0.35 }),
+      ]
+      viewBox = '0 0 28 24'
       break
     default:
       return null
@@ -2494,6 +2580,25 @@ function renderTitle(title, ctx, meta) {
       )
       break
     }
+    case 'poster': {
+      const ink = colors.accentInk
+      inner = section({ background: colors.accent, padding: '28px 22px 24px', borderBottom: `6px solid ${colors.text}` }, [
+        ...(eyebrowText !== '' ? [section({
+          fontSize: '10.5px', letterSpacing: '0.3em', color: ink, opacity: 0.8, marginBottom: '12px', textTransform: 'uppercase',
+        }, text(eyebrowText))] : []),
+        section({ ...titleBase, color: ink, fontSize: `${type.titleSize + 2}px`, lineHeight: 1.08, letterSpacing: '-0.01em' }, text(title)),
+        ...(metaLine !== '' && design.decor.showMeta ? [section({ ...metaStyle, color: ink, opacity: 0.72 }, text(metaLine))] : []),
+        section({ width: '52px', height: '4px', background: colors.text, marginTop: '16px' }),
+      ])
+      break
+    }
+    case 'stacked':
+      inner = section({ borderLeft: `9px solid ${colors.accent}`, paddingLeft: '18px' }, [
+        ...(eyebrowText !== '' ? [eyebrow()] : []),
+        section({ ...titleBase, fontSize: `${type.titleSize + 4}px`, lineHeight: 1.05, letterSpacing: '-0.01em' }, text(title)),
+        ...(metaLine !== '' && design.decor.showMeta ? [section(metaStyle, text(metaLine))] : []),
+      ])
+      break
     case 'tag':
       inner = section({}, [
         ...(eyebrowText !== '' ? [section({
@@ -2595,6 +2700,16 @@ function renderHeading(block, index, ctx) {
         section({ ...headingStyle, color: colors.accent, fontFamily: ctx.titleFont, fontSize: '16.5px', fontWeight: 600, letterSpacing: '0.06em' }, text(plainText(block.text))),
       ])
     }
+    if (style === 'band') {
+      return section({ margin: gap, background: colors.text, padding: '7px 12px' }, [
+        span({ ...headingStyle, color: colors.bg, fontSize: '16px' }, text(plainText(block.text))),
+      ])
+    }
+    if (style === 'folio') {
+      return section({ margin: gap }, [
+        span({ ...headingStyle, color: colors.accent, fontFamily: ctx.titleFont, fontSize: '16px', letterSpacing: '0.05em' }, text(plainText(block.text))),
+      ])
+    }
     return section({ margin: gap }, [
       span({ color: colors.accent, marginRight: '6px' }, text('▍')),
       span(headingStyle, text(plainText(block.text))),
@@ -2613,6 +2728,16 @@ function renderHeading(block, index, ctx) {
           section({ ...headingStyle, color: colors.accent, fontFamily: ctx.titleFont, fontSize: '18px', fontWeight: 700, letterSpacing: '0.08em', textAlign: 'center' }, text(plainText(block.text))),
         ]),
         section({ width: '54px', height: '2px', background: rgba(colors.accent, 0.35), borderRadius: '2px', margin: '10px auto 0' }),
+      ])
+    case 'band':
+      return section({ margin: gap, background: colors.text, padding: '10px 14px' }, [
+        span({ display: 'inline-block', color: colors.accent, fontSize: '11px', fontWeight: 700, letterSpacing: '0.18em', marginRight: '10px', verticalAlign: 'middle' }, text(String(index).padStart(2, '0'))),
+        span({ ...headingStyle, color: colors.bg, fontSize: '18px', verticalAlign: 'middle' }, text(plainText(block.text))),
+      ])
+    case 'folio':
+      return section({ margin: gap, borderTop: `1px solid ${colors.border}`, paddingTop: '12px' }, [
+        span({ display: 'inline-block', color: colors.accent, fontSize: '11px', letterSpacing: '0.14em', marginRight: '10px', verticalAlign: 'top' }, text(String(index).padStart(2, '0'))),
+        span({ ...headingStyle, display: 'inline-block', fontFamily: ctx.titleFont, fontSize: '19px', letterSpacing: '0.04em', verticalAlign: 'top' }, text(plainText(block.text))),
       ])
     case 'tag':
       return section({ margin: gap }, [
@@ -2718,6 +2843,16 @@ function renderQuote(block, ctx) {
         section({ fontSize: '11px', letterSpacing: '0.22em', color: colors.accent, marginBottom: '7px' }, text('摘 录')),
         ...paragraphNodes({ ...quoteText, color: colors.text }),
       ])
+    case 'poster':
+      return section({ background: colors.text, padding: '20px 18px', margin: gap }, [
+        section({ color: colors.accent, fontSize: '36px', lineHeight: 1, fontFamily: ctx.titleFont, marginBottom: '6px' }, text('“')),
+        ...paragraphNodes({ ...quoteText, color: colors.bg, fontSize: `${type.bodySize + 2}px`, fontWeight: 700, lineHeight: 1.5 }),
+      ])
+    case 'margin':
+      return section({ margin: gap, paddingLeft: '18px', borderLeft: `1px solid ${colors.border}` }, [
+        section({ fontSize: '10.5px', letterSpacing: '0.24em', color: colors.accent, marginBottom: '8px' }, text('NOTE')),
+        ...paragraphNodes({ ...quoteText, color: colors.secondary, fontStyle: 'italic' }),
+      ])
     case 'bar':
     default:
       return section({ borderLeft: `3px solid ${colors.accent}`, paddingLeft: '14px', margin: gap }, paragraphNodes({
@@ -2738,6 +2873,8 @@ function renderList(block, ctx) {
         }, text(String(index + 1)))
       case 'square':
         return span({ display: 'inline-block', width: '4px', height: '4px', background: colors.accent, verticalAlign: 'middle', marginRight: '10px' })
+      case 'dash':
+        return span({ color: colors.accent, verticalAlign: 'middle', marginRight: '9px', fontSize: '12px' }, text('—'))
       case 'arrow':
         return span({ color: colors.accent, verticalAlign: 'middle', marginRight: '7px', fontSize: '13px' }, text('▸'))
       case 'dot':
@@ -2794,6 +2931,11 @@ function renderImage(block, ctx) {
         image({ src: block.src, alt }, base),
         ...(alt === '' ? [] : [section({ fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '10px', fontFamily: ctx.titleFont }, text(alt))]),
       ])
+    case 'plate':
+      return wrap({ background: colors.card, padding: '10px 10px 12px', borderTop: `3px solid ${colors.accent}`, borderBottom: `1px solid ${colors.border}` }, [
+        image({ src: block.src, alt }, base),
+        ...(alt === '' ? [] : [section({ fontSize: '11px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '10px', letterSpacing: '0.12em', textTransform: 'uppercase' }, text(alt))]),
+      ])
     case 'full':
       return section({ margin: `0 ${-layout.paddingX}px ${type.paraGap + 2}px` }, [
         image({ src: block.src, alt }, { ...base, display: 'block' }),
@@ -2849,6 +2991,12 @@ function renderDivider(ctx) {
       return section({ textAlign: 'center', margin: '2px 0 26px' }, [
         line({ marginRight: '10px' }),
         span({ ...hue, fontSize: '10px' }, text('✦')),
+        line({ marginLeft: '10px' }),
+      ])
+    case 'star':
+      return section({ textAlign: 'center', margin: '2px 0 26px' }, [
+        line({ marginRight: '10px' }),
+        span({ ...hue, fontSize: '12px' }, text('✳')),
         line({ marginLeft: '10px' }),
       ])
     case 'dash':
@@ -4299,8 +4447,8 @@ const SKINS = [
 ]
 const UI_ACCENTS = ['#0A84FF', '#3A3A3C', '#0E7C86', '#A2653B', '#B23A3A', '#6E6E73']
 const BG_CHOICES = [['', t('跟随主题')], ['#FFFFFF', t('纸白')], ['#F7F4EE', t('米色')], ['#F3F4F6', t('冷灰')], ['#161616', t('墨黑')]]
-const BG_PATTERNS = [['none', t('无底纹')], ['paper', t('纸纹')], ['grid', t('网格')], ['dots', t('点阵')], ['lines', t('竖线')], ['wash', t('淡彩')], ['watercolor', t('水彩')]]
-const ORNAMENTS = [['none', t('不加角标')], ['corner', t('边角线')], ['column', t('栏线')], ['seal', t('印记')], ['leaf', t('叶形')], ['sprig', t('枝叶')]]
+const BG_PATTERNS = [['none', t('无底纹')], ['paper', t('纸纹')], ['grid', t('网格')], ['dots', t('点阵')], ['lines', t('竖线')], ['wash', t('淡彩')], ['watercolor', t('水彩')], ['halftone', t('网点')]]
+const ORNAMENTS = [['none', t('不加角标')], ['corner', t('边角线')], ['column', t('栏线')], ['seal', t('印记')], ['leaf', t('叶形')], ['sprig', t('枝叶')], ['star', t('星标')]]
 
 /** Parse a CSS color and report whether it is dark. */
 function cssColorIsDark(value) {
@@ -6938,7 +7086,7 @@ function AiSection(props) {
     setPending(null)
   }
 
-  const suggestions = [t('按内容重新精排'), t('标题更有冲击力'), t('第二段压缩到两行'), t('换成杂志版式'), t('加一个小节标题'), t('行距调到 1.9')]
+  const suggestions = [t('做成海报感'), t('做成画册感'), t('做成构成感'), t('按内容重新精排'), t('标题更有冲击力'), t('第二段压缩到两行'), t('换成杂志版式'), t('加一个小节标题'), t('行距调到 1.9')]
 
   return h('div', { className: 'ws-chat' },
     h('div', { className: 'ws-card-head' },
@@ -7697,22 +7845,22 @@ function TypeSection(props) {
 const DECOR_OPTIONS = {
   titleStyle: [
     ['rule', t('通栏细线')], ['kicker', t('刊头 + 大标题')], ['ribbon', t('色块标题')], ['tag', t('标签 + 标题')], ['boxed', t('边框卡片')],
-    ['vertical', t('左侧竖线')], ['underline', t('下划短线')], ['centered', t('居中 + 短线')], ['eyebrow', t('眉标 + 大标题')],
+    ['vertical', t('左侧竖线')], ['underline', t('下划短线')], ['centered', t('居中 + 短线')], ['eyebrow', t('眉标 + 大标题')], ['poster', t('整版海报')], ['stacked', t('错位叠排')],
   ],
   sectionStyle: [
-    ['bar', t('左侧色条')], ['rule', t('横线 + 编号')], ['tag', t('色块标签')], ['numbered', t('章节编号')], ['line', t('居中细线')], ['dot', t('圆点')], ['ghost', t('大号数字')], ['brush', t('水彩横幅')],
+    ['bar', t('左侧色条')], ['rule', t('横线 + 编号')], ['tag', t('色块标签')], ['numbered', t('章节编号')], ['line', t('居中细线')], ['dot', t('圆点')], ['ghost', t('大号数字')], ['brush', t('水彩横幅')], ['band', t('反白色带')], ['folio', t('页眉编号')],
   ],
   quoteStyle: [
-    ['bar', t('左侧竖线')], ['pull', t('上下细线')], ['card', t('卡片')], ['center', t('居中引号')], ['tint', t('浅色底')], ['stamp', t('描边摘录')],
+    ['bar', t('左侧竖线')], ['pull', t('上下细线')], ['card', t('卡片')], ['center', t('居中引号')], ['tint', t('浅色底')], ['stamp', t('描边摘录')], ['poster', t('海报引文')], ['margin', t('页边注')],
   ],
   dividerStyle: [
-    ['dots', t('三点')], ['diamond', t('菱形')], ['ornament', t('花饰')], ['line', t('细线')], ['dash', t('虚线')], ['none', t('留白')],
+    ['dots', t('三点')], ['diamond', t('菱形')], ['ornament', t('花饰')], ['line', t('细线')], ['dash', t('虚线')], ['star', t('星号')], ['none', t('留白')],
   ],
   listStyle: [
-    ['dot', t('圆点')], ['num', t('序号')], ['square', t('方块')], ['arrow', t('箭头')],
+    ['dot', t('圆点')], ['num', t('序号')], ['square', t('方块')], ['arrow', t('箭头')], ['dash', t('短横线')],
   ],
   imageStyle: [
-    ['plain', t('直角')], ['rounded', t('圆角')], ['shadow', t('投影')], ['frame', t('细框')], ['polaroid', t('拍立得')], ['full', t('通栏出血')],
+    ['plain', t('直角')], ['rounded', t('圆角')], ['shadow', t('投影')], ['frame', t('细框')], ['polaroid', t('拍立得')], ['full', t('通栏出血')], ['plate', t('图版')],
   ],
 }
 

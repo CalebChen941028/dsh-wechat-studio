@@ -34,6 +34,9 @@ const DESIGN_PRESETS = [
   ['故事书 / 非虚构与情感长文', 'storybook / chapter', 'bg #F9F4E8、bgStyle paper、ornament seal、titleSize 30、bodySize 16、lineHeight 1.98、paraGap 25、paddingX 22、titleStyle rule、sectionStyle line、quoteStyle center、imageStyle frame'],
   ['策展画册 / 建筑摄影与审美', 'gallery / exhibit', 'bg #F7F7F5、bgStyle grid、ornament column、titleSize 29、bodySize 15、lineHeight 1.88、paddingX 22、titleStyle boxed、sectionStyle numbered、quoteStyle stamp、imageStyle frame'],
   ['水彩绘本 / 亲子自然与生活', 'watercolor / garden', 'bg #FFFDF8、bgStyle watercolor、ornament sprig、titleSize 30、bodySize 16、lineHeight 1.95、paddingX 20、titleStyle centered、sectionStyle brush、quoteStyle tint、imageStyle shadow'],
+  ['演出海报 / 活动宣言', 'poster / bill', 'bg #F3EDE2、bgStyle halftone、ornament star、titleSize 34、bodySize 15.5、lineHeight 1.72、paddingX 20、titleStyle poster、sectionStyle band、quoteStyle poster、imageStyle full'],
+  ['展览画册 / 摄影艺术', 'folio / plate', 'bg #F7F3EA、bgStyle paper、ornament seal、titleSize 30、bodySize 15.5、lineHeight 1.95、paddingX 24、titleStyle stacked、sectionStyle folio、quoteStyle margin、imageStyle plate'],
+  ['几何招贴 / 品牌企划', 'bauhaus / axis', 'bg #F2EFE6、bgStyle grid、ornament corner、titleSize 32、bodySize 15.5、lineHeight 1.75、paddingX 22、titleStyle poster、sectionStyle band、quoteStyle stamp、imageStyle plate'],
   ['人物口述 / 暖调随笔', 'paper / letter', 'bodySize 16、lineHeight 1.95、paddingX 20、quoteStyle card、imageStyle polaroid'],
   ['行业分析 / 商业复盘', 'ocean / report', 'titleSize 28、bodySize 15.5、lineHeight 1.8、paraGap 20、paddingX 18、sectionStyle numbered'],
   ['产品说明 / 工具方法', 'mint / minimal', 'titleSize 27、bodySize 15.5、lineHeight 1.78、paddingX 18、sectionStyle bar、imageStyle rounded'],
@@ -46,15 +49,15 @@ const DESIGN_PRESETS = [
 
 /** 装饰选项。与浏览器端 render/decor 选项一致。 */
 const DECOR_OPTIONS = {
-  titleStyle: ['rule', 'kicker', 'ribbon', 'tag', 'boxed', 'vertical', 'underline', 'centered', 'eyebrow'],
-  sectionStyle: ['bar', 'rule', 'tag', 'numbered', 'line', 'dot', 'ghost', 'brush'],
-  quoteStyle: ['bar', 'pull', 'card', 'center', 'tint', 'stamp'],
-  dividerStyle: ['dots', 'diamond', 'ornament', 'line', 'dash', 'none'],
-  listStyle: ['dot', 'num', 'square', 'arrow'],
-  imageStyle: ['plain', 'rounded', 'shadow', 'frame', 'polaroid', 'full'],
+  titleStyle: ['rule', 'kicker', 'ribbon', 'tag', 'boxed', 'vertical', 'underline', 'centered', 'eyebrow', 'poster', 'stacked'],
+  sectionStyle: ['bar', 'rule', 'tag', 'numbered', 'line', 'dot', 'ghost', 'brush', 'band', 'folio'],
+  quoteStyle: ['bar', 'pull', 'card', 'center', 'tint', 'stamp', 'poster', 'margin'],
+  dividerStyle: ['dots', 'diamond', 'ornament', 'line', 'dash', 'none', 'star'],
+  listStyle: ['dot', 'num', 'square', 'arrow', 'dash'],
+  imageStyle: ['plain', 'rounded', 'shadow', 'frame', 'polaroid', 'full', 'plate'],
   imageAlign: ['left', 'center', 'right'],
-  bgStyle: ['none', 'paper', 'grid', 'dots', 'lines', 'wash', 'watercolor'],
-  ornament: ['none', 'corner', 'column', 'seal', 'leaf', 'sprig'],
+  bgStyle: ['none', 'paper', 'grid', 'dots', 'lines', 'wash', 'watercolor', 'halftone'],
+  ornament: ['none', 'corner', 'column', 'seal', 'leaf', 'sprig', 'star'],
 }
 
 const SYSTEM_PROMPT = `你是「公众号排版工作台」的编辑助手。用户会用自然语言要求修改文章或版式。你只做两类事。
@@ -72,17 +75,19 @@ const SYSTEM_PROMPT = `你是「公众号排版工作台」的编辑助手。用
   * 故事书 / 纸质书 / 沉浸叙事 / 童话寓言：优先 storybook（chapter/fable）或 paper（letter/scroll）；用象牙纸底、paper 纸纹、seal 印记角标、rule/centered 扉页标题、line 居中细线小节与大行高（1.92–2.0）。
   * 策展 / 美术馆 / 摄影建筑画册：优先 gallery（exhibit/catalog）；用冷白墙面、grid 微弱网格、column 栏线角标、boxed 展签标题、stamp 摘录框与 frame 画框图。
   * 水彩 / 自然 / 亲子手绘：优先 watercolor（garden/journal）；用淡绿水彩底纹、sprig 枝叶角标、brush 水彩横幅小节与 tint/card 引文。
+  * 海报 / 宣言 / 活动 / 强视觉：优先 poster（bill/manifesto）或 bauhaus（axis/grid）；用 poster 整版标题、band 反白小节、star 星号分隔与 full/plate 图版，允许 34–36px 大标题。
+  * 画册 / 展览 / 摄影 / 建筑：优先 folio（plate/catalogue）；用 stacked 叠排标题、folio 页码小节、plate 图版与 margin 页边注，paddingX 24、行高 1.95，宁可留白。
   * 分析复盘 / 学术研究 / 产品说明：分别优先 ocean/scholar/mint/pine/mono。
 - 视觉层级与呼吸感：
   * 标题与正文字号比保持在 1.8–2.2 倍（如 31/16、33/15.5），形成清晰视觉落差；一篇只保留一个主强调色。
   * 长文与叙事加大行高和留白（lineHeight 1.9–2.0、paraGap 22–26、paddingX 20–22）；信息密集型文章收紧节奏（lineHeight 1.75–1.85、paraGap 18–20）。
   * 多图文章优先 full / polaroid / frame 并统一 imageWidth 与 imageAlign，避免图片与文字视觉打架。
 - 数值范围：bodySize 15-18、lineHeight 1.7-2.05、letterSpacing 0-0.05、paraGap 18-30、paddingX 16-24、titleSize 26-38。
-- 背景：bg 用 #RRGGBB；bgStyle 可选 none/paper/grid/dots/lines/wash/watercolor，不填时跟随主题默认，显式写 none 才关闭。
+- 背景：bg 用 #RRGGBB；bgStyle 可选 none/paper/grid/dots/lines/wash/watercolor/halftone，不填时跟随主题默认，显式写 none 才关闭。
 - 图片：imageWidth 40-100（百分比），imageAlign 可选 left/center/right。
 - 矢量角标：ornament 可选 none/corner/column/seal/leaf，不填时跟随主题默认，显式写 none 才关闭；最多用一个，与底纹呼应而不堆砌。
 - 克制底线：留白优先、同级统一、一个视觉记忆点；不用高饱和荧光色、彩虹拼盘、emoji、外发光和重阴影。
-- 用户说「精排 / 设计感 / 杂志风 / 插画风 / 故事书风 / 优化排版 / 按内容排版」时，必须返回完整 design（themeId、variantId、overrides，包含成套的标题/小节/引文/配图样式以及呼应气质的 bg/bgStyle/ornament），不要只改一两个参数敷衍。reply 用一句话点明选定的风格流派和核心视觉判断。
+- 用户说「精排 / 设计感 / 杂志风 / 插画风 / 故事书风 / 海报风 / 画册风 / 构成风 / 优化排版 / 按内容排版」时，必须返回完整 design（themeId、variantId、overrides，包含成套的标题/小节/引文/配图样式以及呼应气质的 bg/bgStyle/ornament），不要只改一两个参数敷衍。reply 用一句话点明选定的风格流派和核心视觉判断。
 
 只输出一个 JSON 对象，不要代码围栏、不要解释文字。字段：
 - reply：一句话说明改了什么，直接说，不客套。

@@ -310,6 +310,57 @@ export const THEMES = [
       { id: 'journal', name: '手记', titleStyle: 'rule', sectionStyle: 'brush', dividerStyle: 'dash', quoteStyle: 'card', listStyle: 'dot', imageStyle: 'polaroid' },
     ],
   },
+  {
+    id: 'poster',
+    name: '海报',
+    tagline: '大字号、撞色色块与网点，像一张演出海报',
+    mood: ['海报', '强视觉', '宣言'],
+    topics: { culture: 0.8, festival: 0.8, lifestyle: 0.7, business: 0.55, tech: 0.45, writing: 0.6 },
+    palette: {
+      bg: '#F3EDE2', card: '#E8DFD0', text: '#11100E', secondary: '#5E5A52',
+      accent: '#D6402A', accentSoft: '#F3DCD5', border: '#D8CFC1',
+    },
+    surface: { pattern: 'halftone', ornament: 'star' },
+    type: { titleFont: SANS, bodyFont: SANS, titleSize: 34, titleWeight: 800, titleTracking: '-0.01em', bodySize: 15.5, lineHeight: 1.72, letterSpacing: '0.005em', paraGap: 20, paddingX: 20 },
+    variants: [
+      { id: 'bill', name: '演出单', titleStyle: 'poster', sectionStyle: 'band', dividerStyle: 'star', quoteStyle: 'poster', listStyle: 'square', imageStyle: 'full' },
+      { id: 'manifesto', name: '宣言', titleStyle: 'stacked', sectionStyle: 'band', dividerStyle: 'line', quoteStyle: 'stamp', listStyle: 'num', imageStyle: 'plate' },
+    ],
+  },
+  {
+    id: 'folio',
+    name: '画册',
+    tagline: '大留白、图版编号与衬线页眉，像一本展览画册',
+    mood: ['画册', '展览', '留白'],
+    topics: { culture: 0.9, beauty: 0.85, travel: 0.7, writing: 0.6, lifestyle: 0.55, tech: 0.35 },
+    palette: {
+      bg: '#F7F3EA', card: '#EDE6D8', text: '#22201B', secondary: '#6E675B',
+      accent: '#5A6B4A', accentSoft: '#E4E9DC', border: '#DCD3C2',
+    },
+    surface: { pattern: 'paper', ornament: 'seal' },
+    type: { titleFont: SERIF, bodyFont: SERIF, titleSize: 30, titleWeight: 600, titleTracking: '0.04em', bodySize: 15.5, lineHeight: 1.95, letterSpacing: '0.02em', paraGap: 24, paddingX: 24 },
+    variants: [
+      { id: 'plate', name: '图版', titleStyle: 'stacked', sectionStyle: 'folio', dividerStyle: 'none', quoteStyle: 'margin', listStyle: 'dash', imageStyle: 'plate' },
+      { id: 'catalogue', name: '目录', titleStyle: 'centered', sectionStyle: 'folio', dividerStyle: 'line', quoteStyle: 'pull', listStyle: 'num', imageStyle: 'frame' },
+    ],
+  },
+  {
+    id: 'bauhaus',
+    name: '构成',
+    tagline: '几何色块与不对称网格，包豪斯式招贴秩序',
+    mood: ['构成', '几何', '招贴'],
+    topics: { beauty: 0.8, tech: 0.65, business: 0.6, culture: 0.7, lifestyle: 0.6, writing: 0.5 },
+    palette: {
+      bg: '#F2EFE6', card: '#E6E1D3', text: '#171614', secondary: '#5C584F',
+      accent: '#1F5FA8', accentSoft: '#DCE8F5', border: '#D5CFC0',
+    },
+    surface: { pattern: 'grid', ornament: 'corner' },
+    type: { titleFont: SANS, bodyFont: SANS, titleSize: 32, titleWeight: 800, titleTracking: '-0.01em', bodySize: 15.5, lineHeight: 1.75, letterSpacing: '0.01em', paraGap: 20, paddingX: 22 },
+    variants: [
+      { id: 'axis', name: '轴线', titleStyle: 'poster', sectionStyle: 'band', dividerStyle: 'line', quoteStyle: 'stamp', listStyle: 'square', imageStyle: 'plate' },
+      { id: 'grid', name: '网格', titleStyle: 'stacked', sectionStyle: 'folio', dividerStyle: 'star', quoteStyle: 'poster', listStyle: 'num', imageStyle: 'full' },
+    ],
+  },
 ]
 
 export const THEME_IDS = THEMES.map(theme => theme.id)

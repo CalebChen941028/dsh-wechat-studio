@@ -6,7 +6,7 @@
  * reads it back with draft/get, compares the returned HTML with what the
  * renderer produced, then deletes every draft and the temporary cover.
  *
- * Set WX_FIDELITY_ALL=1 to cover all 18 themes × 2 variants. Without it, a
+ * Set WX_FIDELITY_ALL=1 to cover all 21 themes × 2 variants. Without it, a
  * four-theme sample runs. Set WX_FIDELITY_DRY_RUN=1 to generate and inspect
  * every variant locally without calling WeChat.
  *

@@ -70,6 +70,10 @@ function surfaceBackground(surface) {
       style.backgroundRepeat = 'no-repeat'
       style.backgroundSize = '100% 320px'
       break
+    case 'halftone':
+      style.backgroundImage = `radial-gradient(rgba(${ink},0.14) 1.4px, transparent 1.6px)`
+      style.backgroundSize = '10px 10px'
+      break
     default:
       break
   }
@@ -120,6 +124,13 @@ function ornamentNode(surface, colors) {
         shape('circle', { cx: '26', cy: '9', r: '0.9' }, { fill: accent, opacity: 0.3 }),
       ]
       viewBox = '0 0 28 22'
+      break
+    case 'star':
+      children = [
+        shape('path', { d: 'M14 1l2.7 8.3L25 12l-8.3 2.7L14 23l-2.7-8.3L3 12l8.3-2.7z' }, { fill: accent, opacity: 0.7 }),
+        shape('circle', { cx: '14', cy: '12', r: '1.4' }, { fill: accent, opacity: 0.35 }),
+      ]
+      viewBox = '0 0 28 24'
       break
     default:
       return null
@@ -294,6 +305,25 @@ function renderTitle(title, ctx, meta) {
       )
       break
     }
+    case 'poster': {
+      const ink = colors.accentInk
+      inner = section({ background: colors.accent, padding: '28px 22px 24px', borderBottom: `6px solid ${colors.text}` }, [
+        ...(eyebrowText !== '' ? [section({
+          fontSize: '10.5px', letterSpacing: '0.3em', color: ink, opacity: 0.8, marginBottom: '12px', textTransform: 'uppercase',
+        }, text(eyebrowText))] : []),
+        section({ ...titleBase, color: ink, fontSize: `${type.titleSize + 2}px`, lineHeight: 1.08, letterSpacing: '-0.01em' }, text(title)),
+        ...(metaLine !== '' && design.decor.showMeta ? [section({ ...metaStyle, color: ink, opacity: 0.72 }, text(metaLine))] : []),
+        section({ width: '52px', height: '4px', background: colors.text, marginTop: '16px' }),
+      ])
+      break
+    }
+    case 'stacked':
+      inner = section({ borderLeft: `9px solid ${colors.accent}`, paddingLeft: '18px' }, [
+        ...(eyebrowText !== '' ? [eyebrow()] : []),
+        section({ ...titleBase, fontSize: `${type.titleSize + 4}px`, lineHeight: 1.05, letterSpacing: '-0.01em' }, text(title)),
+        ...(metaLine !== '' && design.decor.showMeta ? [section(metaStyle, text(metaLine))] : []),
+      ])
+      break
     case 'tag':
       inner = section({}, [
         ...(eyebrowText !== '' ? [section({
@@ -395,6 +425,16 @@ function renderHeading(block, index, ctx) {
         section({ ...headingStyle, color: colors.accent, fontFamily: ctx.titleFont, fontSize: '16.5px', fontWeight: 600, letterSpacing: '0.06em' }, text(plainText(block.text))),
       ])
     }
+    if (style === 'band') {
+      return section({ margin: gap, background: colors.text, padding: '7px 12px' }, [
+        span({ ...headingStyle, color: colors.bg, fontSize: '16px' }, text(plainText(block.text))),
+      ])
+    }
+    if (style === 'folio') {
+      return section({ margin: gap }, [
+        span({ ...headingStyle, color: colors.accent, fontFamily: ctx.titleFont, fontSize: '16px', letterSpacing: '0.05em' }, text(plainText(block.text))),
+      ])
+    }
     return section({ margin: gap }, [
       span({ color: colors.accent, marginRight: '6px' }, text('▍')),
       span(headingStyle, text(plainText(block.text))),
@@ -413,6 +453,16 @@ function renderHeading(block, index, ctx) {
           section({ ...headingStyle, color: colors.accent, fontFamily: ctx.titleFont, fontSize: '18px', fontWeight: 700, letterSpacing: '0.08em', textAlign: 'center' }, text(plainText(block.text))),
         ]),
         section({ width: '54px', height: '2px', background: rgba(colors.accent, 0.35), borderRadius: '2px', margin: '10px auto 0' }),
+      ])
+    case 'band':
+      return section({ margin: gap, background: colors.text, padding: '10px 14px' }, [
+        span({ display: 'inline-block', color: colors.accent, fontSize: '11px', fontWeight: 700, letterSpacing: '0.18em', marginRight: '10px', verticalAlign: 'middle' }, text(String(index).padStart(2, '0'))),
+        span({ ...headingStyle, color: colors.bg, fontSize: '18px', verticalAlign: 'middle' }, text(plainText(block.text))),
+      ])
+    case 'folio':
+      return section({ margin: gap, borderTop: `1px solid ${colors.border}`, paddingTop: '12px' }, [
+        span({ display: 'inline-block', color: colors.accent, fontSize: '11px', letterSpacing: '0.14em', marginRight: '10px', verticalAlign: 'top' }, text(String(index).padStart(2, '0'))),
+        span({ ...headingStyle, display: 'inline-block', fontFamily: ctx.titleFont, fontSize: '19px', letterSpacing: '0.04em', verticalAlign: 'top' }, text(plainText(block.text))),
       ])
     case 'tag':
       return section({ margin: gap }, [
@@ -518,6 +568,16 @@ function renderQuote(block, ctx) {
         section({ fontSize: '11px', letterSpacing: '0.22em', color: colors.accent, marginBottom: '7px' }, text('摘 录')),
         ...paragraphNodes({ ...quoteText, color: colors.text }),
       ])
+    case 'poster':
+      return section({ background: colors.text, padding: '20px 18px', margin: gap }, [
+        section({ color: colors.accent, fontSize: '36px', lineHeight: 1, fontFamily: ctx.titleFont, marginBottom: '6px' }, text('“')),
+        ...paragraphNodes({ ...quoteText, color: colors.bg, fontSize: `${type.bodySize + 2}px`, fontWeight: 700, lineHeight: 1.5 }),
+      ])
+    case 'margin':
+      return section({ margin: gap, paddingLeft: '18px', borderLeft: `1px solid ${colors.border}` }, [
+        section({ fontSize: '10.5px', letterSpacing: '0.24em', color: colors.accent, marginBottom: '8px' }, text('NOTE')),
+        ...paragraphNodes({ ...quoteText, color: colors.secondary, fontStyle: 'italic' }),
+      ])
     case 'bar':
     default:
       return section({ borderLeft: `3px solid ${colors.accent}`, paddingLeft: '14px', margin: gap }, paragraphNodes({
@@ -538,6 +598,8 @@ function renderList(block, ctx) {
         }, text(String(index + 1)))
       case 'square':
         return span({ display: 'inline-block', width: '4px', height: '4px', background: colors.accent, verticalAlign: 'middle', marginRight: '10px' })
+      case 'dash':
+        return span({ color: colors.accent, verticalAlign: 'middle', marginRight: '9px', fontSize: '12px' }, text('—'))
       case 'arrow':
         return span({ color: colors.accent, verticalAlign: 'middle', marginRight: '7px', fontSize: '13px' }, text('▸'))
       case 'dot':
@@ -594,6 +656,11 @@ function renderImage(block, ctx) {
         image({ src: block.src, alt }, base),
         ...(alt === '' ? [] : [section({ fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '10px', fontFamily: ctx.titleFont }, text(alt))]),
       ])
+    case 'plate':
+      return wrap({ background: colors.card, padding: '10px 10px 12px', borderTop: `3px solid ${colors.accent}`, borderBottom: `1px solid ${colors.border}` }, [
+        image({ src: block.src, alt }, base),
+        ...(alt === '' ? [] : [section({ fontSize: '11px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '10px', letterSpacing: '0.12em', textTransform: 'uppercase' }, text(alt))]),
+      ])
     case 'full':
       return section({ margin: `0 ${-layout.paddingX}px ${type.paraGap + 2}px` }, [
         image({ src: block.src, alt }, { ...base, display: 'block' }),
@@ -649,6 +716,12 @@ function renderDivider(ctx) {
       return section({ textAlign: 'center', margin: '2px 0 26px' }, [
         line({ marginRight: '10px' }),
         span({ ...hue, fontSize: '10px' }, text('✦')),
+        line({ marginLeft: '10px' }),
+      ])
+    case 'star':
+      return section({ textAlign: 'center', margin: '2px 0 26px' }, [
+        line({ marginRight: '10px' }),
+        span({ ...hue, fontSize: '12px' }, text('✳')),
         line({ marginLeft: '10px' }),
       ])
     case 'dash':

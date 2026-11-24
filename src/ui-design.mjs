@@ -275,7 +275,7 @@ function AiSection(props) {
     setPending(null)
   }
 
-  const suggestions = [t('按内容重新精排'), t('标题更有冲击力'), t('第二段压缩到两行'), t('换成杂志版式'), t('加一个小节标题'), t('行距调到 1.9')]
+  const suggestions = [t('做成海报感'), t('做成画册感'), t('做成构成感'), t('按内容重新精排'), t('标题更有冲击力'), t('第二段压缩到两行'), t('换成杂志版式'), t('加一个小节标题'), t('行距调到 1.9')]
 
   return h('div', { className: 'ws-chat' },
     h('div', { className: 'ws-card-head' },
@@ -1034,22 +1034,22 @@ function TypeSection(props) {
 const DECOR_OPTIONS = {
   titleStyle: [
     ['rule', t('通栏细线')], ['kicker', t('刊头 + 大标题')], ['ribbon', t('色块标题')], ['tag', t('标签 + 标题')], ['boxed', t('边框卡片')],
-    ['vertical', t('左侧竖线')], ['underline', t('下划短线')], ['centered', t('居中 + 短线')], ['eyebrow', t('眉标 + 大标题')],
+    ['vertical', t('左侧竖线')], ['underline', t('下划短线')], ['centered', t('居中 + 短线')], ['eyebrow', t('眉标 + 大标题')], ['poster', t('整版海报')], ['stacked', t('错位叠排')],
   ],
   sectionStyle: [
-    ['bar', t('左侧色条')], ['rule', t('横线 + 编号')], ['tag', t('色块标签')], ['numbered', t('章节编号')], ['line', t('居中细线')], ['dot', t('圆点')], ['ghost', t('大号数字')], ['brush', t('水彩横幅')],
+    ['bar', t('左侧色条')], ['rule', t('横线 + 编号')], ['tag', t('色块标签')], ['numbered', t('章节编号')], ['line', t('居中细线')], ['dot', t('圆点')], ['ghost', t('大号数字')], ['brush', t('水彩横幅')], ['band', t('反白色带')], ['folio', t('页眉编号')],
   ],
   quoteStyle: [
-    ['bar', t('左侧竖线')], ['pull', t('上下细线')], ['card', t('卡片')], ['center', t('居中引号')], ['tint', t('浅色底')], ['stamp', t('描边摘录')],
+    ['bar', t('左侧竖线')], ['pull', t('上下细线')], ['card', t('卡片')], ['center', t('居中引号')], ['tint', t('浅色底')], ['stamp', t('描边摘录')], ['poster', t('海报引文')], ['margin', t('页边注')],
   ],
   dividerStyle: [
-    ['dots', t('三点')], ['diamond', t('菱形')], ['ornament', t('花饰')], ['line', t('细线')], ['dash', t('虚线')], ['none', t('留白')],
+    ['dots', t('三点')], ['diamond', t('菱形')], ['ornament', t('花饰')], ['line', t('细线')], ['dash', t('虚线')], ['star', t('星号')], ['none', t('留白')],
   ],
   listStyle: [
-    ['dot', t('圆点')], ['num', t('序号')], ['square', t('方块')], ['arrow', t('箭头')],
+    ['dot', t('圆点')], ['num', t('序号')], ['square', t('方块')], ['arrow', t('箭头')], ['dash', t('短横线')],
   ],
   imageStyle: [
-    ['plain', t('直角')], ['rounded', t('圆角')], ['shadow', t('投影')], ['frame', t('细框')], ['polaroid', t('拍立得')], ['full', t('通栏出血')],
+    ['plain', t('直角')], ['rounded', t('圆角')], ['shadow', t('投影')], ['frame', t('细框')], ['polaroid', t('拍立得')], ['full', t('通栏出血')], ['plate', t('图版')],
   ],
 }
 

@@ -455,13 +455,16 @@ test('auditHouseStyle 检查禁用词、长段与图注', () => {
   assert.equal(DEFAULT_STYLE_GUIDE.tone, 'restrained')
 })
 
-test('高设计感主题（画报/插画/故事书/策展/水彩）默认继承氛围纹理与角标并支持显式关闭', () => {
+test('高设计感主题（画报/插画/故事书/策展/水彩/海报/画册/构成）默认继承氛围纹理与角标并支持显式关闭', () => {
   const expected = [
     ['zine', 'spread', 'lines', 'corner'],
     ['illustration', 'picturebook', 'wash', 'leaf'],
     ['storybook', 'chapter', 'paper', 'seal'],
     ['gallery', 'exhibit', 'grid', 'column'],
     ['watercolor', 'garden', 'watercolor', 'sprig'],
+    ['poster', 'bill', 'halftone', 'star'],
+    ['folio', 'plate', 'paper', 'seal'],
+    ['bauhaus', 'axis', 'grid', 'corner'],
   ]
   const { blocks } = parseArticle(ARTICLE)
   for (const [themeId, , pattern, ornament] of expected) {
@@ -482,4 +485,15 @@ test('高设计感主题（画报/插画/故事书/策展/水彩）默认继承�
       assert.ok(!strippedHtml.includes('<svg'), `${themeId}/${variant.id} hides ornament`)
     }
   }
+})
+
+
+test('海报与画册主题的关键版面元素进入输出', () => {
+  const { blocks } = parseArticle(ARTICLE)
+  const poster = serializeNodes(buildArticle({ blocks, design: composeDesign({ themeId: 'poster', variantId: 'bill' }), meta: {} }).nodes)
+  assert.ok(poster.includes('border-bottom:6px solid'))
+  assert.ok(poster.includes('✳'))
+  const folio = serializeNodes(buildArticle({ blocks, design: composeDesign({ themeId: 'folio', variantId: 'plate' }), meta: {} }).nodes)
+  assert.ok(folio.includes('NOTE'))
+  assert.ok(folio.includes('border-top:3px solid'))
 })

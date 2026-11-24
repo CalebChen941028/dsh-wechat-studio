@@ -160,7 +160,7 @@ test('aiEdit prompt carries content analysis, editorial presets and the design b
 
 test('aiEdit drops unknown background and ornament values', async () => {
   const { ctx } = fakeContext({
-    chunks: jsonReply({ reply: '换背景', design: { themeId: 'column', overrides: { bg: 'red', bgStyle: 'stripes', ornament: 'star', bodySize: 16 } } }),
+    chunks: jsonReply({ reply: '换背景', design: { themeId: 'column', overrides: { bg: 'red', bgStyle: 'stripes', ornament: 'crown', bodySize: 16 } } }),
   })
   const result = await createAiEditor({ ctx }).edit({ instruction: '换个背景', text: ARTICLE })
   assert.equal(result.design.overrides.bg, undefined)
@@ -271,6 +271,9 @@ test('aiEdit prompt includes editorial style families and deduplicated theme cat
   assert.match(prompt, /storybook（故事书/)
   assert.match(prompt, /gallery（策展/)
   assert.match(prompt, /watercolor（水彩/)
+  assert.match(prompt, /poster（海报/)
+  assert.match(prompt, /folio（画册/)
+  assert.match(prompt, /bauhaus（构成/)
   for (const theme of THEMES) {
     assert.match(prompt, new RegExp(`(?:^|[：；])${theme.id}（${theme.name}`), `${theme.id} should appear in the catalog`)
     assert.equal((prompt.match(new RegExp(`(?:^|[：；])${theme.id}（`, 'g')) ?? []).length, 1, `${theme.id} should appear once`)
@@ -279,4 +282,19 @@ test('aiEdit prompt includes editorial style families and deduplicated theme cat
   assert.match(calls[0].system, /显式写 none 才关闭/)
   assert.equal(result.design.themeId, 'illustration')
   assert.equal(result.design.variantId, 'picturebook')
+})
+
+test('aiEdit 接受海报与画册的成套版面参数', async () => {
+  const overrides = {
+    titleStyle: 'poster', sectionStyle: 'band', quoteStyle: 'poster', dividerStyle: 'star',
+    listStyle: 'dash', imageStyle: 'plate', bgStyle: 'halftone', ornament: 'star',
+    titleSize: 34, bodySize: 15.5, lineHeight: 1.72,
+  }
+  const { ctx } = fakeContext({
+    chunks: jsonReply({ reply: '按演出海报处理', design: { themeId: 'poster', variantId: 'bill', overrides } }),
+  })
+  const result = await createAiEditor({ ctx }).edit({ instruction: '做成海报感', text: ARTICLE })
+  assert.equal(result.design.themeId, 'poster')
+  assert.equal(result.design.variantId, 'bill')
+  assert.deepEqual(result.design.overrides, overrides)
 })
