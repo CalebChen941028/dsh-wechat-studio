@@ -713,6 +713,26 @@ test('段落上移、下移、复制与删除都会改写正文', async () => {
   }
 })
 
+test('移动小节经过引用块时不会触发错误边界', async () => {
+  const text = '# 我为什么写一个排版器\n\n> 复制粘贴一次，样式全丢。第三次之后，我决定自己写一个排版器。\n\n## 先说结论\n\n我试过三种省事的办法，都不太灵：\n\n第一种是找现成模板。\n\n第二种是手动调格式。'
+  const seed = [{ ...blockSeed[0], text, design: { themeId: 'illustration', variantId: 'picturebook', overrides: {} } }]
+  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
+  try {
+    const heading = [...container.querySelectorAll('.ws-block')].find(node => node.textContent.includes('先说结论'))
+    assert.ok(heading, 'heading block')
+    const up = heading.querySelector('button[title="上移"]')
+    assert.ok(up, 'heading move control')
+    up.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 260))
+    assert.equal(container.querySelector('.ws-crash'), null, 'no error boundary')
+    const value = container.querySelector('.ws-editor').value
+    assert.ok(value.indexOf('## 先说结论') < value.indexOf('> 复制粘贴'), 'heading moved above the quote')
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
 test('带默认角标的新主题仍能正确上移最后一段', async () => {
   const seed = [{ ...blockSeed[0], design: { themeId: 'zine', variantId: 'spread', overrides: {} } }]
   const { dom, window, container, root } = await mountPanel({ seedDocs: seed })

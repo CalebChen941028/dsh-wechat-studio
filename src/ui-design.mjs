@@ -55,6 +55,13 @@ function AiSection(props) {
   const sourceBlocks = parsed.blocks.filter(block => block.type !== 'title')
   const selectedEntry = selectedBlock !== null ? sourceBlocks[selectedBlock] : undefined
   const canScope = selectedEntry !== undefined && ['paragraph', 'heading', 'quote', 'list'].includes(selectedEntry.type)
+  const selectedPreview = selectedEntry === undefined
+    ? ''
+    : typeof selectedEntry.text === 'string'
+      ? selectedEntry.text
+      : Array.isArray(selectedEntry.paragraphs)
+        ? selectedEntry.paragraphs.join(' ')
+        : Array.isArray(selectedEntry.items) ? selectedEntry.items.join(' ') : ''
   React.useEffect(() => {
     if (canScope) setScopeMode('selection')
   }, [selectedBlock, canScope])
@@ -350,7 +357,7 @@ function AiSection(props) {
       ? h('div', { className: 'ws-chat-compose-option' },
         canScope
           ? h('div', { className: 'ws-scope-row' },
-            h('span', { className: 'ws-hint' }, `${t('当前选中')}：${selectedEntry.text.slice(0, 20)}${selectedEntry.text.length > 20 ? '…' : ''}`),
+            h('span', { className: 'ws-hint' }, `${t('当前选中')}：${selectedPreview.slice(0, 20)}${selectedPreview.length > 20 ? '…' : ''}`),
             h('button', { type: 'button', className: 'ws-chip' + (scopeMode === 'selection' ? ' on' : ''), onClick: () => setScopeMode('selection') }, t('选中段')),
             h('button', { type: 'button', className: 'ws-chip' + (scopeMode === 'section' ? ' on' : ''), onClick: () => setScopeMode('section') }, t('本节')),
             h('button', { type: 'button', className: 'ws-chip' + (scopeMode === 'document' ? ' on' : ''), onClick: () => setScopeMode('document') }, t('整篇')),
