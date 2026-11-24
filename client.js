@@ -803,6 +803,11 @@ const UI_EN = {
   '策展': 'Gallery',
   '展签': 'Exhibit',
   '图录': 'Catalog',
+  '水彩': 'Watercolor',
+  '庭园': 'Garden',
+  '手记': 'Journal',
+  '枝叶': 'Sprig',
+  '水彩横幅': 'Watercolor banner',
 
   // 主题描述
   '衬线标题、细线与编号，克制的杂志内页': 'Serif headings, hairline rules and numbering: a restrained magazine spread',
@@ -822,6 +827,7 @@ const UI_EN = {
   '水粉绘本与手账感：圆润标题、奶油纸底与淡彩叶形': 'Gouache picture book and journal: rounded headings, cream paper, pale leaf marks',
   '精装书页质感：全衬线扉页、细腻纸纹与藏书印记': 'Hardcover page: all-serif title page, fine paper grain and an ex libris seal',
   '美术馆展签与画册感：冷白墙面、微弱网格与青铜细线': 'Museum label and catalogue: cool white walls, faint grid, bronze-green hairlines',
+  '水彩绘本感：淡绿晕染、枝叶角标与手绘横幅': 'Watercolor picture book: pale green washes, leaf sprigs and hand-painted banners',
   '{count} 个版式': '{count} layouts',
 }
 
@@ -1211,6 +1217,23 @@ const THEMES = [
     variants: [
       { id: 'exhibit', name: '展签', titleStyle: 'boxed', sectionStyle: 'numbered', dividerStyle: 'line', quoteStyle: 'stamp', listStyle: 'square', imageStyle: 'frame' },
       { id: 'catalog', name: '图录', titleStyle: 'kicker', sectionStyle: 'line', dividerStyle: 'none', quoteStyle: 'pull', listStyle: 'num', imageStyle: 'shadow' },
+    ],
+  },
+  {
+    id: 'watercolor',
+    name: '水彩',
+    tagline: '水彩绘本感：淡绿晕染、枝叶角标与手绘横幅',
+    mood: ['水彩', '自然', '绘本'],
+    topics: { parent: 0.9, lifestyle: 0.8, food: 0.75, travel: 0.7, emotion: 0.65, culture: 0.6 },
+    palette: {
+      bg: '#FFFDF8', card: '#F2F8EE', text: '#263229', secondary: '#6D7C6C',
+      accent: '#6E9E66', accentSoft: '#E7F1E1', border: '#DCE7D5',
+    },
+    surface: { pattern: 'watercolor', ornament: 'sprig' },
+    type: { titleFont: ROUND, bodyFont: SERIF, titleSize: 30, titleWeight: 700, titleTracking: '0.02em', bodySize: 16, lineHeight: 1.95, letterSpacing: '0.02em', paraGap: 24, paddingX: 20 },
+    variants: [
+      { id: 'garden', name: '庭园', titleStyle: 'centered', sectionStyle: 'brush', dividerStyle: 'ornament', quoteStyle: 'tint', listStyle: 'dot', imageStyle: 'shadow' },
+      { id: 'journal', name: '手记', titleStyle: 'rule', sectionStyle: 'brush', dividerStyle: 'dash', quoteStyle: 'card', listStyle: 'dot', imageStyle: 'polaroid' },
     ],
   },
 ]
@@ -1615,8 +1638,8 @@ function composeDesign(stored) {
   }
   colors.accentInk = readableOn(colors.accent)
 
-  const BG_PATTERNS = ['none', 'paper', 'grid', 'dots', 'lines', 'wash']
-  const ORNAMENTS = ['none', 'corner', 'column', 'seal', 'leaf']
+  const BG_PATTERNS = ['none', 'paper', 'grid', 'dots', 'lines', 'wash', 'watercolor']
+  const ORNAMENTS = ['none', 'corner', 'column', 'seal', 'leaf', 'sprig']
   const defaultPattern = BG_PATTERNS.includes(theme.surface?.pattern) ? theme.surface.pattern : 'none'
   const defaultOrnament = ORNAMENTS.includes(theme.surface?.ornament) ? theme.surface.ornament : 'none'
   const surface = {
@@ -1765,7 +1788,7 @@ function rankThemes(topic, features) {
     if (features.avgParagraph > 0 && features.avgParagraph < 35 && ['magazine', 'zine', 'ink', 'pine'].includes(theme.id)) score += 0.06
     if (features.listItems >= 4 && ['pine', 'mint', 'mono'].includes(theme.id)) score += 0.06
     if (features.exclamations >= 2 && ['festival', 'amber', 'magazine', 'illustration'].includes(theme.id)) score += 0.08
-    if (features.images >= 2 && ['magazine', 'zine', 'illustration', 'gallery', 'ocean', 'rose'].includes(theme.id)) score += 0.06
+    if (features.images >= 2 && ['magazine', 'zine', 'illustration', 'gallery', 'watercolor', 'ocean', 'rose'].includes(theme.id)) score += 0.06
     return { theme, score }
   })
   ranked.sort((a, b) => b.score - a.score)
@@ -2238,6 +2261,15 @@ function surfaceBackground(surface) {
     case 'wash':
       style.backgroundImage = `linear-gradient(180deg, ${rgba(surface.wash, 0.12)} 0%, ${rgba(surface.wash, 0)} 240px)`
       break
+    case 'watercolor':
+      style.backgroundImage = [
+        `radial-gradient(120% 55% at 8% -8%, ${rgba(surface.wash, 0.24)} 0%, ${rgba(surface.wash, 0)} 62%)`,
+        `radial-gradient(80% 42% at 88% -6%, ${rgba(surface.wash, 0.16)} 0%, ${rgba(surface.wash, 0)} 58%)`,
+        'radial-gradient(55% 26% at 54% 0%, rgba(245,206,122,0.18) 0%, rgba(245,206,122,0) 70%)',
+      ].join(', ')
+      style.backgroundRepeat = 'no-repeat'
+      style.backgroundSize = '100% 320px'
+      break
     default:
       break
   }
@@ -2280,10 +2312,19 @@ function ornamentNode(surface, colors) {
       ]
       viewBox = '0 0 24 22'
       break
+    case 'sprig':
+      children = [
+        shape('path', { d: 'M2 20C8 17 14 12 19 3c0 7-5 13-14 17z' }, { fill: accent, opacity: 0.24 }),
+        shape('path', { d: 'M9 17C13 14 16 10 18 5c-1 5-4 9-9 12z' }, { fill: accent, opacity: 0.45 }),
+        shape('circle', { cx: '22', cy: '4', r: '1.2' }, { fill: accent, opacity: 0.45 }),
+        shape('circle', { cx: '26', cy: '9', r: '0.9' }, { fill: accent, opacity: 0.3 }),
+      ]
+      viewBox = '0 0 28 22'
+      break
     default:
       return null
   }
-  const svg = node('svg', { display: 'block', marginLeft: 'auto' }, children, {
+  const svg = node('svg', { display: 'block', ...(surface.ornament === 'sprig' ? { marginRight: 'auto' } : { marginLeft: 'auto' }) }, children, {
     width: '54', height: '22', viewBox, fill: 'none', 'aria-hidden': 'true',
   })
   return section({ margin: '0 0 6px', lineHeight: 0 }, [svg])
@@ -2327,6 +2368,7 @@ function buildArticle(input) {
   const mark = ornamentNode(surface, colors)
   if (mark !== null) children.push(mark)
   if (titleText !== '') children.push(renderTitle(titleText, ctx, meta))
+  const blockStart = children.length
 
   const paragraphs = blocks.filter(block => block.type === 'paragraph')
   const firstParagraph = paragraphs[0]
@@ -2380,7 +2422,7 @@ function buildArticle(input) {
     children,
   )
 
-  return { nodes: [root], title: titleText }
+  return { nodes: [root], title: titleText, blockStart }
 }
 
 /* ------------------------------------------------------------------ *
@@ -2548,6 +2590,11 @@ function renderHeading(block, index, ctx) {
         section({ ...headingStyle, fontFamily: ctx.titleFont, fontSize: '16.5px', fontWeight: 600, letterSpacing: '0.03em' }, text(plainText(block.text))),
       ])
     }
+    if (style === 'brush') {
+      return section({ margin: gap, textAlign: 'center' }, [
+        section({ ...headingStyle, color: colors.accent, fontFamily: ctx.titleFont, fontSize: '16.5px', fontWeight: 600, letterSpacing: '0.06em' }, text(plainText(block.text))),
+      ])
+    }
     return section({ margin: gap }, [
       span({ color: colors.accent, marginRight: '6px' }, text('▍')),
       span(headingStyle, text(plainText(block.text))),
@@ -2555,6 +2602,18 @@ function renderHeading(block, index, ctx) {
   }
 
   switch (style) {
+    case 'brush':
+      return section({ margin: gap, textAlign: 'center' }, [
+        section({
+          display: 'inline-block',
+          background: `linear-gradient(90deg, ${rgba(colors.accent, 0.04)} 0%, ${rgba(colors.accent, 0.22)} 50%, ${rgba(colors.accent, 0.04)} 100%)`,
+          borderRadius: '999px',
+          padding: '7px 24px',
+        }, [
+          section({ ...headingStyle, color: colors.accent, fontFamily: ctx.titleFont, fontSize: '18px', fontWeight: 700, letterSpacing: '0.08em', textAlign: 'center' }, text(plainText(block.text))),
+        ]),
+        section({ width: '54px', height: '2px', background: rgba(colors.accent, 0.35), borderRadius: '2px', margin: '10px auto 0' }),
+      ])
     case 'tag':
       return section({ margin: gap }, [
         section({
@@ -4240,8 +4299,8 @@ const SKINS = [
 ]
 const UI_ACCENTS = ['#0A84FF', '#3A3A3C', '#0E7C86', '#A2653B', '#B23A3A', '#6E6E73']
 const BG_CHOICES = [['', t('跟随主题')], ['#FFFFFF', t('纸白')], ['#F7F4EE', t('米色')], ['#F3F4F6', t('冷灰')], ['#161616', t('墨黑')]]
-const BG_PATTERNS = [['none', t('无底纹')], ['paper', t('纸纹')], ['grid', t('网格')], ['dots', t('点阵')], ['lines', t('竖线')], ['wash', t('淡彩')]]
-const ORNAMENTS = [['none', t('不加角标')], ['corner', t('边角线')], ['column', t('栏线')], ['seal', t('印记')], ['leaf', t('叶形')]]
+const BG_PATTERNS = [['none', t('无底纹')], ['paper', t('纸纹')], ['grid', t('网格')], ['dots', t('点阵')], ['lines', t('竖线')], ['wash', t('淡彩')], ['watercolor', t('水彩')]]
+const ORNAMENTS = [['none', t('不加角标')], ['corner', t('边角线')], ['column', t('栏线')], ['seal', t('印记')], ['leaf', t('叶形')], ['sprig', t('枝叶')]]
 
 /** Parse a CSS color and report whether it is dark. */
 function cssColorIsDark(value) {
@@ -6307,7 +6366,7 @@ function PreviewStage(props) {
     }
   }
   const root = article.nodes[0]
-  const titleFirst = article.title !== ''
+  const blockStart = Number.isInteger(article.blockStart) ? article.blockStart : (article.title !== '' ? 1 : 0)
   const sourceBlocks = parsed.blocks.filter(block => block.type !== 'title')
 
   const moveBlock = (index, direction) => {
@@ -6318,6 +6377,7 @@ function PreviewStage(props) {
     const lines = doc.text.split('\n')
     const a = groups[index]
     const b = groups[target]
+    if (!a || !b) return
     const first = a.start < b.start ? a : b
     const second = a.start < b.start ? b : a
     const firstLines = lines.slice(first.start, first.end + 1)
@@ -6412,7 +6472,7 @@ function PreviewStage(props) {
     h('div', { className: 'ws-stage' },
       h(WechatPhoneChrome, { brand: surfaceBrand, source: surface === 'article' ? source : '', empty: doc.text.trim() === '' && surface === 'article', device, surface },
         surface === 'article' ? h(ArticleBody, {
-          root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel,
+          root, blockStart, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel,
           captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption,
           dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage,
           aiHashes, lockedHashes, toggleLock,
@@ -6511,7 +6571,7 @@ function SurfacePreview({ surface, title, digest, cover, account, date }) {
 }
 
 function ArticleBody(props) {
-  const { root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption, dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage, aiHashes, lockedHashes, toggleLock } = props
+  const { root, blockStart, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption, dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage, aiHashes, lockedHashes, toggleLock } = props
   const [hovered, setHovered] = React.useState(null)
   const children = root.children
 
@@ -6519,7 +6579,7 @@ function ArticleBody(props) {
     className: 'ws-article',
     style: root.style,
   }, children.map((child, index) => {
-    const blockIndex = index - (titleFirst ? 1 : 0)
+    const blockIndex = index - blockStart
     const block = blockIndex >= 0 && blockIndex < sourceBlocks.length ? sourceBlocks[blockIndex] : null
     const content = nodesToReact([child], h)
     if (!block) return h('div', { key: index, className: 'ws-block' }, content)
@@ -7633,7 +7693,7 @@ const DECOR_OPTIONS = {
     ['vertical', t('左侧竖线')], ['underline', t('下划短线')], ['centered', t('居中 + 短线')], ['eyebrow', t('眉标 + 大标题')],
   ],
   sectionStyle: [
-    ['bar', t('左侧色条')], ['rule', t('横线 + 编号')], ['tag', t('色块标签')], ['numbered', t('章节编号')], ['line', t('居中细线')], ['dot', t('圆点')], ['ghost', t('大号数字')],
+    ['bar', t('左侧色条')], ['rule', t('横线 + 编号')], ['tag', t('色块标签')], ['numbered', t('章节编号')], ['line', t('居中细线')], ['dot', t('圆点')], ['ghost', t('大号数字')], ['brush', t('水彩横幅')],
   ],
   quoteStyle: [
     ['bar', t('左侧竖线')], ['pull', t('上下细线')], ['card', t('卡片')], ['center', t('居中引号')], ['tint', t('浅色底')], ['stamp', t('描边摘录')],

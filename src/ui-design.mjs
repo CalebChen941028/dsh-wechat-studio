@@ -1030,7 +1030,7 @@ const DECOR_OPTIONS = {
     ['vertical', t('左侧竖线')], ['underline', t('下划短线')], ['centered', t('居中 + 短线')], ['eyebrow', t('眉标 + 大标题')],
   ],
   sectionStyle: [
-    ['bar', t('左侧色条')], ['rule', t('横线 + 编号')], ['tag', t('色块标签')], ['numbered', t('章节编号')], ['line', t('居中细线')], ['dot', t('圆点')], ['ghost', t('大号数字')],
+    ['bar', t('左侧色条')], ['rule', t('横线 + 编号')], ['tag', t('色块标签')], ['numbered', t('章节编号')], ['line', t('居中细线')], ['dot', t('圆点')], ['ghost', t('大号数字')], ['brush', t('水彩横幅')],
   ],
   quoteStyle: [
     ['bar', t('左侧竖线')], ['pull', t('上下细线')], ['card', t('卡片')], ['center', t('居中引号')], ['tint', t('浅色底')], ['stamp', t('描边摘录')],

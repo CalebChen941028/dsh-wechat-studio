@@ -293,6 +293,23 @@ export const THEMES = [
       { id: 'catalog', name: '图录', titleStyle: 'kicker', sectionStyle: 'line', dividerStyle: 'none', quoteStyle: 'pull', listStyle: 'num', imageStyle: 'shadow' },
     ],
   },
+  {
+    id: 'watercolor',
+    name: '水彩',
+    tagline: '水彩绘本感：淡绿晕染、枝叶角标与手绘横幅',
+    mood: ['水彩', '自然', '绘本'],
+    topics: { parent: 0.9, lifestyle: 0.8, food: 0.75, travel: 0.7, emotion: 0.65, culture: 0.6 },
+    palette: {
+      bg: '#FFFDF8', card: '#F2F8EE', text: '#263229', secondary: '#6D7C6C',
+      accent: '#6E9E66', accentSoft: '#E7F1E1', border: '#DCE7D5',
+    },
+    surface: { pattern: 'watercolor', ornament: 'sprig' },
+    type: { titleFont: ROUND, bodyFont: SERIF, titleSize: 30, titleWeight: 700, titleTracking: '0.02em', bodySize: 16, lineHeight: 1.95, letterSpacing: '0.02em', paraGap: 24, paddingX: 20 },
+    variants: [
+      { id: 'garden', name: '庭园', titleStyle: 'centered', sectionStyle: 'brush', dividerStyle: 'ornament', quoteStyle: 'tint', listStyle: 'dot', imageStyle: 'shadow' },
+      { id: 'journal', name: '手记', titleStyle: 'rule', sectionStyle: 'brush', dividerStyle: 'dash', quoteStyle: 'card', listStyle: 'dot', imageStyle: 'polaroid' },
+    ],
+  },
 ]
 
 export const THEME_IDS = THEMES.map(theme => theme.id)

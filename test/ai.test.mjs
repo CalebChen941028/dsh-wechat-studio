@@ -270,6 +270,7 @@ test('aiEdit prompt includes editorial style families and deduplicated theme cat
   assert.match(prompt, /illustration（插画/)
   assert.match(prompt, /storybook（故事书/)
   assert.match(prompt, /gallery（策展/)
+  assert.match(prompt, /watercolor（水彩/)
   for (const theme of THEMES) {
     assert.match(prompt, new RegExp(`(?:^|[：；])${theme.id}（${theme.name}`), `${theme.id} should appear in the catalog`)
     assert.equal((prompt.match(new RegExp(`(?:^|[：；])${theme.id}（`, 'g')) ?? []).length, 1, `${theme.id} should appear once`)

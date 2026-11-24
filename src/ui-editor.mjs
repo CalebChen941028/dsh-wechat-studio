@@ -793,7 +793,7 @@ function PreviewStage(props) {
     }
   }
   const root = article.nodes[0]
-  const titleFirst = article.title !== ''
+  const blockStart = Number.isInteger(article.blockStart) ? article.blockStart : (article.title !== '' ? 1 : 0)
   const sourceBlocks = parsed.blocks.filter(block => block.type !== 'title')
 
   const moveBlock = (index, direction) => {
@@ -804,6 +804,7 @@ function PreviewStage(props) {
     const lines = doc.text.split('\n')
     const a = groups[index]
     const b = groups[target]
+    if (!a || !b) return
     const first = a.start < b.start ? a : b
     const second = a.start < b.start ? b : a
     const firstLines = lines.slice(first.start, first.end + 1)
@@ -898,7 +899,7 @@ function PreviewStage(props) {
     h('div', { className: 'ws-stage' },
       h(WechatPhoneChrome, { brand: surfaceBrand, source: surface === 'article' ? source : '', empty: doc.text.trim() === '' && surface === 'article', device, surface },
         surface === 'article' ? h(ArticleBody, {
-          root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel,
+          root, blockStart, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel,
           captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption,
           dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage,
           aiHashes, lockedHashes, toggleLock,
@@ -997,7 +998,7 @@ function SurfacePreview({ surface, title, digest, cover, account, date }) {
 }
 
 function ArticleBody(props) {
-  const { root, titleFirst, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption, dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage, aiHashes, lockedHashes, toggleLock } = props
+  const { root, blockStart, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption, dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage, aiHashes, lockedHashes, toggleLock } = props
   const [hovered, setHovered] = React.useState(null)
   const children = root.children
 
@@ -1005,7 +1006,7 @@ function ArticleBody(props) {
     className: 'ws-article',
     style: root.style,
   }, children.map((child, index) => {
-    const blockIndex = index - (titleFirst ? 1 : 0)
+    const blockIndex = index - blockStart
     const block = blockIndex >= 0 && blockIndex < sourceBlocks.length ? sourceBlocks[blockIndex] : null
     const content = nodesToReact([child], h)
     if (!block) return h('div', { key: index, className: 'ws-block' }, content)

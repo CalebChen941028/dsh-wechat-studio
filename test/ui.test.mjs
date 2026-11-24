@@ -196,6 +196,7 @@ test('英文界面显示主题、变体与描述译文', async () => {
     const names = [...container.querySelectorAll('.ws-theme-name')].map(node => node.textContent)
     assert.ok(names.includes('Zine'), `theme names: ${names.join(', ')}`)
     assert.ok(names.includes('Storybook'))
+    assert.ok(names.includes('Watercolor'))
     assert.ok(!names.includes('画报'))
     const taglines = [...container.querySelectorAll('.ws-theme-tag')].map(node => node.textContent)
     assert.ok(taglines.some(text => text.startsWith('Independent magazine spread')), 'theme tagline translated')
@@ -706,6 +707,28 @@ test('段落上移、下移、复制与删除都会改写正文', async () => {
     await new Promise(resolve => setTimeout(resolve, 160))
     value = container.querySelector('.ws-editor').value
     assert.equal((value.match(/第一段。/g) ?? []).length, 1)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('带默认角标的新主题仍能正确上移最后一段', async () => {
+  const seed = [{ ...blockSeed[0], design: { themeId: 'zine', variantId: 'spread', overrides: {} } }]
+  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
+  try {
+    const title = [...container.querySelectorAll('.ws-block')].find(node => node.textContent.trim().startsWith('标题'))
+    assert.ok(title, 'title block')
+    assert.equal(title.querySelector('button[title="上移"]'), null, 'title is not treated as a movable paragraph')
+    const last = [...container.querySelectorAll('.ws-block')].find(node => node.textContent.includes('第三段。'))
+    assert.ok(last, 'last paragraph block')
+    const up = last.querySelector('button[title="上移"]')
+    assert.ok(up, 'last paragraph has a move control')
+    up.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 200))
+    const value = container.querySelector('.ws-editor').value
+    assert.ok(value.indexOf('第三段。') < value.indexOf('第二段。'), 'third paragraph moved above the second')
+    assert.equal(container.querySelector('.ws-crash'), null)
   } finally {
     root.unmount()
     dom.window.close()

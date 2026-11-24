@@ -33,6 +33,7 @@ const DESIGN_PRESETS = [
   ['插画绘本 / 亲子美食手账', 'illustration / picturebook', 'bg #FFFBF2、bgStyle wash、ornament leaf、titleSize 30、bodySize 15.5、lineHeight 1.9、paddingX 20、titleStyle tag、sectionStyle dot、quoteStyle card、imageStyle polaroid'],
   ['故事书 / 非虚构与情感长文', 'storybook / chapter', 'bg #F9F4E8、bgStyle paper、ornament seal、titleSize 30、bodySize 16、lineHeight 1.98、paraGap 25、paddingX 22、titleStyle rule、sectionStyle line、quoteStyle center、imageStyle frame'],
   ['策展画册 / 建筑摄影与审美', 'gallery / exhibit', 'bg #F7F7F5、bgStyle grid、ornament column、titleSize 29、bodySize 15、lineHeight 1.88、paddingX 22、titleStyle boxed、sectionStyle numbered、quoteStyle stamp、imageStyle frame'],
+  ['水彩绘本 / 亲子自然与生活', 'watercolor / garden', 'bg #FFFDF8、bgStyle watercolor、ornament sprig、titleSize 30、bodySize 16、lineHeight 1.95、paddingX 20、titleStyle centered、sectionStyle brush、quoteStyle tint、imageStyle shadow'],
   ['人物口述 / 暖调随笔', 'paper / letter', 'bodySize 16、lineHeight 1.95、paddingX 20、quoteStyle card、imageStyle polaroid'],
   ['行业分析 / 商业复盘', 'ocean / report', 'titleSize 28、bodySize 15.5、lineHeight 1.8、paraGap 20、paddingX 18、sectionStyle numbered'],
   ['产品说明 / 工具方法', 'mint / minimal', 'titleSize 27、bodySize 15.5、lineHeight 1.78、paddingX 18、sectionStyle bar、imageStyle rounded'],
@@ -46,14 +47,14 @@ const DESIGN_PRESETS = [
 /** 装饰选项。与浏览器端 render/decor 选项一致。 */
 const DECOR_OPTIONS = {
   titleStyle: ['rule', 'kicker', 'ribbon', 'tag', 'boxed', 'vertical', 'underline', 'centered', 'eyebrow'],
-  sectionStyle: ['bar', 'rule', 'tag', 'numbered', 'line', 'dot', 'ghost'],
+  sectionStyle: ['bar', 'rule', 'tag', 'numbered', 'line', 'dot', 'ghost', 'brush'],
   quoteStyle: ['bar', 'pull', 'card', 'center', 'tint', 'stamp'],
   dividerStyle: ['dots', 'diamond', 'ornament', 'line', 'dash', 'none'],
   listStyle: ['dot', 'num', 'square', 'arrow'],
   imageStyle: ['plain', 'rounded', 'shadow', 'frame', 'polaroid', 'full'],
   imageAlign: ['left', 'center', 'right'],
-  bgStyle: ['none', 'paper', 'grid', 'dots', 'lines', 'wash'],
-  ornament: ['none', 'corner', 'column', 'seal', 'leaf'],
+  bgStyle: ['none', 'paper', 'grid', 'dots', 'lines', 'wash', 'watercolor'],
+  ornament: ['none', 'corner', 'column', 'seal', 'leaf', 'sprig'],
 }
 
 const SYSTEM_PROMPT = `你是「公众号排版工作台」的编辑助手。用户会用自然语言要求修改文章或版式。你只做两类事。
@@ -70,13 +71,14 @@ const SYSTEM_PROMPT = `你是「公众号排版工作台」的编辑助手。用
   * 插画 / 绘本 / 手账 / 轻快温暖：优先 illustration（picturebook/sketch）；用奶油暖底、wash 淡彩底纹、leaf 叶形角标、tag/ribbon 标题、card/tint 引文与 polaroid/rounded 配图。
   * 故事书 / 纸质书 / 沉浸叙事 / 童话寓言：优先 storybook（chapter/fable）或 paper（letter/scroll）；用象牙纸底、paper 纸纹、seal 印记角标、rule/centered 扉页标题、line 居中细线小节与大行高（1.92–2.0）。
   * 策展 / 美术馆 / 摄影建筑画册：优先 gallery（exhibit/catalog）；用冷白墙面、grid 微弱网格、column 栏线角标、boxed 展签标题、stamp 摘录框与 frame 画框图。
+  * 水彩 / 自然 / 亲子手绘：优先 watercolor（garden/journal）；用淡绿水彩底纹、sprig 枝叶角标、brush 水彩横幅小节与 tint/card 引文。
   * 分析复盘 / 学术研究 / 产品说明：分别优先 ocean/scholar/mint/pine/mono。
 - 视觉层级与呼吸感：
   * 标题与正文字号比保持在 1.8–2.2 倍（如 31/16、33/15.5），形成清晰视觉落差；一篇只保留一个主强调色。
   * 长文与叙事加大行高和留白（lineHeight 1.9–2.0、paraGap 22–26、paddingX 20–22）；信息密集型文章收紧节奏（lineHeight 1.75–1.85、paraGap 18–20）。
   * 多图文章优先 full / polaroid / frame 并统一 imageWidth 与 imageAlign，避免图片与文字视觉打架。
 - 数值范围：bodySize 15-18、lineHeight 1.7-2.05、letterSpacing 0-0.05、paraGap 18-30、paddingX 16-24、titleSize 26-38。
-- 背景：bg 用 #RRGGBB；bgStyle 可选 none/paper/grid/dots/lines/wash，不填时跟随主题默认，显式写 none 才关闭。
+- 背景：bg 用 #RRGGBB；bgStyle 可选 none/paper/grid/dots/lines/wash/watercolor，不填时跟随主题默认，显式写 none 才关闭。
 - 图片：imageWidth 40-100（百分比），imageAlign 可选 left/center/right。
 - 矢量角标：ornament 可选 none/corner/column/seal/leaf，不填时跟随主题默认，显式写 none 才关闭；最多用一个，与底纹呼应而不堆砌。
 - 克制底线：留白优先、同级统一、一个视觉记忆点；不用高饱和荧光色、彩虹拼盘、emoji、外发光和重阴影。

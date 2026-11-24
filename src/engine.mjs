@@ -355,8 +355,8 @@ export function composeDesign(stored) {
   }
   colors.accentInk = readableOn(colors.accent)
 
-  const BG_PATTERNS = ['none', 'paper', 'grid', 'dots', 'lines', 'wash']
-  const ORNAMENTS = ['none', 'corner', 'column', 'seal', 'leaf']
+  const BG_PATTERNS = ['none', 'paper', 'grid', 'dots', 'lines', 'wash', 'watercolor']
+  const ORNAMENTS = ['none', 'corner', 'column', 'seal', 'leaf', 'sprig']
   const defaultPattern = BG_PATTERNS.includes(theme.surface?.pattern) ? theme.surface.pattern : 'none'
   const defaultOrnament = ORNAMENTS.includes(theme.surface?.ornament) ? theme.surface.ornament : 'none'
   const surface = {
@@ -505,7 +505,7 @@ export function rankThemes(topic, features) {
     if (features.avgParagraph > 0 && features.avgParagraph < 35 && ['magazine', 'zine', 'ink', 'pine'].includes(theme.id)) score += 0.06
     if (features.listItems >= 4 && ['pine', 'mint', 'mono'].includes(theme.id)) score += 0.06
     if (features.exclamations >= 2 && ['festival', 'amber', 'magazine', 'illustration'].includes(theme.id)) score += 0.08
-    if (features.images >= 2 && ['magazine', 'zine', 'illustration', 'gallery', 'ocean', 'rose'].includes(theme.id)) score += 0.06
+    if (features.images >= 2 && ['magazine', 'zine', 'illustration', 'gallery', 'watercolor', 'ocean', 'rose'].includes(theme.id)) score += 0.06
     return { theme, score }
   })
   ranked.sort((a, b) => b.score - a.score)

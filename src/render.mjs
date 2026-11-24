@@ -61,6 +61,15 @@ function surfaceBackground(surface) {
     case 'wash':
       style.backgroundImage = `linear-gradient(180deg, ${rgba(surface.wash, 0.12)} 0%, ${rgba(surface.wash, 0)} 240px)`
       break
+    case 'watercolor':
+      style.backgroundImage = [
+        `radial-gradient(120% 55% at 8% -8%, ${rgba(surface.wash, 0.24)} 0%, ${rgba(surface.wash, 0)} 62%)`,
+        `radial-gradient(80% 42% at 88% -6%, ${rgba(surface.wash, 0.16)} 0%, ${rgba(surface.wash, 0)} 58%)`,
+        'radial-gradient(55% 26% at 54% 0%, rgba(245,206,122,0.18) 0%, rgba(245,206,122,0) 70%)',
+      ].join(', ')
+      style.backgroundRepeat = 'no-repeat'
+      style.backgroundSize = '100% 320px'
+      break
     default:
       break
   }
@@ -103,10 +112,19 @@ function ornamentNode(surface, colors) {
       ]
       viewBox = '0 0 24 22'
       break
+    case 'sprig':
+      children = [
+        shape('path', { d: 'M2 20C8 17 14 12 19 3c0 7-5 13-14 17z' }, { fill: accent, opacity: 0.24 }),
+        shape('path', { d: 'M9 17C13 14 16 10 18 5c-1 5-4 9-9 12z' }, { fill: accent, opacity: 0.45 }),
+        shape('circle', { cx: '22', cy: '4', r: '1.2' }, { fill: accent, opacity: 0.45 }),
+        shape('circle', { cx: '26', cy: '9', r: '0.9' }, { fill: accent, opacity: 0.3 }),
+      ]
+      viewBox = '0 0 28 22'
+      break
     default:
       return null
   }
-  const svg = node('svg', { display: 'block', marginLeft: 'auto' }, children, {
+  const svg = node('svg', { display: 'block', ...(surface.ornament === 'sprig' ? { marginRight: 'auto' } : { marginLeft: 'auto' }) }, children, {
     width: '54', height: '22', viewBox, fill: 'none', 'aria-hidden': 'true',
   })
   return section({ margin: '0 0 6px', lineHeight: 0 }, [svg])
@@ -150,6 +168,7 @@ export function buildArticle(input) {
   const mark = ornamentNode(surface, colors)
   if (mark !== null) children.push(mark)
   if (titleText !== '') children.push(renderTitle(titleText, ctx, meta))
+  const blockStart = children.length
 
   const paragraphs = blocks.filter(block => block.type === 'paragraph')
   const firstParagraph = paragraphs[0]
@@ -203,7 +222,7 @@ export function buildArticle(input) {
     children,
   )
 
-  return { nodes: [root], title: titleText }
+  return { nodes: [root], title: titleText, blockStart }
 }
 
 /* ------------------------------------------------------------------ *
@@ -371,6 +390,11 @@ function renderHeading(block, index, ctx) {
         section({ ...headingStyle, fontFamily: ctx.titleFont, fontSize: '16.5px', fontWeight: 600, letterSpacing: '0.03em' }, text(plainText(block.text))),
       ])
     }
+    if (style === 'brush') {
+      return section({ margin: gap, textAlign: 'center' }, [
+        section({ ...headingStyle, color: colors.accent, fontFamily: ctx.titleFont, fontSize: '16.5px', fontWeight: 600, letterSpacing: '0.06em' }, text(plainText(block.text))),
+      ])
+    }
     return section({ margin: gap }, [
       span({ color: colors.accent, marginRight: '6px' }, text('▍')),
       span(headingStyle, text(plainText(block.text))),
@@ -378,6 +402,18 @@ function renderHeading(block, index, ctx) {
   }
 
   switch (style) {
+    case 'brush':
+      return section({ margin: gap, textAlign: 'center' }, [
+        section({
+          display: 'inline-block',
+          background: `linear-gradient(90deg, ${rgba(colors.accent, 0.04)} 0%, ${rgba(colors.accent, 0.22)} 50%, ${rgba(colors.accent, 0.04)} 100%)`,
+          borderRadius: '999px',
+          padding: '7px 24px',
+        }, [
+          section({ ...headingStyle, color: colors.accent, fontFamily: ctx.titleFont, fontSize: '18px', fontWeight: 700, letterSpacing: '0.08em', textAlign: 'center' }, text(plainText(block.text))),
+        ]),
+        section({ width: '54px', height: '2px', background: rgba(colors.accent, 0.35), borderRadius: '2px', margin: '10px auto 0' }),
+      ])
     case 'tag':
       return section({ margin: gap }, [
         section({

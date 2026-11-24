@@ -7,14 +7,15 @@ import { compareHtml, fidelitySuite, themeHtml } from '../scripts/fidelity-lib.m
 const IMAGE = 'https://example.com/fidelity.png'
 const STAMP = '20260101000000'
 
-test('保真套件在 all 模式覆盖 17 套主题的 34 个变体', () => {
+test('保真套件在 all 模式覆盖 18 套主题的 36 个变体', () => {
   const sample = fidelitySuite(false)
   assert.equal(sample.length, 4)
   const all = fidelitySuite(true)
   assert.equal(all.length, THEMES.reduce((count, theme) => count + theme.variants.length, 0))
-  assert.equal(all.length, 34)
+  assert.equal(all.length, 36)
   assert.ok(all.some(([themeId, variantId]) => themeId === 'zine' && variantId === 'dossier'))
   assert.ok(all.some(([themeId, variantId]) => themeId === 'storybook' && variantId === 'fable'))
+  assert.ok(all.some(([themeId, variantId]) => themeId === 'watercolor' && variantId === 'journal'))
 })
 
 test('compareHtml 把 SVG、底纹和脚本丢失判为失败', () => {
@@ -41,7 +42,7 @@ test('compareHtml 把 SVG、底纹和脚本丢失判为失败', () => {
   assert.equal(compareHtml('zine/spread', html, scripted).ok, false)
 })
 
-test('全部 34 个变体的生成 HTML 保留各自主题的氛围特征', () => {
+test('全部 36 个变体的生成 HTML 保留各自主题的氛围特征', () => {
   for (const [themeId, variantId] of fidelitySuite(true)) {
     const theme = THEMES.find(entry => entry.id === themeId)
     const html = themeHtml(themeId, variantId, IMAGE, STAMP)

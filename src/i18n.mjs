@@ -792,6 +792,11 @@ const UI_EN = {
   '策展': 'Gallery',
   '展签': 'Exhibit',
   '图录': 'Catalog',
+  '水彩': 'Watercolor',
+  '庭园': 'Garden',
+  '手记': 'Journal',
+  '枝叶': 'Sprig',
+  '水彩横幅': 'Watercolor banner',
 
   // 主题描述
   '衬线标题、细线与编号，克制的杂志内页': 'Serif headings, hairline rules and numbering: a restrained magazine spread',
@@ -811,6 +816,7 @@ const UI_EN = {
   '水粉绘本与手账感：圆润标题、奶油纸底与淡彩叶形': 'Gouache picture book and journal: rounded headings, cream paper, pale leaf marks',
   '精装书页质感：全衬线扉页、细腻纸纹与藏书印记': 'Hardcover page: all-serif title page, fine paper grain and an ex libris seal',
   '美术馆展签与画册感：冷白墙面、微弱网格与青铜细线': 'Museum label and catalogue: cool white walls, faint grid, bronze-green hairlines',
+  '水彩绘本感：淡绿晕染、枝叶角标与手绘横幅': 'Watercolor picture book: pale green washes, leaf sprigs and hand-painted banners',
   '{count} 个版式': '{count} layouts',
 }
 

@@ -455,12 +455,13 @@ test('auditHouseStyle 检查禁用词、长段与图注', () => {
   assert.equal(DEFAULT_STYLE_GUIDE.tone, 'restrained')
 })
 
-test('高设计感主题（画报/插画/故事书/策展）默认继承氛围纹理与角标并支持显式关闭', () => {
+test('高设计感主题（画报/插画/故事书/策展/水彩）默认继承氛围纹理与角标并支持显式关闭', () => {
   const expected = [
     ['zine', 'spread', 'lines', 'corner'],
     ['illustration', 'picturebook', 'wash', 'leaf'],
     ['storybook', 'chapter', 'paper', 'seal'],
     ['gallery', 'exhibit', 'grid', 'column'],
+    ['watercolor', 'garden', 'watercolor', 'sprig'],
   ]
   const { blocks } = parseArticle(ARTICLE)
   for (const [themeId, , pattern, ornament] of expected) {
@@ -472,6 +473,7 @@ test('高设计感主题（画报/插画/故事书/策展）默认继承氛围�
       const html = serializeNodes(buildArticle({ blocks, design, meta: { author: '编辑部' } }).nodes)
       assert.ok(html.includes('background-image'), `${themeId}/${variant.id} renders default pattern`)
       assert.ok(html.includes('<svg'), `${themeId}/${variant.id} renders default ornament`)
+      if (themeId === 'watercolor') assert.ok(html.includes('linear-gradient(90deg'), `${variant.id} renders brush sections`)
       const stripped = composeDesign({ themeId, variantId: variant.id, overrides: { bgStyle: 'none', ornament: 'none' } })
       assert.equal(stripped.surface.pattern, 'none')
       assert.equal(stripped.surface.ornament, 'none')
