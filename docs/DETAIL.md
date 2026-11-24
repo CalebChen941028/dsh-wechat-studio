@@ -35,7 +35,7 @@ A DeepSeek Harness (DSH) sidebar bundle for turning Markdown into WeChat Officia
 
 ## Data flow
 
-1. Editor text is parsed locally; `composeDesign` resolves the theme/variant/overrides into concrete styles.
+1. Editor text is parsed locally; `composeDesign` resolves the theme/variant/overrides into concrete styles. When AI returns `design.custom`, `normalizeCustomDesign` validates and completes the palette, type, surface and decoration tokens, so the design does not need to match a preset theme.
 2. The same node tree feeds the live preview and the copy/publish HTML, so they cannot drift.
 3. Publishing: data URLs are compressed and uploaded to the WeChat CDN, remote images are imported; then a draft is created and optionally submitted for publish.
 4. AI edits return structured JSON (`reply`, optional `text`, `design`, `meta`). The panel consumes an SSE variant (`aiEditStream`) for live character progress; long articles can be rewritten section by section with a client-side toggle.

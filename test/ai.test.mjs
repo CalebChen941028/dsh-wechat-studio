@@ -151,8 +151,8 @@ test('aiEdit prompt carries content analysis, editorial presets and the design b
   const prompt = calls[0].messages[0].content[0].text
   assert.match(prompt, /内容分析/)
   assert.match(prompt, /编辑预设/)
-  assert.match(calls[0].system, /杂志美术编辑/)
-  assert.match(calls[0].system, /矢量角标/)
+  assert.match(calls[0].system, /独立美术指导/)
+  assert.match(calls[0].system, /ornament/)
   assert.match(calls[0].system, /bgStyle/)
   assert.equal(result.design.themeId, 'column')
   assert.deepEqual(result.design.overrides, { bg: '#F7F4EE', bgStyle: 'paper', ornament: 'corner', bodySize: 16, lineHeight: 1.92 })
@@ -297,4 +297,33 @@ test('aiEdit 接受海报与画册的成套版面参数', async () => {
   assert.equal(result.design.themeId, 'poster')
   assert.equal(result.design.variantId, 'bill')
   assert.deepEqual(result.design.overrides, overrides)
+})
+
+
+test('aiEdit 接受 AI 原创 custom 设计而不是只选主题', async () => {
+  const { ctx, calls } = fakeContext({
+    chunks: jsonReply({
+      reply: '设计了一套夜色版式',
+      design: {
+        custom: {
+          name: '夜色',
+          palette: { bg: '#101418', accent: '#D9A441' },
+          type: { titleFont: 'serif', titleSize: 34, bodySize: 16 },
+          surface: { pattern: 'halftone', ornament: 'star' },
+          titleStyle: 'stacked', sectionStyle: 'folio', quoteStyle: 'margin', imageStyle: 'plate',
+          options: { dropCap: true },
+        },
+      },
+    }),
+  })
+  const result = await createAiEditor({ ctx }).edit({ instruction: '随便发挥你的审美，不要用模板', text: ARTICLE })
+  assert.equal(result.design.custom.name, '夜色')
+  assert.equal(result.design.custom.palette.bg, '#101418')
+  assert.equal(result.design.custom.titleStyle, 'stacked')
+  assert.equal(result.design.custom.options.dropCap, true)
+  assert.match(calls[0].system, /原创优先/)
+  assert.match(calls[0].system, /design\.custom/)
+  assert.match(calls[0].messages[0].content[0].text, /参考主题（只作方向/)
+  await createAiEditor({ ctx }).edit({ instruction: '再暗一点', text: ARTICLE, design: { custom: { name: '夜色' } } })
+  assert.match(calls[1].messages[0].content[0].text, /当前是 AI 自定义版式/)
 })

@@ -16,7 +16,7 @@ const LONG_TEXT_DESIGN_ONLY = 7000
 const TIMEOUT_MS = 120000
 
 /** 主题目录。直接从浏览器端 themes.mjs 生成，保持单一数据源。 */
-import { detectTopic, measure, normalizeStyleGuide, parseArticle } from '../src/engine.mjs'
+import { detectTopic, measure, normalizeCustomDesign, normalizeStyleGuide, parseArticle } from '../src/engine.mjs'
 import { THEMES } from '../src/themes.mjs'
 
 const THEME_CATALOG = THEMES.map(theme => [
@@ -68,33 +68,41 @@ const SYSTEM_PROMPT = `你是「公众号排版工作台」的编辑助手。用
 - 保留 Markdown 结构：# 标题、## 小节、### 小标题、> 引用、- 列表、1. 有序列表、![说明](url)、--- 分割线、**加粗**、==高亮==、行内代码。
 - 中文句子自然平实，不用「赋能、闭环、底层逻辑、全方位、抓手」这类黑话，不加「让我们」式煽情排比。
 
-二、改版式。你的角色是杂志美术编辑：先判断文章气质与目标流派，再选主题与版式变体，最后统筹底纹、角标、字号层级与配图语言。只输出 design 字段，不要发明不存在的主题或装饰 id。
-- 流派与主题映射：
-  * 杂志 / 画报 / 高级编辑感：优先 zine（spread/dossier）、column（essay/feature）或 magazine（cover/feature）；用 kicker/eyebrow 眉标、ghost/rule 小节与 pull 上下细线拉引制造刊物节奏，可配 lines 底纹与 corner 角标。
-  * 插画 / 绘本 / 手账 / 轻快温暖：优先 illustration（picturebook/sketch）；用奶油暖底、wash 淡彩底纹、leaf 叶形角标、tag/ribbon 标题、card/tint 引文与 polaroid/rounded 配图。
-  * 故事书 / 纸质书 / 沉浸叙事 / 童话寓言：优先 storybook（chapter/fable）或 paper（letter/scroll）；用象牙纸底、paper 纸纹、seal 印记角标、rule/centered 扉页标题、line 居中细线小节与大行高（1.92–2.0）。
-  * 策展 / 美术馆 / 摄影建筑画册：优先 gallery（exhibit/catalog）；用冷白墙面、grid 微弱网格、column 栏线角标、boxed 展签标题、stamp 摘录框与 frame 画框图。
-  * 水彩 / 自然 / 亲子手绘：优先 watercolor（garden/journal）；用淡绿水彩底纹、sprig 枝叶角标、brush 水彩横幅小节与 tint/card 引文。
-  * 海报 / 宣言 / 活动 / 强视觉：优先 poster（bill/manifesto）或 bauhaus（axis/grid）；用 poster 整版标题、band 反白小节、star 星号分隔与 full/plate 图版，允许 34–36px 大标题。
-  * 画册 / 展览 / 摄影 / 建筑：优先 folio（plate/catalogue）；用 stacked 叠排标题、folio 页码小节、plate 图版与 margin 页边注，paddingX 24、行高 1.95，宁可留白。
-  * 分析复盘 / 学术研究 / 产品说明：分别优先 ocean/scholar/mint/pine/mono。
+二、改版式。你的角色是独立美术指导，不是模板选择器。先读文章气质，再原创一套版式：定配色、字体、字号层级、留白、底纹、角标和标题/小节/引文/图片语言。只有当用户点名某个主题，或只要求微调现有版式时，才使用 themeId/variantId。
+- 原创优先：用户说「精排 / 设计感 / 改版 / 换个风格 / 杂志风 / 插画风 / 海报风 / 画册风 / 构成风」时，必须输出 design.custom，完整一套，不要从主题库里挑一个交差。custom 不需要存在于主题库。
+- 参考流派（只定方向，不是限制）：
+  * 杂志 / 画报 / 高级编辑感：kicker/eyebrow 标题、ghost/rule 小节、pull 上下细线、lines 底纹、corner 角标。
+  * 插画 / 绘本 / 手账：奶油底、wash 淡彩、leaf 叶形、tag/ribbon 标题、card/tint 引文、polaroid/rounded 配图。
+  * 故事书 / 纸质书：象牙纸、paper 纸纹、seal 印记、rule/centered 扉页标题、line 小节与大行高。
+  * 策展 / 画册 / 摄影：冷白或象牙底、grid/paper 底纹、column/star 角标、boxed/stacked 标题、stamp/margin 引文、plate 图版。
+  * 海报 / 宣言 / 活动强视觉：poster 整版标题、band 反白小节、star 分隔、halftone 网点、full/plate 图版。
+  * 水彩 / 自然 / 亲子：淡绿水彩底、sprig 枝叶、brush 横幅小节、tint/card 引文。
+  * 分析复盘 / 学术 / 产品：低饱和纸色、编号小节、细线、左右留白优先。
+  这些只是方向，具体颜色、字体、字号和组合由你判断，不要照抄某个主题。
 - 视觉层级与呼吸感：
-  * 标题与正文字号比保持在 1.8–2.2 倍（如 31/16、33/15.5），形成清晰视觉落差；一篇只保留一个主强调色。
+  * 标题与正文字号比保持在 1.8–2.2 倍，形成清晰落差；一篇只保留一个主强调色。
   * 长文与叙事加大行高和留白（lineHeight 1.9–2.0、paraGap 22–26、paddingX 20–22）；信息密集型文章收紧节奏（lineHeight 1.75–1.85、paraGap 18–20）。
-  * 多图文章优先 full / polaroid / frame 并统一 imageWidth 与 imageAlign，避免图片与文字视觉打架。
-- 数值范围：bodySize 15-18、lineHeight 1.7-2.05、letterSpacing 0-0.05、paraGap 18-30、paddingX 16-24、titleSize 26-38。
-- 背景：bg 用 #RRGGBB；bgStyle 可选 none/paper/grid/dots/lines/wash/watercolor/halftone，不填时跟随主题默认，显式写 none 才关闭。
-- 图片：imageWidth 40-100（百分比），imageAlign 可选 left/center/right。
-- 矢量角标：ornament 可选 none/corner/column/seal/leaf，不填时跟随主题默认，显式写 none 才关闭；最多用一个，与底纹呼应而不堆砌。
-- 克制底线：留白优先、同级统一、一个视觉记忆点；不用高饱和荧光色、彩虹拼盘、emoji、外发光和重阴影。
+  * 多图文章统一 imageWidth 与 imageAlign，避免图片与文字打架。
+- 数值范围：bodySize 15-18、lineHeight 1.7-2.05、letterSpacing 0-0.05em、paraGap 18-30、paddingX 16-24、titleSize 20-40、titleWeight 400-800。
 - 品质底线：正文 15–16px、行高 1.8–1.95、字距 0.01–0.03em、左右留白 16–20px；全文最多一个强调色，正文不用纯黑纯白，强调只给关键词、编号和 CTA。
-- 选择顺序：日常长文优先 column/paper/scholar/folio/gallery；poster/bauhaus 只在用户明确要海报、活动或强视觉时使用，不要默认选高饱和主题。每篇只保留一个记忆点：首字下沉、章节大编号、图版、反白色带或水彩横幅，不要全部堆上。
-- 用户说「精排 / 设计感 / 杂志风 / 插画风 / 故事书风 / 海报风 / 画册风 / 构成风 / 优化排版 / 按内容排版」时，必须返回完整 design（themeId、variantId、overrides，包含成套的标题/小节/引文/配图样式以及呼应气质的 bg/bgStyle/ornament），不要只改一两个参数敷衍。reply 用一句话点明选定的风格流派和核心视觉判断。
+- 每篇只保留一个记忆点：首字下沉、章节大编号、图版、反白色带、水彩横幅或一个角标，不要全部堆上。不用高饱和荧光色、彩虹拼盘、emoji、外发光和重阴影。
+- design.custom 结构：
+  * name / tagline：版式名与一句话气质，可省略。
+  * palette：bg、card、text、secondary、accent、accentSoft、border，均为 #RRGGBB；accent 和 secondary 对 bg 至少 4.5:1。
+  * type：titleFont/bodyFont 取 serif|sans|round；titleSize 20-40、titleWeight 400-800、titleTracking "-0.01em" 这类字符串、bodySize 15-18、lineHeight 1.7-2.05、letterSpacing "0.01em" 这类字符串、paraGap 18-30、paddingX 16-24。
+  * surface：pattern 取 none|paper|grid|dots|lines|wash|watercolor|halftone；ornament 取 none|corner|column|seal|leaf|sprig|star。
+  * titleStyle、sectionStyle、quoteStyle、dividerStyle、listStyle、imageStyle：取值见用户消息里的「可用装饰」。
+  * options：dropCap/lead/showMeta/showFooter/showEyebrow 布尔；eyebrow/footerText/footerSign 文本；imageWidth 40-100；imageAlign 取 left|center|right。
+- 使用 themeId 时，bgStyle/ornament 不填时跟随主题默认，显式写 none 才关闭；使用 custom 时直接在 surface 里写。
+- 输出二选一，不要输出 HTML/CSS，不要发明装饰 id：
+  A. 原创：design = { "custom": { ... } }。
+  B. 微调或点名主题：design = { "themeId": "...", "variantId": "...", "overrides": { ... } }。
+- 主题库只是参考，不是限制；不要因为现有 21 套主题就放弃原创。用户明确说「用某个主题」时才走 B。
 
 只输出一个 JSON 对象，不要代码围栏、不要解释文字。字段：
 - reply：一句话说明改了什么，直接说，不客套。
 - text：修改后的完整 Markdown 全文（不是 diff）。没改正文就省略。
-- design：{ "themeId": "...", "variantId": "...", "overrides": { ... } }。没改版式就省略。
+- design：二选一。原创：{ "custom": { ... } }；微调或点名主题：{ "themeId": "...", "variantId": "...", "overrides": { ... } }。没改版式就省略。
 - meta：{ "title": "...", "digest": "..." }。没改就省略。
 
 用户只要求改版式时，不要动 text；只要求改文案时，不要动 design。`
@@ -194,7 +202,7 @@ function buildUserPrompt(payload) {
   lines.push(`- 结构：${features.headings} 个小节 / ${features.paragraphs} 段 / ${features.quotes} 段引用 / ${features.listItems} 条列表 / ${features.images} 张图 / ${features.codeBlocks} 段代码`)
   lines.push(`- 篇幅：${features.chars} 字，约 ${features.readingMinutes} 分钟；平均段长 ${features.avgParagraph} 字；标题 ${titleLength} 字`)
   lines.push('')
-  lines.push('编辑预设（起点，按文章实际情况微调）：')
+  lines.push('编辑预设（参考起点，按文章实际情况改写或原创）：')
   for (const preset of DESIGN_PRESETS) lines.push(`- ${preset[0]}：${preset[1]}；${preset[2]}`)
   lines.push('')
   lines.push(`当前标题：${typeof meta.title === 'string' && meta.title.trim() !== '' ? meta.title.trim() : '（正文第一行 # 标题）'}`)
@@ -206,9 +214,15 @@ function buildUserPrompt(payload) {
   if (style.bannedWords.length > 0) lines.push(`禁用词（不要出现）：${style.bannedWords.join('、')}`)
   if (style.preferredWords.length > 0) lines.push(`偏好词（优先使用）：${style.preferredWords.join('、')}`)
   if (memory.length > 0) lines.push(`最近采用的改法：${memory.join('；')}`)
-  lines.push(`当前排版：主题 ${typeof design.themeId === 'string' ? design.themeId : 'ink'}，版式 ${typeof design.variantId === 'string' ? design.variantId : 'editorial'}`)
+  if (design.custom !== undefined && design.custom !== null && typeof design.custom === 'object') {
+    lines.push(`当前是 AI 自定义版式，可在此基础上继续改：${JSON.stringify(design.custom)}`)
+  } else if (typeof design.themeId === 'string') {
+    lines.push(`当前排版：主题 ${design.themeId}，版式 ${typeof design.variantId === 'string' ? design.variantId : '（默认）'}`)
+  } else {
+    lines.push('当前排版：未指定主题；请按内容原创 custom 版式，或从参考主题里判断。')
+  }
   lines.push(`排版覆盖参数：${JSON.stringify(design.overrides ?? {}, null, 0)}`)
-  lines.push(`可用主题（主题 id：名称，风格；版式 id）：${THEME_CATALOG.map(theme => `${theme[0]}（${theme[1]}，${theme[2]}；版式 ${theme[3]}）`).join('；')}`)
+  lines.push(`参考主题（只作方向，不是限制；原创 custom 优先）：${THEME_CATALOG.map(theme => `${theme[0]}（${theme[1]}，${theme[2]}；版式 ${theme[3]}）`).join('；')}`)
   lines.push(`可用装饰：${Object.entries(DECOR_OPTIONS).map(([key, values]) => `${key}=${values.join('/')}`).join('；')}`)
   if (history.length > 0) {
     lines.push('')
@@ -314,6 +328,7 @@ export function createAiEditor({ ctx }) {
       const maxTokens = designOnly
         ? 2048
         : Math.min(MAX_MAX_TOKENS, Math.max(MIN_MAX_TOKENS, Math.ceil(sourceText.length * 1.8) + 600))
+      const creativeBrief = /设计|版式|排版|风格|海报|画册|杂志|创意|审美|模板|好看|丑/.test(instruction)
       let output = ''
       let truncated = false
       try {
@@ -324,7 +339,7 @@ export function createAiEditor({ ctx }) {
           ...(sessionId === undefined ? {} : { sessionId }),
           system: SYSTEM_PROMPT,
           messages: [{ role: 'user', content: [{ type: 'text', text: userPrompt }] }],
-          temperature: 0.3,
+          temperature: creativeBrief ? 0.6 : 0.3,
           maxTokens,
           signal: controller.signal,
         })) {
@@ -374,6 +389,8 @@ export function createAiEditor({ ctx }) {
         if (typeof parsed.design.variantId === 'string') design.variantId = parsed.design.variantId
         const overrides = sanitizeOverrides(parsed.design.overrides)
         if (overrides !== undefined) design.overrides = overrides
+        const custom = normalizeCustomDesign(parsed.design.custom)
+        if (custom !== null) design.custom = custom
         if (Object.keys(design).length > 0) result.design = design
       }
       if (parsed.meta && typeof parsed.meta === 'object' && !Array.isArray(parsed.meta)) {

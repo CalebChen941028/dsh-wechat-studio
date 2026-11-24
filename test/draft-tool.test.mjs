@@ -113,6 +113,24 @@ test('a remote image is imported before the draft is written', async () => {
   assert.ok(draft.content.includes('imported-'))
 })
 
+test('AI custom design tokens are rendered into the draft', async () => {
+  const { promise, calls } = run({
+    markdown: '# 夜班车\n\n城市像按了静音。',
+    custom: {
+      name: '夜色',
+      palette: { bg: '#101418', accent: '#D9A441' },
+      titleStyle: 'stacked',
+      surface: { pattern: 'halftone' },
+    },
+    coverMediaId: 'cover',
+  })
+  const result = await promise
+  assert.equal(result.saved, true)
+  const draft = calls.find(call => call[0] === 'createDraft')[1]
+  assert.ok(draft.content.includes('#101418'))
+  assert.ok(draft.content.includes('background-image'))
+  assert.ok(draft.content.includes('border-left:9px solid'))
+})
 test('a missing cover is refused before any WeChat write', async () => {
   const { promise, calls } = run({ markdown: '# 无封面\n\n正文' })
   await assert.rejects(promise, error => {

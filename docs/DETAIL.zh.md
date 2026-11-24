@@ -14,7 +14,7 @@ DeepSeek Harness（DSH）的侧边栏 bundle：把 Markdown 变成公众号文�
 
 ## 数据流
 
-1. 编辑区文本在本地解析，`composeDesign` 把主题、版式和覆盖参数解析成具体样式。
+1. 编辑区文本在本地解析，`composeDesign` 把主题、版式和覆盖参数解析成具体样式；如果 AI 返回 `design.custom`，`normalizeCustomDesign` 会先校验并补全配色、字体、字号、底纹与装饰 token，不再要求命中主题库。
 2. 同一棵节点树同时供实时预览和复制/发布 HTML 使用，避免两边不一致。
 3. 发布时：data URL 图片先压缩并上传到微信 CDN，外链图片自动转存，然后创建草稿，按需提交发布。
 4. AI 编辑返回结构化 JSON（`reply`、可选 `text`、`design`、`meta`），客户端应用文本或版式修改，并支持撤销。对话面板走 `aiEditStream` 的 SSE 变体显示生成进度；长文可以打开分段改写，按小节分别调用模型。

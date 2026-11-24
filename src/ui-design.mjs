@@ -174,6 +174,16 @@ function AiSection(props) {
       }
       let nextDesign
       if (scopeLines === null && value.design && typeof value.design === 'object') {
+        if (value.design.custom !== undefined && value.design.custom !== null) {
+          nextDesign = {
+            themeId: 'custom',
+            variantId: 'custom',
+            custom: value.design.custom,
+            overrides: value.design.overrides ?? {},
+          }
+        }
+      }
+      if (scopeLines === null && value.design && typeof value.design === 'object' && nextDesign === undefined) {
         const theme = THEMES.find(entry => entry.id === value.design.themeId)
         const themeId = theme === undefined ? current.design.themeId : theme.id
         const variant = theme === undefined
@@ -275,7 +285,7 @@ function AiSection(props) {
     setPending(null)
   }
 
-  const suggestions = [t('做成海报感'), t('做成画册感'), t('做成构成感'), t('按内容重新精排'), t('标题更有冲击力'), t('第二段压缩到两行'), t('换成杂志版式'), t('加一个小节标题'), t('行距调到 1.9')]
+  const suggestions = [t('自由发挥，不要套主题'), t('做成海报感'), t('做成画册感'), t('做成构成感'), t('按内容重新精排'), t('标题更有冲击力'), t('第二段压缩到两行'), t('换成杂志版式'), t('加一个小节标题'), t('行距调到 1.9')]
 
   return h('div', { className: 'ws-chat' },
     h('div', { className: 'ws-card-head' },
@@ -342,6 +352,9 @@ function AiSection(props) {
           : h('p', { className: 'ws-hint' }, t('只调整版式与标题摘要，不改正文')),
         pending.design !== undefined
           ? h('p', { className: 'ws-hint' }, t('版式：{theme}', { theme: (() => {
+            if (pending.design.custom !== undefined && pending.design.custom !== null) {
+              return t(pending.design.custom.name || 'AI 自定义')
+            }
             const theme = THEMES.find(entry => entry.id === pending.design.themeId)
             const variant = theme?.variants.find(entry => entry.id === pending.design.variantId)
             return `${t(theme?.name ?? pending.design.themeId)}${variant === undefined ? '' : ` · ${t(variant.name)}`}`
@@ -607,7 +620,15 @@ function ThemeSection(props) {
       setDnaBusy(false)
     }
   }
-  const activeTheme = THEMES.find(theme => theme.id === design.themeId) ?? THEMES[0]
+  const customTheme = design.custom === undefined || design.custom === null ? null : {
+    id: 'custom',
+    name: design.themeName,
+    tagline: design.tagline,
+    palette: design.colors,
+    type: design.type,
+    variants: [{ id: 'custom', name: design.variantName, ...design.decor }],
+  }
+  const activeTheme = customTheme ?? THEMES.find(theme => theme.id === design.themeId) ?? THEMES[0]
   const toggleFavorite = (themeId) => {
     setFavorites((list) => {
       const next = list.includes(themeId) ? list.filter(id => id !== themeId) : [themeId, ...list]
@@ -635,6 +656,7 @@ function ThemeSection(props) {
         design: {
           themeId: theme.id,
           variantId: theme.variants[0].id,
+          custom: null,
           overrides: {
             ...preservedAccent,
             eyebrow: previous.eyebrow ?? analysis.label,
@@ -644,7 +666,10 @@ function ThemeSection(props) {
       }
     })
   }
-  const setVariant = (variantId) => store.updateDesign(current => ({ ...current, variantId }))
+  const setVariant = (variantId) => {
+    if (design.custom !== undefined && design.custom !== null) return
+    store.updateDesign(current => ({ ...current, variantId }))
+  }
   const setAccent = (accent) => store.updateDesign(current => ({
     ...current,
     overrides: { ...(current.overrides ?? {}), accent },
@@ -671,6 +696,7 @@ function ThemeSection(props) {
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('主题库')), h('span', { className: 'ws-group-note' }, t('{count} 个版式', { count: THEMES.reduce((count, entry) => count + entry.variants.length, 0) }))),
+      h('p', { className: 'ws-hint' }, t('预设只是起点；让 AI 自由设计会生成不限于主题库的版式。')),
       h('div', { className: 'ws-chips ws-theme-filter' },
         [['all', t('全部')], ['favorites', t('收藏')], ['recent', t('最近')]].map(([id, label]) => h('button', {
           key: id,
@@ -679,9 +705,20 @@ function ThemeSection(props) {
           onClick: () => setFilter(id),
         }, label)),
       ),
-      visibleThemes.length === 0
+      visibleThemes.length === 0 && customTheme === null
         ? h('p', { className: 'ws-hint' }, t('还没有收藏主题；点主题卡上的星标即可收藏。'))
         : h('div', { className: 'ws-themes' },
+          customTheme !== null
+            ? h('div', { key: 'custom', className: 'ws-theme ws-theme-custom on', role: 'group' },
+              h(ThemeMiniPreview, { theme: customTheme }),
+              h('span', { className: 'ws-theme-meta' },
+                h('span', { className: 'ws-theme-name-row' },
+                  h('span', { className: 'ws-theme-name' }, t(customTheme.name)),
+                  h('span', { className: 'ws-badge' }, t('AI 自定义')),
+                ),
+                h('span', { className: 'ws-theme-tag' }, t(customTheme.tagline)),
+              ))
+            : null,
           visibleThemes.map(theme => h('div', {
             key: theme.id,
             role: 'button',
@@ -862,8 +899,8 @@ function TypeSection(props) {
     store.updateDesign(current => withoutOverrideKeys(current, TYPE_OVERRIDE_KEYS))
     toast(t('已恢复当前主题的默认排版'))
   }
-  const theme = THEMES.find(entry => entry.id === design.themeId) ?? THEMES[0]
-  const base = theme.type
+  const theme = THEMES.find(entry => entry.id === design.themeId)
+  const base = design.custom !== undefined && design.custom !== null ? design.type : (theme ?? THEMES[0]).type
   const round2 = value => Math.round(value * 100) / 100
   const presetSpecs = [
     {
@@ -1308,15 +1345,16 @@ function PublishSection(props) {
     if (houseStyle.bannedHits.length > 0) push('warn', t('禁用词出现 {count} 次', { count: houseStyle.bannedHits.reduce((sum, item) => sum + item.count, 0) }), houseStyle.bannedHits.map(item => item.word).join('、'))
     if (houseStyle.longParagraphs > 0) push('warn', t('超过段落上限 {count} 段', { count: houseStyle.longParagraphs }), `${houseStyle.guide.maxParagraphChars} ${t('字')}`)
     if (houseStyle.missingCaptions > 0) push('warn', t('缺图注 {count} 张', { count: houseStyle.missingCaptions }), t('规范要求正文图片带图注'))
-    const measured = fidelityFor(doc.design.themeId)
-    if (measured === null) push('warn', t('这个主题还没有真实账号实测'), '')
+    const isCustomDesign = doc.design.custom !== undefined && doc.design.custom !== null
+    const measured = isCustomDesign ? null : fidelityFor(doc.design.themeId)
+    if (measured === null) push('warn', t(isCustomDesign ? 'AI 自定义版式还没有真实账号实测' : '这个主题还没有真实账号实测'), '')
     else if (measured.ok) push('ok', t('主题实测保真 {score}', { score: measured.score }), `${measured.testedAt.slice(0, 10)} · ${t('真实草稿读回')}`)
     else push('warn', t('主题实测保真 {score}', { score: measured.score }), t('有样式在微信端被清洗'))
     if (coverDataUrl !== '' || doc.meta.coverCustom === true) push('ok', t('封面已就绪'), '')
     else push('warn', t('封面还在生成'), t('等封面出现或手动上传'))
     if (bundleIds.length > 0) push('ok', t('合集共 {count} 篇', { count: bundleIds.length + 1 }), t('保存时会逐篇上传'))
     return checks
-  }, [previewHtmlLength, article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length, doc.design.themeId, houseStyle])
+  }, [previewHtmlLength, article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length, doc.design.themeId, doc.design.custom, houseStyle])
 
   const qa = React.useMemo(() => {
     const errors = preflight.filter(item => item.level === 'error').length

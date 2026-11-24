@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   parseArticle, parseInline, plainText, detectTopic, measure, composeDesign,
-  autoCompose, rankThemes, nextVariant, mixHex, readableOn, splitMarkdownChunks,
+  autoCompose, rankThemes, nextVariant, mixHex, readableOn, splitMarkdownChunks, normalizeCustomDesign,
   auditTypography, splitLongParagraphs, normalizeCjkPunctuation, tidyMarkdown, diffTextLines, replaceImageCaption, replaceImageSource, hashBlock, paletteFromPixels, replaceAllOccurrences, normalizeStyleGuide, auditHouseStyle, DEFAULT_STYLE_GUIDE,
 } from '../src/engine.mjs'
 import { THEMES } from '../src/themes.mjs'
@@ -507,4 +507,37 @@ test('编辑感主题启用首字下沉、关键词下划线与 END 收尾', () 
   assert.match(html, /border-bottom:2px solid #9A5B3D/)
   assert.match(html, />END</)
   assert.equal(composeDesign({ themeId: 'mono' }).decor.dropCap, false)
+})
+
+
+test('AI 自定义设计不依赖主题库，并支持覆盖与兜底', () => {
+  const custom = normalizeCustomDesign({
+    name: '夜色',
+    palette: { bg: '#101418', accent: '#D9A441' },
+    type: { titleFont: 'serif', titleSize: 34, bodySize: 16, lineHeight: 1.88, paddingX: 20 },
+    surface: { pattern: 'halftone', ornament: 'star' },
+    titleStyle: 'stacked',
+    sectionStyle: 'folio',
+    quoteStyle: 'margin',
+    imageStyle: 'plate',
+    options: { dropCap: true, imageWidth: 88, imageAlign: 'left' },
+  })
+  assert.equal(custom.palette.bg, '#101418')
+  assert.equal(custom.type.titleSize, 34)
+  const design = composeDesign({ custom })
+  assert.equal(design.themeId, 'custom')
+  assert.equal(design.themeName, '夜色')
+  assert.equal(design.surface.pattern, 'halftone')
+  assert.equal(design.decor.titleStyle, 'stacked')
+  assert.equal(design.decor.dropCap, true)
+  assert.equal(design.decor.imageWidth, 88)
+  const overridden = composeDesign({ custom, overrides: { accent: '#FF0000', titleSize: 28 } })
+  assert.equal(overridden.colors.accent, '#FF0000')
+  assert.equal(overridden.type.titleSize, 28)
+  const invalid = normalizeCustomDesign({ palette: { bg: 'red', accent: 'blue' }, type: { titleSize: 999, bodySize: 1 } })
+  assert.equal(invalid.palette.bg, '#FCFAF6')
+  assert.equal(invalid.type.titleSize, 40)
+  assert.equal(invalid.type.bodySize, 13)
+  const lowContrast = normalizeCustomDesign({ palette: { bg: '#FFFFFF', accent: '#FFFF00' } })
+  assert.notEqual(lowContrast.palette.accent, '#FFFF00')
 })

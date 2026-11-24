@@ -826,9 +826,15 @@ const UI_EN = {
   '短横线': 'Dash',
   '网点': 'Halftone',
   '星标': 'Star mark',
+  '自由发挥，不要套主题': 'Design it freely, no preset theme',
+  '预设只是起点；让 AI 自由设计会生成不限于主题库的版式。': 'Presets are a starting point; asking AI to design freely produces layouts beyond the theme library.',
   '做成海报感': 'Make it poster-like',
   '做成画册感': 'Make it art-book-like',
   '做成构成感': 'Make it Bauhaus-like',
+  'AI 自定义': 'AI custom',
+  '自定义': 'Custom',
+  'AI 自定义版式还没有真实账号实测': 'This AI-designed layout has not been tested against a real account yet',
+  '当前是 AI 自定义版式，没有预设变体；可以让 AI 再设计一版': 'This is an AI-designed layout with no preset variants; ask AI to design another version.',
 
   // 主题描述
   '衬线标题、细线与编号，克制的杂志内页': 'Serif headings, hairline rules and numbering: a restrained magazine spread',
@@ -1373,6 +1379,18 @@ function fidelityFor(themeId) {
  */
 
 
+/** Shared vocabulary for preset themes and AI-authored custom designs. */
+const DESIGN_BG_PATTERNS = ['none', 'paper', 'grid', 'dots', 'lines', 'wash', 'watercolor', 'halftone']
+const DESIGN_ORNAMENTS = ['none', 'corner', 'column', 'seal', 'leaf', 'sprig', 'star']
+const DESIGN_TITLE_STYLES = ['rule', 'kicker', 'ribbon', 'tag', 'boxed', 'vertical', 'underline', 'centered', 'eyebrow', 'poster', 'stacked']
+const DESIGN_SECTION_STYLES = ['bar', 'rule', 'tag', 'numbered', 'line', 'dot', 'ghost', 'brush', 'band', 'folio']
+const DESIGN_QUOTE_STYLES = ['bar', 'pull', 'card', 'center', 'tint', 'stamp', 'poster', 'margin']
+const DESIGN_DIVIDER_STYLES = ['dots', 'diamond', 'ornament', 'line', 'dash', 'none', 'star']
+const DESIGN_LIST_STYLES = ['dot', 'num', 'square', 'arrow', 'dash']
+const DESIGN_IMAGE_STYLES = ['plain', 'rounded', 'shadow', 'frame', 'polaroid', 'full', 'plate']
+const DESIGN_FONT_KINDS = ['serif', 'sans', 'round']
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+
 /* ------------------------------------------------------------------ *
  * Markdown-ish parsing
  * ------------------------------------------------------------------ */
@@ -1681,6 +1699,120 @@ function measure(blocks, text) {
   }
 }
 
+
+/** WCAG contrast ratio for two #RRGGBB colours. */
+function contrastRatio(a, b) {
+  const left = hexToRgb(a)
+  const right = hexToRgb(b)
+  if (left === null || right === null) return 21
+  const linear = value => {
+    const scaled = value / 255
+    return scaled <= 0.03928 ? scaled / 12.92 : ((scaled + 0.055) / 1.055) ** 2.4
+  }
+  const luminance = rgb => 0.2126 * linear(rgb.r) + 0.7152 * linear(rgb.g) + 0.0722 * linear(rgb.b)
+  const [high, low] = [luminance(left), luminance(right)].sort((x, y) => y - x)
+  return (high + 0.05) / (low + 0.05)
+}
+
+/** Nudge a foreground toward black/white until it clears the contrast floor. */
+function ensureReadable(foreground, background, minimum = 4.5) {
+  if (!HEX_COLOR.test(foreground) || !HEX_COLOR.test(background)) return foreground
+  if (contrastRatio(foreground, background) >= minimum) return foreground
+  const target = readableOn(background) === '#141414' ? '#000000' : '#FFFFFF'
+  for (let step = 1; step <= 10; step += 1) {
+    const candidate = mixHex(foreground, target, step / 10)
+    if (contrastRatio(candidate, background) >= minimum) return candidate
+  }
+  return target
+}
+
+const pickCustomHex = (value, fallback) => typeof value === 'string' && HEX_COLOR.test(value) ? value : fallback
+const pickCustomEnum = (value, allowed, fallback) => typeof value === 'string' && allowed.includes(value) ? value : fallback
+const pickCustomNumber = (value, fallback, min, max) => {
+  const number = typeof value === 'number' && Number.isFinite(value) ? value : fallback
+  return Math.min(max, Math.max(min, number))
+}
+const pickCustomEm = (value, fallback, min = 0, max = 0.08) => {
+  const number = typeof value === 'number' ? value : typeof value === 'string' ? parseFloat(value) : NaN
+  const safe = Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : parseFloat(fallback) || 0
+  return `${Math.round(safe * 1000) / 1000}em`
+}
+
+/**
+ * Validate an AI-authored design into a complete token set. The model can
+ * invent a palette, type scale and combination of layout primitives; values
+ * are clamped and enum-checked so the renderer only sees safe inputs.
+ * @param {object} raw custom design fragment.
+ * @returns {object|null} complete custom design, or null when absent/empty.
+ */
+function normalizeCustomDesign(raw) {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const meaningful = ['palette', 'type', 'surface', 'titleStyle', 'sectionStyle', 'quoteStyle', 'dividerStyle', 'listStyle', 'imageStyle', 'options']
+  if (!meaningful.some(key => raw[key] !== undefined)) return null
+  const base = themeOf('column')
+  const paletteRaw = raw.palette !== null && typeof raw.palette === 'object' && !Array.isArray(raw.palette) ? raw.palette : {}
+  const bg = pickCustomHex(paletteRaw.bg, base.palette.bg)
+  const dark = readableOn(bg) === '#FFFFFF'
+  const text = ensureReadable(pickCustomHex(paletteRaw.text, dark ? '#F6F4EF' : '#1E1B18'), bg)
+  const accent = ensureReadable(pickCustomHex(paletteRaw.accent, base.palette.accent), bg)
+  const palette = {
+    bg,
+    card: pickCustomHex(paletteRaw.card, dark ? mixHex(bg, '#FFFFFF', 0.08) : mixHex(bg, '#000000', 0.04)),
+    text,
+    secondary: ensureReadable(pickCustomHex(paletteRaw.secondary, dark ? '#B9B4AA' : mixHex(text, bg, 0.4)), bg),
+    accent,
+    accentSoft: pickCustomHex(paletteRaw.accentSoft, mixHex(accent, dark ? '#000000' : '#FFFFFF', dark ? 0.55 : 0.82)),
+    border: pickCustomHex(paletteRaw.border, dark ? mixHex(bg, '#FFFFFF', 0.16) : mixHex(bg, '#000000', 0.12)),
+  }
+  const typeRaw = raw.type !== null && typeof raw.type === 'object' && !Array.isArray(raw.type) ? raw.type : {}
+  const type = {
+    titleFont: pickCustomEnum(typeRaw.titleFont, DESIGN_FONT_KINDS, base.type.titleFont),
+    bodyFont: pickCustomEnum(typeRaw.bodyFont, DESIGN_FONT_KINDS, base.type.bodyFont),
+    titleSize: Math.round(pickCustomNumber(typeRaw.titleSize, base.type.titleSize, 20, 40)),
+    titleWeight: Math.round(pickCustomNumber(typeRaw.titleWeight, base.type.titleWeight, 300, 900) / 100) * 100,
+    titleTracking: pickCustomEm(typeRaw.titleTracking, base.type.titleTracking, -0.02, 0.08),
+    bodySize: Math.round(pickCustomNumber(typeRaw.bodySize, base.type.bodySize, 13, 20) * 2) / 2,
+    lineHeight: Math.round(pickCustomNumber(typeRaw.lineHeight, base.type.lineHeight, 1.5, 2.4) * 100) / 100,
+    letterSpacing: pickCustomEm(typeRaw.letterSpacing, base.type.letterSpacing, 0, 0.06),
+    paraGap: Math.round(pickCustomNumber(typeRaw.paraGap, base.type.paraGap, 10, 40)),
+    paddingX: Math.round(pickCustomNumber(typeRaw.paddingX, base.type.paddingX, 8, 28)),
+  }
+  const surfaceRaw = raw.surface !== null && typeof raw.surface === 'object' && !Array.isArray(raw.surface) ? raw.surface : {}
+  const surface = {
+    pattern: pickCustomEnum(surfaceRaw.pattern, DESIGN_BG_PATTERNS, 'none'),
+    ornament: pickCustomEnum(surfaceRaw.ornament, DESIGN_ORNAMENTS, 'none'),
+  }
+  const optionsRaw = raw.options !== null && typeof raw.options === 'object' && !Array.isArray(raw.options) ? raw.options : {}
+  const optionBool = (key, fallback) => typeof optionsRaw[key] === 'boolean' ? optionsRaw[key] : fallback
+  const optionText = (key, max) => typeof optionsRaw[key] === 'string' ? optionsRaw[key].slice(0, max) : ''
+  const options = {
+    dropCap: optionBool('dropCap', false),
+    lead: optionBool('lead', true),
+    showMeta: optionBool('showMeta', true),
+    showFooter: optionBool('showFooter', true),
+    showEyebrow: optionBool('showEyebrow', true),
+    eyebrow: optionText('eyebrow', 40),
+    footerText: optionText('footerText', 140),
+    footerSign: optionText('footerSign', 40),
+    imageWidth: Math.round(pickCustomNumber(optionsRaw.imageWidth, 100, 40, 100)),
+    imageAlign: pickCustomEnum(optionsRaw.imageAlign, ['left', 'center', 'right'], 'center'),
+  }
+  return {
+    name: typeof raw.name === 'string' ? raw.name.trim().slice(0, 24) : '',
+    tagline: typeof raw.tagline === 'string' ? raw.tagline.trim().slice(0, 60) : '',
+    palette,
+    type,
+    surface,
+    titleStyle: pickCustomEnum(raw.titleStyle, DESIGN_TITLE_STYLES, 'rule'),
+    sectionStyle: pickCustomEnum(raw.sectionStyle, DESIGN_SECTION_STYLES, 'rule'),
+    quoteStyle: pickCustomEnum(raw.quoteStyle, DESIGN_QUOTE_STYLES, 'pull'),
+    dividerStyle: pickCustomEnum(raw.dividerStyle, DESIGN_DIVIDER_STYLES, 'line'),
+    listStyle: pickCustomEnum(raw.listStyle, DESIGN_LIST_STYLES, 'dot'),
+    imageStyle: pickCustomEnum(raw.imageStyle, DESIGN_IMAGE_STYLES, 'plain'),
+    options,
+  }
+}
+
 /**
  * Compose the design object the renderer consumes: theme palette and type
  * scale, variant decoration vocabulary, then explicit user overrides.
@@ -1689,8 +1821,26 @@ function measure(blocks, text) {
  */
 function composeDesign(stored) {
   const input = stored && typeof stored === 'object' ? stored : {}
-  const theme = themeOf(input.themeId)
-  const variant = variantOf(theme, input.variantId)
+  const custom = normalizeCustomDesign(input.custom)
+  const theme = custom === null ? themeOf(input.themeId) : {
+    id: 'custom',
+    name: custom.name !== '' ? custom.name : 'AI 自定义',
+    tagline: custom.tagline !== '' ? custom.tagline : 'AI 按内容生成的一套版式',
+    palette: custom.palette,
+    type: custom.type,
+    surface: custom.surface,
+    variants: [{
+      id: 'custom',
+      name: '自定义',
+      titleStyle: custom.titleStyle,
+      sectionStyle: custom.sectionStyle,
+      dividerStyle: custom.dividerStyle,
+      quoteStyle: custom.quoteStyle,
+      listStyle: custom.listStyle,
+      imageStyle: custom.imageStyle,
+    }],
+  }
+  const variant = custom === null ? variantOf(theme, input.variantId) : theme.variants[0]
   const overrides = input.overrides && typeof input.overrides === 'object' ? input.overrides : {}
 
   const colors = { ...theme.palette }
@@ -1720,14 +1870,12 @@ function composeDesign(stored) {
   }
   colors.accentInk = readableOn(colors.accent)
 
-  const BG_PATTERNS = ['none', 'paper', 'grid', 'dots', 'lines', 'wash', 'watercolor', 'halftone']
-  const ORNAMENTS = ['none', 'corner', 'column', 'seal', 'leaf', 'sprig', 'star']
-  const defaultPattern = BG_PATTERNS.includes(theme.surface?.pattern) ? theme.surface.pattern : 'none'
-  const defaultOrnament = ORNAMENTS.includes(theme.surface?.ornament) ? theme.surface.ornament : 'none'
+  const defaultPattern = DESIGN_BG_PATTERNS.includes(theme.surface?.pattern) ? theme.surface.pattern : 'none'
+  const defaultOrnament = DESIGN_ORNAMENTS.includes(theme.surface?.ornament) ? theme.surface.ornament : 'none'
   const surface = {
     bg: colors.bg,
-    pattern: BG_PATTERNS.includes(overrides.bgStyle) ? overrides.bgStyle : defaultPattern,
-    ornament: ORNAMENTS.includes(overrides.ornament) ? overrides.ornament : defaultOrnament,
+    pattern: DESIGN_BG_PATTERNS.includes(overrides.bgStyle) ? overrides.bgStyle : defaultPattern,
+    ornament: DESIGN_ORNAMENTS.includes(overrides.ornament) ? overrides.ornament : defaultOrnament,
     ink: readableOn(colors.bg) === '#FFFFFF' ? '255,255,255' : '17,17,17',
     wash: colors.accent,
   }
@@ -1755,6 +1903,22 @@ function composeDesign(stored) {
     titleGap: Math.round(pick(overrides.titleGap, Math.max(18, Math.round(type.paraGap * 0.9)), 8, 40)),
   }
 
+  const customOption = custom === null ? null : custom.options
+  const optionBool = (key, fallback) => typeof overrides[key] === 'boolean'
+    ? overrides[key]
+    : typeof customOption?.[key] === 'boolean' ? customOption[key] : fallback
+  const optionText = (key, fallback) => {
+    if (typeof overrides[key] === 'string') return overrides[key]
+    if (customOption !== null && typeof customOption[key] === 'string' && customOption[key] !== '') return customOption[key]
+    return fallback
+  }
+  const optionNumber = (key, fallback, min, max) => {
+    const value = typeof overrides[key] === 'number' && Number.isFinite(overrides[key])
+      ? overrides[key]
+      : customOption !== null && typeof customOption[key] === 'number' && Number.isFinite(customOption[key]) ? customOption[key] : fallback
+    return Math.round(Math.min(max, Math.max(min, value)))
+  }
+
   const decor = {
     titleStyle: overrides.titleStyle ?? variant.titleStyle,
     sectionStyle: overrides.sectionStyle ?? variant.sectionStyle,
@@ -1762,28 +1926,29 @@ function composeDesign(stored) {
     quoteStyle: overrides.quoteStyle ?? variant.quoteStyle,
     listStyle: overrides.listStyle ?? variant.listStyle,
     imageStyle: overrides.imageStyle ?? variant.imageStyle,
-    imageWidth: Math.round(Math.min(100, Math.max(40, typeof overrides.imageWidth === 'number' && Number.isFinite(overrides.imageWidth) ? overrides.imageWidth : 100))),
-    imageAlign: ['left', 'center', 'right'].includes(overrides.imageAlign) ? overrides.imageAlign : 'center',
-    showMeta: overrides.showMeta !== false,
-    showFooter: overrides.showFooter !== false,
-    showEyebrow: overrides.showEyebrow !== false,
-    lead: overrides.lead !== false,
-    dropCap: theme.dropCap === true && overrides.dropCap !== false,
-    eyebrow: typeof overrides.eyebrow === 'string' ? overrides.eyebrow : '',
-    footerText: typeof overrides.footerText === 'string' && overrides.footerText.trim() !== ''
-      ? overrides.footerText
-      : '如果这篇内容对你有帮助，欢迎点个「在看」或转发给需要的人。',
-    footerSign: typeof overrides.footerSign === 'string' ? overrides.footerSign : '',
+    imageWidth: optionNumber('imageWidth', 100, 40, 100),
+    imageAlign: ['left', 'center', 'right'].includes(overrides.imageAlign)
+      ? overrides.imageAlign
+      : customOption?.imageAlign ?? 'center',
+    showMeta: optionBool('showMeta', true),
+    showFooter: optionBool('showFooter', true),
+    showEyebrow: optionBool('showEyebrow', true),
+    lead: optionBool('lead', true),
+    dropCap: optionBool('dropCap', theme.dropCap === true),
+    eyebrow: optionText('eyebrow', ''),
+    footerText: optionText('footerText', '如果这篇内容对你有帮助，欢迎点个「在看」或转发给需要的人。'),
+    footerSign: optionText('footerSign', ''),
   }
 
   return {
-    themeId: theme.id,
-    variantId: variant.id,
+    themeId: custom === null ? theme.id : 'custom',
+    variantId: custom === null ? variant.id : 'custom',
     themeName: theme.name,
     themeBg: theme.palette.bg,
     surface,
     variantName: variant.name,
     tagline: theme.tagline,
+    custom: custom ?? undefined,
     colors,
     type,
     layout,
@@ -2234,6 +2399,7 @@ function pickVariant(theme, features, seed = 0) {
 
 /** Cycle to the theme's other variant, keeping the caller's overrides. */
 function nextVariant(design) {
+  if (design?.custom !== undefined && design.custom !== null) return { ...design }
   const theme = themeOf(design?.themeId)
   const current = variantOf(theme, design?.variantId)
   const index = theme.variants.findIndex(variant => variant.id === current.id)
@@ -5117,6 +5283,10 @@ function StudioPanel(props) {
   }
 
   const reshuffle = () => {
+    if (doc.design.custom !== undefined && doc.design.custom !== null) {
+      toast(t('当前是 AI 自定义版式，没有预设变体；可以让 AI 再设计一版'))
+      return
+    }
     store.updateDesign(current => nextVariant(current))
     const next = composeDesign(nextVariant(doc.design))
     toast(`换了一版：${t(next.themeName)} · ${t(next.variantName)}`)
@@ -5149,6 +5319,7 @@ function StudioPanel(props) {
   const composeFromCurrent = React.useCallback((announce) => {
     const current = store.getDoc()
     if (!current || current.text.trim().length < 40) return null
+    if (current.design?.custom !== undefined && current.design?.custom !== null) return current.design
     const parsedNow = parseArticle(current.text)
     if (parsedNow.blocks.length === 0) return null
     const designNow = autoCompose(parsedNow.blocks, current.text, 0).design
@@ -5185,7 +5356,20 @@ function StudioPanel(props) {
         toast('你刚手动调过版式，AI 精排的结果没有覆盖它')
         return
       }
-      if (!value.design || typeof value.design.themeId !== 'string') return
+      if (!value.design) return
+      if (value.design.custom !== undefined && value.design.custom !== null) {
+        const design = {
+          themeId: 'custom',
+          variantId: 'custom',
+          custom: value.design.custom,
+          overrides: value.design.overrides ?? {},
+        }
+        store.updateDoc(entry => ({ ...entry, design }))
+        const composed = composeDesign(design)
+        toast(`AI 精排完成：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
+        return
+      }
+      if (typeof value.design.themeId !== 'string') return
       const theme = THEMES.find(entry => entry.id === value.design.themeId)
       if (theme === undefined) return
       const variantId = theme.variants.some(entry => entry.id === value.design.variantId)
@@ -7012,6 +7196,16 @@ function AiSection(props) {
       }
       let nextDesign
       if (scopeLines === null && value.design && typeof value.design === 'object') {
+        if (value.design.custom !== undefined && value.design.custom !== null) {
+          nextDesign = {
+            themeId: 'custom',
+            variantId: 'custom',
+            custom: value.design.custom,
+            overrides: value.design.overrides ?? {},
+          }
+        }
+      }
+      if (scopeLines === null && value.design && typeof value.design === 'object' && nextDesign === undefined) {
         const theme = THEMES.find(entry => entry.id === value.design.themeId)
         const themeId = theme === undefined ? current.design.themeId : theme.id
         const variant = theme === undefined
@@ -7113,7 +7307,7 @@ function AiSection(props) {
     setPending(null)
   }
 
-  const suggestions = [t('做成海报感'), t('做成画册感'), t('做成构成感'), t('按内容重新精排'), t('标题更有冲击力'), t('第二段压缩到两行'), t('换成杂志版式'), t('加一个小节标题'), t('行距调到 1.9')]
+  const suggestions = [t('自由发挥，不要套主题'), t('做成海报感'), t('做成画册感'), t('做成构成感'), t('按内容重新精排'), t('标题更有冲击力'), t('第二段压缩到两行'), t('换成杂志版式'), t('加一个小节标题'), t('行距调到 1.9')]
 
   return h('div', { className: 'ws-chat' },
     h('div', { className: 'ws-card-head' },
@@ -7180,6 +7374,9 @@ function AiSection(props) {
           : h('p', { className: 'ws-hint' }, t('只调整版式与标题摘要，不改正文')),
         pending.design !== undefined
           ? h('p', { className: 'ws-hint' }, t('版式：{theme}', { theme: (() => {
+            if (pending.design.custom !== undefined && pending.design.custom !== null) {
+              return t(pending.design.custom.name || 'AI 自定义')
+            }
             const theme = THEMES.find(entry => entry.id === pending.design.themeId)
             const variant = theme?.variants.find(entry => entry.id === pending.design.variantId)
             return `${t(theme?.name ?? pending.design.themeId)}${variant === undefined ? '' : ` · ${t(variant.name)}`}`
@@ -7445,7 +7642,15 @@ function ThemeSection(props) {
       setDnaBusy(false)
     }
   }
-  const activeTheme = THEMES.find(theme => theme.id === design.themeId) ?? THEMES[0]
+  const customTheme = design.custom === undefined || design.custom === null ? null : {
+    id: 'custom',
+    name: design.themeName,
+    tagline: design.tagline,
+    palette: design.colors,
+    type: design.type,
+    variants: [{ id: 'custom', name: design.variantName, ...design.decor }],
+  }
+  const activeTheme = customTheme ?? THEMES.find(theme => theme.id === design.themeId) ?? THEMES[0]
   const toggleFavorite = (themeId) => {
     setFavorites((list) => {
       const next = list.includes(themeId) ? list.filter(id => id !== themeId) : [themeId, ...list]
@@ -7473,6 +7678,7 @@ function ThemeSection(props) {
         design: {
           themeId: theme.id,
           variantId: theme.variants[0].id,
+          custom: null,
           overrides: {
             ...preservedAccent,
             eyebrow: previous.eyebrow ?? analysis.label,
@@ -7482,7 +7688,10 @@ function ThemeSection(props) {
       }
     })
   }
-  const setVariant = (variantId) => store.updateDesign(current => ({ ...current, variantId }))
+  const setVariant = (variantId) => {
+    if (design.custom !== undefined && design.custom !== null) return
+    store.updateDesign(current => ({ ...current, variantId }))
+  }
   const setAccent = (accent) => store.updateDesign(current => ({
     ...current,
     overrides: { ...(current.overrides ?? {}), accent },
@@ -7509,6 +7718,7 @@ function ThemeSection(props) {
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('主题库')), h('span', { className: 'ws-group-note' }, t('{count} 个版式', { count: THEMES.reduce((count, entry) => count + entry.variants.length, 0) }))),
+      h('p', { className: 'ws-hint' }, t('预设只是起点；让 AI 自由设计会生成不限于主题库的版式。')),
       h('div', { className: 'ws-chips ws-theme-filter' },
         [['all', t('全部')], ['favorites', t('收藏')], ['recent', t('最近')]].map(([id, label]) => h('button', {
           key: id,
@@ -7517,9 +7727,20 @@ function ThemeSection(props) {
           onClick: () => setFilter(id),
         }, label)),
       ),
-      visibleThemes.length === 0
+      visibleThemes.length === 0 && customTheme === null
         ? h('p', { className: 'ws-hint' }, t('还没有收藏主题；点主题卡上的星标即可收藏。'))
         : h('div', { className: 'ws-themes' },
+          customTheme !== null
+            ? h('div', { key: 'custom', className: 'ws-theme ws-theme-custom on', role: 'group' },
+              h(ThemeMiniPreview, { theme: customTheme }),
+              h('span', { className: 'ws-theme-meta' },
+                h('span', { className: 'ws-theme-name-row' },
+                  h('span', { className: 'ws-theme-name' }, t(customTheme.name)),
+                  h('span', { className: 'ws-badge' }, t('AI 自定义')),
+                ),
+                h('span', { className: 'ws-theme-tag' }, t(customTheme.tagline)),
+              ))
+            : null,
           visibleThemes.map(theme => h('div', {
             key: theme.id,
             role: 'button',
@@ -7700,8 +7921,8 @@ function TypeSection(props) {
     store.updateDesign(current => withoutOverrideKeys(current, TYPE_OVERRIDE_KEYS))
     toast(t('已恢复当前主题的默认排版'))
   }
-  const theme = THEMES.find(entry => entry.id === design.themeId) ?? THEMES[0]
-  const base = theme.type
+  const theme = THEMES.find(entry => entry.id === design.themeId)
+  const base = design.custom !== undefined && design.custom !== null ? design.type : (theme ?? THEMES[0]).type
   const round2 = value => Math.round(value * 100) / 100
   const presetSpecs = [
     {
@@ -8146,15 +8367,16 @@ function PublishSection(props) {
     if (houseStyle.bannedHits.length > 0) push('warn', t('禁用词出现 {count} 次', { count: houseStyle.bannedHits.reduce((sum, item) => sum + item.count, 0) }), houseStyle.bannedHits.map(item => item.word).join('、'))
     if (houseStyle.longParagraphs > 0) push('warn', t('超过段落上限 {count} 段', { count: houseStyle.longParagraphs }), `${houseStyle.guide.maxParagraphChars} ${t('字')}`)
     if (houseStyle.missingCaptions > 0) push('warn', t('缺图注 {count} 张', { count: houseStyle.missingCaptions }), t('规范要求正文图片带图注'))
-    const measured = fidelityFor(doc.design.themeId)
-    if (measured === null) push('warn', t('这个主题还没有真实账号实测'), '')
+    const isCustomDesign = doc.design.custom !== undefined && doc.design.custom !== null
+    const measured = isCustomDesign ? null : fidelityFor(doc.design.themeId)
+    if (measured === null) push('warn', t(isCustomDesign ? 'AI 自定义版式还没有真实账号实测' : '这个主题还没有真实账号实测'), '')
     else if (measured.ok) push('ok', t('主题实测保真 {score}', { score: measured.score }), `${measured.testedAt.slice(0, 10)} · ${t('真实草稿读回')}`)
     else push('warn', t('主题实测保真 {score}', { score: measured.score }), t('有样式在微信端被清洗'))
     if (coverDataUrl !== '' || doc.meta.coverCustom === true) push('ok', t('封面已就绪'), '')
     else push('warn', t('封面还在生成'), t('等封面出现或手动上传'))
     if (bundleIds.length > 0) push('ok', t('合集共 {count} 篇', { count: bundleIds.length + 1 }), t('保存时会逐篇上传'))
     return checks
-  }, [previewHtmlLength, article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length, doc.design.themeId, houseStyle])
+  }, [previewHtmlLength, article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length, doc.design.themeId, doc.design.custom, houseStyle])
 
   const qa = React.useMemo(() => {
     const errors = preflight.filter(item => item.level === 'error').length

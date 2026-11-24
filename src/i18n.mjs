@@ -815,9 +815,15 @@ const UI_EN = {
   '短横线': 'Dash',
   '网点': 'Halftone',
   '星标': 'Star mark',
+  '自由发挥，不要套主题': 'Design it freely, no preset theme',
+  '预设只是起点；让 AI 自由设计会生成不限于主题库的版式。': 'Presets are a starting point; asking AI to design freely produces layouts beyond the theme library.',
   '做成海报感': 'Make it poster-like',
   '做成画册感': 'Make it art-book-like',
   '做成构成感': 'Make it Bauhaus-like',
+  'AI 自定义': 'AI custom',
+  '自定义': 'Custom',
+  'AI 自定义版式还没有真实账号实测': 'This AI-designed layout has not been tested against a real account yet',
+  '当前是 AI 自定义版式，没有预设变体；可以让 AI 再设计一版': 'This is an AI-designed layout with no preset variants; ask AI to design another version.',
 
   // 主题描述
   '衬线标题、细线与编号，克制的杂志内页': 'Serif headings, hairline rules and numbering: a restrained magazine spread',

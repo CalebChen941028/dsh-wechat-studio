@@ -664,6 +664,10 @@ function StudioPanel(props) {
   }
 
   const reshuffle = () => {
+    if (doc.design.custom !== undefined && doc.design.custom !== null) {
+      toast(t('当前是 AI 自定义版式，没有预设变体；可以让 AI 再设计一版'))
+      return
+    }
     store.updateDesign(current => nextVariant(current))
     const next = composeDesign(nextVariant(doc.design))
     toast(`换了一版：${t(next.themeName)} · ${t(next.variantName)}`)
@@ -696,6 +700,7 @@ function StudioPanel(props) {
   const composeFromCurrent = React.useCallback((announce) => {
     const current = store.getDoc()
     if (!current || current.text.trim().length < 40) return null
+    if (current.design?.custom !== undefined && current.design?.custom !== null) return current.design
     const parsedNow = parseArticle(current.text)
     if (parsedNow.blocks.length === 0) return null
     const designNow = autoCompose(parsedNow.blocks, current.text, 0).design
@@ -732,7 +737,20 @@ function StudioPanel(props) {
         toast('你刚手动调过版式，AI 精排的结果没有覆盖它')
         return
       }
-      if (!value.design || typeof value.design.themeId !== 'string') return
+      if (!value.design) return
+      if (value.design.custom !== undefined && value.design.custom !== null) {
+        const design = {
+          themeId: 'custom',
+          variantId: 'custom',
+          custom: value.design.custom,
+          overrides: value.design.overrides ?? {},
+        }
+        store.updateDoc(entry => ({ ...entry, design }))
+        const composed = composeDesign(design)
+        toast(`AI 精排完成：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
+        return
+      }
+      if (typeof value.design.themeId !== 'string') return
       const theme = THEMES.find(entry => entry.id === value.design.themeId)
       if (theme === undefined) return
       const variantId = theme.variants.some(entry => entry.id === value.design.variantId)

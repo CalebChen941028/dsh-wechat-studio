@@ -57,6 +57,7 @@ export function createDraftTool({ service, StudioError }) {
         digest: { type: 'string', description: 'Summary shown in the WeChat list, at most 120 characters.' },
         themeId: { type: 'string', description: 'Theme id: ink, paper, pine, ocean, magazine, rose, amber, night, festival, scholar, mint, mono. Omit to pick one from the content.' },
         variantId: { type: 'string', description: 'Variant id inside the theme; omit for the theme default.' },
+        custom: { type: 'object', description: 'AI-authored custom design token set. Takes precedence over themeId and variantId.' },
         coverDataUrl: { type: 'string', description: 'Cover image as a PNG/JPEG data URL (900x383 recommended). Required unless coverMediaId is given.' },
         coverMediaId: { type: 'string', description: 'Existing WeChat permanent image media_id to use as the cover.' },
         coverPath: { type: 'string', description: 'Absolute path of a local PNG/JPEG to upload as the cover; an alternative to coverDataUrl.' },
@@ -77,11 +78,13 @@ export function createDraftTool({ service, StudioError }) {
         const title = (typeof args?.title === 'string' && args.title.trim() !== '' ? args.title.trim() : parsed.title).trim()
         if (title === '') throw new StudioError('title-required', '标题为空：传 title，或在 Markdown 第一行写 # 标题')
         const features = measure(parsed.blocks, markdown)
-        const design = composeDesign(
-          typeof args?.themeId === 'string'
-            ? { themeId: args.themeId, variantId: typeof args?.variantId === 'string' ? args.variantId : undefined }
-            : autoCompose(parsed.blocks, markdown, 0).design,
-        )
+        const design = args?.custom !== null && typeof args?.custom === 'object' && !Array.isArray(args.custom)
+          ? composeDesign({ custom: args.custom })
+          : composeDesign(
+            typeof args?.themeId === 'string'
+              ? { themeId: args.themeId, variantId: typeof args?.variantId === 'string' ? args.variantId : undefined }
+              : autoCompose(parsed.blocks, markdown, 0).design,
+          )
         const tree = buildArticle({
           blocks: parsed.blocks,
           design,
