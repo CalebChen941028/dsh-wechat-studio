@@ -972,10 +972,11 @@ const THEMES = [
     name: '专栏',
     tagline: '衬线标题、细线与编号，克制的杂志内页',
     mood: ['克制', '耐读', '编辑感'],
+    dropCap: true,
     topics: { writing: 0.9, culture: 0.75, lifestyle: 0.5, emotion: 0.4, academic: 0.5, business: 0.3, tech: 0.2 },
     palette: {
-      bg: '#FFFFFF', card: '#F7F4EE', text: '#171614', secondary: '#6F6A62',
-      accent: '#8C3B2E', accentSoft: '#F3EAE5', border: '#E3DED4',
+      bg: '#FCFAF6', card: '#F4EFE6', text: '#1E1B18', secondary: '#6F675D',
+      accent: '#9A5B3D', accentSoft: '#F0E4DB', border: '#E3D9CC',
     },
     type: { titleFont: SERIF, bodyFont: SERIF, titleSize: 31, titleWeight: 600, titleTracking: '0.01em', bodySize: 16, lineHeight: 1.92, letterSpacing: '0.015em', paraGap: 24, paddingX: 20 },
     variants: [
@@ -990,8 +991,8 @@ const THEMES = [
     mood: ['克制', '深度', '编辑感'],
     topics: { academic: 0.55, culture: 0.6, tech: 0.5, business: 0.5, lifestyle: 0.35, writing: 0.85 },
     palette: {
-      bg: '#FFFFFF', card: '#F6F5F2', text: '#18191B', secondary: '#6B6D70',
-      accent: '#18191B', accentSoft: '#EDEBE6', border: '#E5E2DB',
+      bg: '#FAF9F5', card: '#F1EFE8', text: '#232323', secondary: '#6E6A63',
+      accent: '#2F2A26', accentSoft: '#E8E4DB', border: '#DED9CF',
     },
     type: { titleFont: SERIF, bodyFont: SANS, titleSize: 30, titleWeight: 600, titleTracking: '0.03em', bodySize: 15.5, lineHeight: 1.85, letterSpacing: '0.015em', paraGap: 22, paddingX: 18 },
     variants: [
@@ -1004,10 +1005,11 @@ const THEMES = [
     name: '米纸',
     tagline: '旧纸的暖调，像一本翻旧了的随笔集',
     mood: ['温润', '文学', '慢'],
+    dropCap: true,
     topics: { culture: 0.85, lifestyle: 0.6, emotion: 0.75, academic: 0.3, writing: 0.5 },
     palette: {
-      bg: '#FBF7EF', card: '#F4EDDF', text: '#3A322A', secondary: '#7C7163',
-      accent: '#A8763E', accentSoft: '#F0E5D2', border: '#E5D9C4',
+      bg: '#F8F1E3', card: '#EFE3CE', text: '#3A3026', secondary: '#7A6A57',
+      accent: '#8E5E2F', accentSoft: '#EDE0CA', border: '#E0D2B8',
     },
     type: { titleFont: SERIF, bodyFont: SERIF, titleSize: 29, titleWeight: 600, titleTracking: '0.04em', bodySize: 15.5, lineHeight: 1.95, letterSpacing: '0.02em', paraGap: 24, paddingX: 20 },
     variants: [
@@ -1022,8 +1024,8 @@ const THEMES = [
     mood: ['清新', '成长', '利落'],
     topics: { education: 0.8, lifestyle: 0.65, health: 0.7, tech: 0.45, parent: 0.55, writing: 0.35 },
     palette: {
-      bg: '#FFFFFF', card: '#F2F8F3', text: '#1C2B22', secondary: '#5F7268',
-      accent: '#2E7D5B', accentSoft: '#E3F2E9', border: '#D8E7DD',
+      bg: '#F8FAF5', card: '#EAF2E6', text: '#253027', secondary: '#657366',
+      accent: '#4E7A5A', accentSoft: '#E3EFE4', border: '#D6E3D7',
     },
     type: { titleFont: SANS, bodyFont: SANS, titleSize: 28, titleWeight: 600, titleTracking: '0.02em', bodySize: 15.5, lineHeight: 1.8, letterSpacing: '0.01em', paraGap: 20, paddingX: 18 },
     variants: [
@@ -1038,8 +1040,8 @@ const THEMES = [
     mood: ['专业', '理性', '结构'],
     topics: { business: 0.9, tech: 0.75, finance: 0.8, academic: 0.6, education: 0.5, writing: 0.45 },
     palette: {
-      bg: '#FFFFFF', card: '#F1F5FA', text: '#17233A', secondary: '#5A6A82',
-      accent: '#1F5FA8', accentSoft: '#E6EFF9', border: '#D7E2EF',
+      bg: '#F6F8FB', card: '#E8EFF7', text: '#1F2A35', secondary: '#66717D',
+      accent: '#3C6288', accentSoft: '#E2EBF3', border: '#D6E1EA',
     },
     type: { titleFont: SANS, bodyFont: SANS, titleSize: 28, titleWeight: 700, titleTracking: '0.01em', bodySize: 15.5, lineHeight: 1.8, letterSpacing: '0.01em', paraGap: 20, paddingX: 18 },
     variants: [
@@ -1054,8 +1056,8 @@ const THEMES = [
     mood: ['锋利', '时髦', '视觉'],
     topics: { lifestyle: 0.8, business: 0.7, tech: 0.6, beauty: 0.8, food: 0.5, writing: 0.6 },
     palette: {
-      bg: '#FFFFFF', card: '#FAFAF8', text: '#101010', secondary: '#6E6E6E',
-      accent: '#E8A600', accentSoft: '#FFF4D6', border: '#EBEBEB',
+      bg: '#FAF7F2', card: '#F0E8DC', text: '#171513', secondary: '#6B6359',
+      accent: '#C04A2E', accentSoft: '#F3E3DC', border: '#E1D6C8',
     },
     type: { titleFont: SANS, bodyFont: SANS, titleSize: 34, titleWeight: 800, titleTracking: '0em', bodySize: 16, lineHeight: 1.75, letterSpacing: '0.01em', paraGap: 20, paddingX: 16 },
     variants: [
@@ -1070,8 +1072,8 @@ const THEMES = [
     mood: ['柔和', '精致', '亲近'],
     topics: { beauty: 0.95, lifestyle: 0.75, emotion: 0.7, food: 0.45, writing: 0.3 },
     palette: {
-      bg: '#FFFBFB', card: '#FDF1F2', text: '#2E2225', secondary: '#7C6B6F',
-      accent: '#C2606F', accentSoft: '#FBE7EA', border: '#F0DDE0',
+      bg: '#FBF6F5', card: '#F5E9E8', text: '#35282B', secondary: '#7A6265',
+      accent: '#8E4A55', accentSoft: '#F2E3E4', border: '#E8D6D7',
     },
     type: { titleFont: SANS, bodyFont: SANS, titleSize: 28, titleWeight: 600, titleTracking: '0.03em', bodySize: 15.5, lineHeight: 1.85, letterSpacing: '0.015em', paraGap: 22, paddingX: 18 },
     variants: [
@@ -1086,8 +1088,8 @@ const THEMES = [
     mood: ['温暖', '叙事', '生活'],
     topics: { emotion: 0.9, lifestyle: 0.7, food: 0.6, education: 0.35, parent: 0.5, writing: 0.35 },
     palette: {
-      bg: '#FFFDF8', card: '#FFF3E6', text: '#2D2419', secondary: '#7A6A57',
-      accent: '#D97B29', accentSoft: '#FDEBD9', border: '#F0E0CD',
+      bg: '#FDF8F0', card: '#F7EBDD', text: '#342A22', secondary: '#7A6A5A',
+      accent: '#9C532A', accentSoft: '#F5E4D7', border: '#E8D7C5',
     },
     type: { titleFont: SERIF, bodyFont: SANS, titleSize: 28, titleWeight: 600, titleTracking: '0.03em', bodySize: 15.5, lineHeight: 1.9, letterSpacing: '0.015em', paraGap: 23, paddingX: 18 },
     variants: [
@@ -1102,8 +1104,8 @@ const THEMES = [
     mood: ['沉静', '思辨', '夜读'],
     topics: { tech: 0.85, academic: 0.65, culture: 0.55, business: 0.55, emotion: 0.45, writing: 0.35 },
     palette: {
-      bg: '#FFFFFF', card: '#F2F4F8', text: '#1B2440', secondary: '#5D6780',
-      accent: '#3A4E8C', accentSoft: '#E9EDF7', border: '#DCE2EF',
+      bg: '#F4F5F8', card: '#E7EAF1', text: '#1D2430', secondary: '#66707F',
+      accent: '#4B5C7A', accentSoft: '#E2E7EF', border: '#D5DCE7',
     },
     type: { titleFont: SANS, bodyFont: SANS, titleSize: 28, titleWeight: 700, titleTracking: '0.02em', bodySize: 15.5, lineHeight: 1.85, letterSpacing: '0.01em', paraGap: 22, paddingX: 18 },
     variants: [
@@ -1118,8 +1120,8 @@ const THEMES = [
     mood: ['热闹', '祝福', '仪式'],
     topics: { festival: 0.95, culture: 0.5, business: 0.4, emotion: 0.5, writing: 0.2 },
     palette: {
-      bg: '#FFFFFF', card: '#FFF4F2', text: '#2A1512', secondary: '#7D5A54',
-      accent: '#C8342C', accentSoft: '#FCE7E4', border: '#F3D8D4',
+      bg: '#FDF6EE', card: '#F8E7D8', text: '#3A211C', secondary: '#7A5A4E',
+      accent: '#B23A2E', accentSoft: '#F3DCD4', border: '#E8D1C3',
     },
     type: { titleFont: SERIF, bodyFont: SANS, titleSize: 30, titleWeight: 700, titleTracking: '0.05em', bodySize: 15.5, lineHeight: 1.85, letterSpacing: '0.015em', paraGap: 22, paddingX: 18 },
     variants: [
@@ -1132,10 +1134,11 @@ const THEMES = [
     name: '学术',
     tagline: '编号、脚注式引用，适合研究与长文',
     mood: ['严谨', '正式', '论证'],
+    dropCap: true,
     topics: { academic: 0.95, education: 0.7, business: 0.55, finance: 0.6, tech: 0.5, writing: 0.4 },
     palette: {
-      bg: '#FFFFFF', card: '#F4F6F9', text: '#14202E', secondary: '#55637A',
-      accent: '#24486E', accentSoft: '#E8EEF4', border: '#D9E1EA',
+      bg: '#FBF9F4', card: '#F0EBE1', text: '#2A2A26', secondary: '#6F6A60',
+      accent: '#5A6B4A', accentSoft: '#E8EADF', border: '#DDD6C8',
     },
     type: { titleFont: SERIF, bodyFont: SERIF, titleSize: 26, titleWeight: 700, titleTracking: '0.02em', bodySize: 15, lineHeight: 1.95, letterSpacing: '0.02em', paraGap: 20, paddingX: 18 },
     variants: [
@@ -1150,8 +1153,8 @@ const THEMES = [
     mood: ['干净', '轻快', '说明'],
     topics: { tech: 0.85, health: 0.75, education: 0.6, lifestyle: 0.5, writing: 0.35 },
     palette: {
-      bg: '#FFFFFF', card: '#F0FAF8', text: '#16302C', secondary: '#5B756F',
-      accent: '#149E8C', accentSoft: '#DFF5F1', border: '#D3EDE8',
+      bg: '#F7FAF8', card: '#E8F2EC', text: '#22302B', secondary: '#60736B',
+      accent: '#3F7D6B', accentSoft: '#E1F0E9', border: '#D2E4DB',
     },
     type: { titleFont: SANS, bodyFont: SANS, titleSize: 28, titleWeight: 600, titleTracking: '0.02em', bodySize: 15.5, lineHeight: 1.8, letterSpacing: '0.01em', paraGap: 20, paddingX: 18 },
     variants: [
@@ -1166,8 +1169,8 @@ const THEMES = [
     mood: ['中性', '效率', '清单'],
     topics: { tech: 0.6, business: 0.6, education: 0.5, academic: 0.5, writing: 0.4 },
     palette: {
-      bg: '#FCFCFC', card: '#F3F3F3', text: '#191919', secondary: '#6A6A6A',
-      accent: '#3D3D3D', accentSoft: '#ECECEC', border: '#E2E2E2',
+      bg: '#F7F7F6', card: '#ECECEA', text: '#2A2A28', secondary: '#6C6C68',
+      accent: '#555550', accentSoft: '#E6E6E2', border: '#DADAD6',
     },
     type: { titleFont: SANS, bodyFont: SANS, titleSize: 27, titleWeight: 700, titleTracking: '0.01em', bodySize: 15, lineHeight: 1.8, letterSpacing: '0.01em', paraGap: 18, paddingX: 18 },
     variants: [
@@ -1180,10 +1183,11 @@ const THEMES = [
     name: '画报',
     tagline: '独立杂志跨页感：衬线大标题、朱砂强调与隐约栏线',
     mood: ['杂志', '独立', '视觉'],
+    dropCap: true,
     topics: { lifestyle: 0.85, culture: 0.85, beauty: 0.75, travel: 0.8, writing: 0.65, food: 0.65 },
     palette: {
-      bg: '#FAF8F4', card: '#F2EDE4', text: '#181715', secondary: '#6D675E',
-      accent: '#C4432B', accentSoft: '#F5E6E1', border: '#E2DDD5',
+      bg: '#FAF6EE', card: '#F1E8DA', text: '#1D1A16', secondary: '#6E6558',
+      accent: '#B8452F', accentSoft: '#F1DED7', border: '#E1D4C2',
     },
     surface: { pattern: 'lines', ornament: 'corner' },
     type: { titleFont: SERIF, bodyFont: SANS, titleSize: 33, titleWeight: 700, titleTracking: '0.01em', bodySize: 15.5, lineHeight: 1.88, letterSpacing: '0.015em', paraGap: 22, paddingX: 20 },
@@ -1199,8 +1203,8 @@ const THEMES = [
     mood: ['插画', '明快', '绘本'],
     topics: { parent: 0.95, travel: 0.85, food: 0.85, lifestyle: 0.8, emotion: 0.7, education: 0.6 },
     palette: {
-      bg: '#FFFBF2', card: '#FDF1E3', text: '#2C241E', secondary: '#7A6B5D',
-      accent: '#D96B43', accentSoft: '#FCECE2', border: '#EFE0D0',
+      bg: '#FFFBF1', card: '#FDF0DF', text: '#2D241D', secondary: '#7A6B5C',
+      accent: '#A94F2E', accentSoft: '#F8E6DA', border: '#EAD9C8',
     },
     surface: { pattern: 'wash', ornament: 'leaf' },
     type: { titleFont: ROUND, bodyFont: SANS, titleSize: 30, titleWeight: 700, titleTracking: '0.03em', bodySize: 15.5, lineHeight: 1.9, letterSpacing: '0.015em', paraGap: 22, paddingX: 20 },
@@ -1214,10 +1218,11 @@ const THEMES = [
     name: '故事书',
     tagline: '精装书页质感：全衬线扉页、细腻纸纹与藏书印记',
     mood: ['故事', '书卷', '沉浸'],
+    dropCap: true,
     topics: { emotion: 0.85, culture: 0.85, parent: 0.85, writing: 0.7, travel: 0.65, lifestyle: 0.55 },
     palette: {
-      bg: '#F9F4E8', card: '#F1E8D5', text: '#2E261E', secondary: '#766A5A',
-      accent: '#3D5A73', accentSoft: '#E8EFF4', border: '#E2D8C5',
+      bg: '#F8F2E6', card: '#EEE4D2', text: '#2E261E', secondary: '#706454',
+      accent: '#4E6277', accentSoft: '#E5EBF0', border: '#DFD3BF',
     },
     surface: { pattern: 'paper', ornament: 'seal' },
     type: { titleFont: SERIF, bodyFont: SERIF, titleSize: 30, titleWeight: 600, titleTracking: '0.06em', bodySize: 16, lineHeight: 1.98, letterSpacing: '0.02em', paraGap: 25, paddingX: 22 },
@@ -1231,10 +1236,11 @@ const THEMES = [
     name: '策展',
     tagline: '美术馆展签与画册感：冷白墙面、微弱网格与青铜细线',
     mood: ['策展', '建筑', '画册'],
+    dropCap: true,
     topics: { culture: 0.9, beauty: 0.85, lifestyle: 0.8, travel: 0.75, writing: 0.65, tech: 0.45 },
     palette: {
-      bg: '#F7F7F5', card: '#EFEFEA', text: '#1A1A18', secondary: '#676760',
-      accent: '#5E6B4C', accentSoft: '#EAEDE5', border: '#DFDFDA',
+      bg: '#F7F7F4', card: '#EEEEE8', text: '#1E1E1B', secondary: '#6B6B63',
+      accent: '#5E6B4C', accentSoft: '#E7EADD', border: '#DDDDD6',
     },
     surface: { pattern: 'grid', ornament: 'column' },
     type: { titleFont: SERIF, bodyFont: SANS, titleSize: 29, titleWeight: 600, titleTracking: '0.05em', bodySize: 15, lineHeight: 1.88, letterSpacing: '0.015em', paraGap: 22, paddingX: 22 },
@@ -1250,8 +1256,8 @@ const THEMES = [
     mood: ['水彩', '自然', '绘本'],
     topics: { parent: 0.9, lifestyle: 0.8, food: 0.75, travel: 0.7, emotion: 0.65, culture: 0.6 },
     palette: {
-      bg: '#FFFDF8', card: '#F2F8EE', text: '#263229', secondary: '#6D7C6C',
-      accent: '#6E9E66', accentSoft: '#E7F1E1', border: '#DCE7D5',
+      bg: '#FFFDF8', card: '#F1F7EC', text: '#263229', secondary: '#5A6859',
+      accent: '#4C7148', accentSoft: '#E7F1E1', border: '#DCE7D5',
     },
     surface: { pattern: 'watercolor', ornament: 'sprig' },
     type: { titleFont: ROUND, bodyFont: SERIF, titleSize: 30, titleWeight: 700, titleTracking: '0.02em', bodySize: 16, lineHeight: 1.95, letterSpacing: '0.02em', paraGap: 24, paddingX: 20 },
@@ -1267,8 +1273,8 @@ const THEMES = [
     mood: ['海报', '强视觉', '宣言'],
     topics: { culture: 0.8, festival: 0.8, lifestyle: 0.7, business: 0.55, tech: 0.45, writing: 0.6 },
     palette: {
-      bg: '#F3EDE2', card: '#E8DFD0', text: '#11100E', secondary: '#5E5A52',
-      accent: '#D6402A', accentSoft: '#F3DCD5', border: '#D8CFC1',
+      bg: '#F1EADF', card: '#E6DCCB', text: '#171412', secondary: '#5E564C',
+      accent: '#B03522', accentSoft: '#F1DDD6', border: '#D8CCBB',
     },
     surface: { pattern: 'halftone', ornament: 'star' },
     type: { titleFont: SANS, bodyFont: SANS, titleSize: 34, titleWeight: 800, titleTracking: '-0.01em', bodySize: 15.5, lineHeight: 1.72, letterSpacing: '0.005em', paraGap: 20, paddingX: 20 },
@@ -1282,10 +1288,11 @@ const THEMES = [
     name: '画册',
     tagline: '大留白、图版编号与衬线页眉，像一本展览画册',
     mood: ['画册', '展览', '留白'],
+    dropCap: true,
     topics: { culture: 0.9, beauty: 0.85, travel: 0.7, writing: 0.6, lifestyle: 0.55, tech: 0.35 },
     palette: {
-      bg: '#F7F3EA', card: '#EDE6D8', text: '#22201B', secondary: '#6E675B',
-      accent: '#5A6B4A', accentSoft: '#E4E9DC', border: '#DCD3C2',
+      bg: '#F8F4EA', card: '#EDE5D6', text: '#24211C', secondary: '#6C6559',
+      accent: '#5A6B4A', accentSoft: '#E4E9DC', border: '#DDD3C1',
     },
     surface: { pattern: 'paper', ornament: 'seal' },
     type: { titleFont: SERIF, bodyFont: SERIF, titleSize: 30, titleWeight: 600, titleTracking: '0.04em', bodySize: 15.5, lineHeight: 1.95, letterSpacing: '0.02em', paraGap: 24, paddingX: 24 },
@@ -1302,7 +1309,7 @@ const THEMES = [
     topics: { beauty: 0.8, tech: 0.65, business: 0.6, culture: 0.7, lifestyle: 0.6, writing: 0.5 },
     palette: {
       bg: '#F2EFE6', card: '#E6E1D3', text: '#171614', secondary: '#5C584F',
-      accent: '#1F5FA8', accentSoft: '#DCE8F5', border: '#D5CFC0',
+      accent: '#245E9E', accentSoft: '#DCE7F2', border: '#D4CEC0',
     },
     surface: { pattern: 'grid', ornament: 'corner' },
     type: { titleFont: SANS, bodyFont: SANS, titleSize: 32, titleWeight: 800, titleTracking: '-0.01em', bodySize: 15.5, lineHeight: 1.75, letterSpacing: '0.01em', paraGap: 20, paddingX: 22 },
@@ -1761,6 +1768,7 @@ function composeDesign(stored) {
     showFooter: overrides.showFooter !== false,
     showEyebrow: overrides.showEyebrow !== false,
     lead: overrides.lead !== false,
+    dropCap: theme.dropCap === true && overrides.dropCap !== false,
     eyebrow: typeof overrides.eyebrow === 'string' ? overrides.eyebrow : '',
     footerText: typeof overrides.footerText === 'string' && overrides.footerText.trim() !== ''
       ? overrides.footerText
@@ -2459,6 +2467,7 @@ function buildArticle(input) {
   const paragraphs = blocks.filter(block => block.type === 'paragraph')
   const firstParagraph = paragraphs[0]
   let didLead = false
+  let didDropCap = false
 
   for (const block of blocks) {
     switch (block.type) {
@@ -2471,7 +2480,9 @@ function buildArticle(input) {
       case 'paragraph': {
         const isLead = design.decor.lead && !didLead && block === firstParagraph && paragraphs.length >= 3 && block.text.length <= 140
         if (isLead) didLead = true
-        children.push(renderParagraph(block, ctx, isLead))
+        const useDropCap = design.decor.dropCap === true && !didDropCap
+        if (useDropCap) didDropCap = true
+        children.push(renderParagraph(block, ctx, isLead, useDropCap))
         break
       }
       case 'quote':
@@ -2783,7 +2794,7 @@ function renderHeading(block, index, ctx) {
   }
 }
 
-function renderParagraph(block, ctx, isLead) {
+function renderParagraph(block, ctx, isLead, dropCap = false) {
   const { design, colors, type, baseStyle, bodyInline } = ctx
   void design
   const style = {
@@ -2797,7 +2808,18 @@ function renderParagraph(block, ctx, isLead) {
     style.color = colors.secondary
     style.marginBottom = `${type.paraGap + 4}px`
   }
-  return section(style, bodyInline(block.text))
+  const firstChar = Array.from(String(block.text ?? ''))[0] ?? ''
+  const canDropCap = dropCap && /^[\u4e00-\u9fffA-Za-z0-9]$/.test(firstChar)
+  const content = canDropCap
+    ? [
+      span({
+        display: 'inline-block', fontFamily: ctx.titleFont, fontSize: '52px', fontWeight: 700,
+        lineHeight: '0.86', color: colors.accent, marginRight: '8px', verticalAlign: '-0.06em',
+      }, text(firstChar)),
+      ...bodyInline(String(block.text).slice(firstChar.length)),
+    ]
+    : bodyInline(block.text)
+  return section(style, content)
 }
 
 function renderQuote(block, ctx) {
@@ -2904,7 +2926,7 @@ function renderImage(block, ctx) {
   const alt = plainText(block.alt ?? '').trim()
   const caption = alt === ''
     ? []
-    : [section({ fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '8px', letterSpacing: '0.04em' }, text(alt))]
+    : [section({ fontFamily: ctx.titleFont, fontStyle: 'italic', fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '8px', letterSpacing: '0.04em' }, text(alt))]
   const width = design.decor.imageStyle === 'full' ? 100 : design.decor.imageWidth
   const align = design.decor.imageAlign
   const base = {
@@ -2929,7 +2951,7 @@ function renderImage(block, ctx) {
     case 'polaroid':
       return wrap({ background: '#FFFFFF', padding: '10px 10px 12px', boxShadow: '0 8px 22px rgba(0, 0, 0, 0.12)', borderRadius: '4px' }, [
         image({ src: block.src, alt }, base),
-        ...(alt === '' ? [] : [section({ fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '10px', fontFamily: ctx.titleFont }, text(alt))]),
+        ...(alt === '' ? [] : [section({ fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '10px', fontFamily: ctx.titleFont, fontStyle: 'italic' }, text(alt))]),
       ])
     case 'plate':
       return wrap({ background: colors.card, padding: '10px 10px 12px', borderTop: `3px solid ${colors.accent}`, borderBottom: `1px solid ${colors.border}` }, [
@@ -2939,7 +2961,7 @@ function renderImage(block, ctx) {
     case 'full':
       return section({ margin: `0 ${-layout.paddingX}px ${type.paraGap + 2}px` }, [
         image({ src: block.src, alt }, { ...base, display: 'block' }),
-        ...(alt === '' ? [] : [section({ fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '8px' }, text(alt))]),
+        ...(alt === '' ? [] : [section({ fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '8px', fontFamily: ctx.titleFont, fontStyle: 'italic' }, text(alt))]),
       ])
     case 'plain':
     default:
@@ -3012,10 +3034,15 @@ function renderDivider(ctx) {
 }
 
 function renderFooter(ctx, meta) {
-  const { design, colors, type } = ctx
+  const { design, colors } = ctx
   const hasSign = design.decor.footerSign.trim() !== ''
-  return section({ marginTop: '30px', paddingTop: '20px', borderTop: `1px dashed ${colors.border}`, textAlign: 'center' }, [
-    section({ fontSize: '11px', letterSpacing: '0.24em', color: colors.secondary, marginBottom: '12px' }, text('· 全 文 完 ·')),
+  const rule = { display: 'inline-block', width: '38px', height: '1px', background: colors.border, verticalAlign: 'middle' }
+  return section({ marginTop: '34px', paddingTop: '26px', textAlign: 'center' }, [
+    section({ marginBottom: '18px', lineHeight: 1 }, [
+      span({ ...rule, marginRight: '12px' }),
+      span({ display: 'inline-block', fontFamily: ctx.titleFont, fontSize: '11px', letterSpacing: '0.32em', color: colors.accent, verticalAlign: 'middle' }, text('END')),
+      span({ ...rule, marginLeft: '12px' }),
+    ]),
     section({
       fontSize: '13px',
       lineHeight: 1.85,
@@ -3037,7 +3064,7 @@ function styledRuns(runs, design) {
   const out = []
   for (const run of runs) {
     if (run.kind === 'text') out.push(text(run.text))
-    else if (run.kind === 'strong') out.push(span({ fontWeight: 700, color: design.colors.accent }, text(run.text)))
+    else if (run.kind === 'strong') out.push(span({ fontWeight: 700, borderBottom: `2px solid ${design.colors.accent}` }, text(run.text)))
     else if (run.kind === 'em') out.push(span({ color: design.colors.accent }, text(run.text)))
     else if (run.kind === 'del') out.push(span({ textDecoration: 'line-through', color: design.colors.secondary }, text(run.text)))
     else if (run.kind === 'mark') out.push(span({

@@ -184,6 +184,7 @@ export function buildArticle(input) {
   const paragraphs = blocks.filter(block => block.type === 'paragraph')
   const firstParagraph = paragraphs[0]
   let didLead = false
+  let didDropCap = false
 
   for (const block of blocks) {
     switch (block.type) {
@@ -196,7 +197,9 @@ export function buildArticle(input) {
       case 'paragraph': {
         const isLead = design.decor.lead && !didLead && block === firstParagraph && paragraphs.length >= 3 && block.text.length <= 140
         if (isLead) didLead = true
-        children.push(renderParagraph(block, ctx, isLead))
+        const useDropCap = design.decor.dropCap === true && !didDropCap
+        if (useDropCap) didDropCap = true
+        children.push(renderParagraph(block, ctx, isLead, useDropCap))
         break
       }
       case 'quote':
@@ -508,7 +511,7 @@ function renderHeading(block, index, ctx) {
   }
 }
 
-function renderParagraph(block, ctx, isLead) {
+function renderParagraph(block, ctx, isLead, dropCap = false) {
   const { design, colors, type, baseStyle, bodyInline } = ctx
   void design
   const style = {
@@ -522,7 +525,18 @@ function renderParagraph(block, ctx, isLead) {
     style.color = colors.secondary
     style.marginBottom = `${type.paraGap + 4}px`
   }
-  return section(style, bodyInline(block.text))
+  const firstChar = Array.from(String(block.text ?? ''))[0] ?? ''
+  const canDropCap = dropCap && /^[\u4e00-\u9fffA-Za-z0-9]$/.test(firstChar)
+  const content = canDropCap
+    ? [
+      span({
+        display: 'inline-block', fontFamily: ctx.titleFont, fontSize: '52px', fontWeight: 700,
+        lineHeight: '0.86', color: colors.accent, marginRight: '8px', verticalAlign: '-0.06em',
+      }, text(firstChar)),
+      ...bodyInline(String(block.text).slice(firstChar.length)),
+    ]
+    : bodyInline(block.text)
+  return section(style, content)
 }
 
 function renderQuote(block, ctx) {
@@ -629,7 +643,7 @@ function renderImage(block, ctx) {
   const alt = plainText(block.alt ?? '').trim()
   const caption = alt === ''
     ? []
-    : [section({ fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '8px', letterSpacing: '0.04em' }, text(alt))]
+    : [section({ fontFamily: ctx.titleFont, fontStyle: 'italic', fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '8px', letterSpacing: '0.04em' }, text(alt))]
   const width = design.decor.imageStyle === 'full' ? 100 : design.decor.imageWidth
   const align = design.decor.imageAlign
   const base = {
@@ -654,7 +668,7 @@ function renderImage(block, ctx) {
     case 'polaroid':
       return wrap({ background: '#FFFFFF', padding: '10px 10px 12px', boxShadow: '0 8px 22px rgba(0, 0, 0, 0.12)', borderRadius: '4px' }, [
         image({ src: block.src, alt }, base),
-        ...(alt === '' ? [] : [section({ fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '10px', fontFamily: ctx.titleFont }, text(alt))]),
+        ...(alt === '' ? [] : [section({ fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '10px', fontFamily: ctx.titleFont, fontStyle: 'italic' }, text(alt))]),
       ])
     case 'plate':
       return wrap({ background: colors.card, padding: '10px 10px 12px', borderTop: `3px solid ${colors.accent}`, borderBottom: `1px solid ${colors.border}` }, [
@@ -664,7 +678,7 @@ function renderImage(block, ctx) {
     case 'full':
       return section({ margin: `0 ${-layout.paddingX}px ${type.paraGap + 2}px` }, [
         image({ src: block.src, alt }, { ...base, display: 'block' }),
-        ...(alt === '' ? [] : [section({ fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '8px' }, text(alt))]),
+        ...(alt === '' ? [] : [section({ fontSize: '12px', lineHeight: 1.6, color: colors.secondary, textAlign: 'center', marginTop: '8px', fontFamily: ctx.titleFont, fontStyle: 'italic' }, text(alt))]),
       ])
     case 'plain':
     default:
@@ -737,10 +751,15 @@ function renderDivider(ctx) {
 }
 
 function renderFooter(ctx, meta) {
-  const { design, colors, type } = ctx
+  const { design, colors } = ctx
   const hasSign = design.decor.footerSign.trim() !== ''
-  return section({ marginTop: '30px', paddingTop: '20px', borderTop: `1px dashed ${colors.border}`, textAlign: 'center' }, [
-    section({ fontSize: '11px', letterSpacing: '0.24em', color: colors.secondary, marginBottom: '12px' }, text('· 全 文 完 ·')),
+  const rule = { display: 'inline-block', width: '38px', height: '1px', background: colors.border, verticalAlign: 'middle' }
+  return section({ marginTop: '34px', paddingTop: '26px', textAlign: 'center' }, [
+    section({ marginBottom: '18px', lineHeight: 1 }, [
+      span({ ...rule, marginRight: '12px' }),
+      span({ display: 'inline-block', fontFamily: ctx.titleFont, fontSize: '11px', letterSpacing: '0.32em', color: colors.accent, verticalAlign: 'middle' }, text('END')),
+      span({ ...rule, marginLeft: '12px' }),
+    ]),
     section({
       fontSize: '13px',
       lineHeight: 1.85,
@@ -762,7 +781,7 @@ function styledRuns(runs, design) {
   const out = []
   for (const run of runs) {
     if (run.kind === 'text') out.push(text(run.text))
-    else if (run.kind === 'strong') out.push(span({ fontWeight: 700, color: design.colors.accent }, text(run.text)))
+    else if (run.kind === 'strong') out.push(span({ fontWeight: 700, borderBottom: `2px solid ${design.colors.accent}` }, text(run.text)))
     else if (run.kind === 'em') out.push(span({ color: design.colors.accent }, text(run.text)))
     else if (run.kind === 'del') out.push(span({ textDecoration: 'line-through', color: design.colors.secondary }, text(run.text)))
     else if (run.kind === 'mark') out.push(span({

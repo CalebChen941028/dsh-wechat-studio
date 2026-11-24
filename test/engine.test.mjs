@@ -497,3 +497,14 @@ test('海报与画册主题的关键版面元素进入输出', () => {
   assert.ok(folio.includes('NOTE'))
   assert.ok(folio.includes('border-top:3px solid'))
 })
+
+test('编辑感主题启用首字下沉、关键词下划线与 END 收尾', () => {
+  const { blocks } = parseArticle(ARTICLE)
+  const design = composeDesign({ themeId: 'column' })
+  assert.equal(design.decor.dropCap, true)
+  const html = serializeNodes(buildArticle({ blocks, design, meta: { author: '编辑部' } }).nodes)
+  assert.match(html, /font-size:52px/)
+  assert.match(html, /border-bottom:2px solid #9A5B3D/)
+  assert.match(html, />END</)
+  assert.equal(composeDesign({ themeId: 'mono' }).decor.dropCap, false)
+})

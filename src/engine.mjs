@@ -403,6 +403,7 @@ export function composeDesign(stored) {
     showFooter: overrides.showFooter !== false,
     showEyebrow: overrides.showEyebrow !== false,
     lead: overrides.lead !== false,
+    dropCap: theme.dropCap === true && overrides.dropCap !== false,
     eyebrow: typeof overrides.eyebrow === 'string' ? overrides.eyebrow : '',
     footerText: typeof overrides.footerText === 'string' && overrides.footerText.trim() !== ''
       ? overrides.footerText
