@@ -354,10 +354,12 @@ export function composeDesign(stored) {
 
   const BG_PATTERNS = ['none', 'paper', 'grid', 'dots', 'lines', 'wash']
   const ORNAMENTS = ['none', 'corner', 'column', 'seal', 'leaf']
+  const defaultPattern = BG_PATTERNS.includes(theme.surface?.pattern) ? theme.surface.pattern : 'none'
+  const defaultOrnament = ORNAMENTS.includes(theme.surface?.ornament) ? theme.surface.ornament : 'none'
   const surface = {
     bg: colors.bg,
-    pattern: BG_PATTERNS.includes(overrides.bgStyle) ? overrides.bgStyle : 'none',
-    ornament: ORNAMENTS.includes(overrides.ornament) ? overrides.ornament : 'none',
+    pattern: BG_PATTERNS.includes(overrides.bgStyle) ? overrides.bgStyle : defaultPattern,
+    ornament: ORNAMENTS.includes(overrides.ornament) ? overrides.ornament : defaultOrnament,
     ink: readableOn(colors.bg) === '#FFFFFF' ? '255,255,255' : '17,17,17',
     wash: colors.accent,
   }
@@ -494,13 +496,13 @@ export function rankThemes(topic, features) {
     // Writing and culture pieces start from the editorial magazine layout.
     if (theme.id === 'column' && (topic.scores.writing ?? 0) + (topic.scores.culture ?? 0) > 0.5) score += 0.08
     if (features.codeBlocks > 0 && ['mint', 'mono', 'ocean', 'night'].includes(theme.id)) score += 0.16
-    if (features.quotes >= 2 && ['paper', 'ink', 'rose', 'amber', 'column'].includes(theme.id)) score += 0.12
-    if (features.headings >= 3 && ['ocean', 'scholar', 'mono', 'night'].includes(theme.id)) score += 0.1
-    if (features.avgParagraph > 90 && ['scholar', 'ink', 'paper', 'column'].includes(theme.id)) score += 0.08
-    if (features.avgParagraph > 0 && features.avgParagraph < 35 && ['magazine', 'ink', 'pine'].includes(theme.id)) score += 0.06
+    if (features.quotes >= 2 && ['paper', 'ink', 'rose', 'amber', 'column', 'storybook'].includes(theme.id)) score += 0.12
+    if (features.headings >= 3 && ['ocean', 'scholar', 'mono', 'night', 'gallery'].includes(theme.id)) score += 0.1
+    if (features.avgParagraph > 90 && ['scholar', 'ink', 'paper', 'column', 'storybook'].includes(theme.id)) score += 0.08
+    if (features.avgParagraph > 0 && features.avgParagraph < 35 && ['magazine', 'zine', 'ink', 'pine'].includes(theme.id)) score += 0.06
     if (features.listItems >= 4 && ['pine', 'mint', 'mono'].includes(theme.id)) score += 0.06
-    if (features.exclamations >= 2 && ['festival', 'amber', 'magazine'].includes(theme.id)) score += 0.08
-    if (features.images >= 2 && ['magazine', 'ocean', 'rose'].includes(theme.id)) score += 0.05
+    if (features.exclamations >= 2 && ['festival', 'amber', 'magazine', 'illustration'].includes(theme.id)) score += 0.08
+    if (features.images >= 2 && ['magazine', 'zine', 'illustration', 'gallery', 'ocean', 'rose'].includes(theme.id)) score += 0.06
     return { theme, score }
   })
   ranked.sort((a, b) => b.score - a.score)

@@ -15,35 +15,30 @@ const LONG_TEXT_DESIGN_ONLY = 7000
 /** 单次对话的超时时间。 */
 const TIMEOUT_MS = 120000
 
-/** 主题目录。与浏览器端 themes.mjs 保持一致；这里只用于给模型列选项。 */
+/** 主题目录。直接从浏览器端 themes.mjs 生成，保持单一数据源。 */
 import { detectTopic, measure, normalizeStyleGuide, parseArticle } from '../src/engine.mjs'
+import { THEMES } from '../src/themes.mjs'
 
-const THEME_CATALOG = [
-  ['column', '专栏', '衬线标题、细线与编号，克制的杂志内页', 'essay/feature'],
-  ['ink', '墨白', '黑字、细线、大留白，适合深度与随笔', 'editorial/index'],
-  ['paper', '米纸', '暖调纸张，适合文学、文化、书信体', 'letter/scroll'],
-  ['pine', '青松', '清爽的绿，适合方法、经验、成长', 'garden/clean'],
-  ['ocean', '深海蓝', '结构清楚、层级分明，适合分析与复盘', 'report/brief'],
-  ['magazine', '摩登', '大标题强对比，适合封面式内容', 'cover/feature'],
-  ['column', '专栏', '衬线标题、细线与编号，克制的杂志内页', 'essay/feature'],
-  ['rose', '玫瑰', '柔和粉调，适合审美、人物、生活方式', 'soft/glossy'],
-  ['amber', '暖橙', '暖色叙事，适合故事、经历', 'warm/story'],
-  ['night', '夜幕', '深靛蓝配浅底，安静有分量', 'night/calm'],
-  ['festival', '节庆', '红金配色，适合祝福、周年、节点', 'celebrate/greeting'],
-  ['scholar', '学术', '编号与引用，适合研究与长文', 'paper/notebook'],
-  ['mint', '薄荷', '干净的科学感，适合产品与工具说明', 'fresh/minimal'],
-  ['mono', '灰阶', '无彩色，信息密度优先', 'grid/plain'],
-]
+const THEME_CATALOG = THEMES.map(theme => [
+  theme.id,
+  theme.name,
+  theme.tagline,
+  theme.variants.map(variant => variant.id).join('/'),
+])
 
-/** 编辑预设：给模型一个可靠的起点，再按文章实际情况微调。 */
+/** 编辑预设：给模型一个高设计感的起点，再按文章实际情况微调。 */
 const DESIGN_PRESETS = [
-  ['长篇随笔 / 文化评论', 'column / essay', 'titleSize 31、bodySize 16、lineHeight 1.92、paraGap 24、paddingX 20、titleStyle kicker、sectionStyle rule、quoteStyle pull'],
-  ['人物特稿 / 故事', 'paper / letter', 'bodySize 16、lineHeight 1.95、paddingX 20、quoteStyle card、imageStyle plain'],
+  ['杂志特稿 / 文化评论', 'column / essay', 'titleSize 31、bodySize 16、lineHeight 1.92、paraGap 24、paddingX 20、titleStyle kicker、sectionStyle rule、quoteStyle pull'],
+  ['独立画报 / 城市与生活特辑', 'zine / spread', 'bg #FAF8F4、bgStyle lines、ornament corner、titleSize 33、bodySize 15.5、lineHeight 1.88、paddingX 20、titleStyle kicker、sectionStyle ghost、quoteStyle pull、imageStyle full'],
+  ['插画绘本 / 亲子美食手账', 'illustration / picturebook', 'bg #FFFBF2、bgStyle wash、ornament leaf、titleSize 30、bodySize 15.5、lineHeight 1.9、paddingX 20、titleStyle tag、sectionStyle dot、quoteStyle card、imageStyle polaroid'],
+  ['故事书 / 非虚构与情感长文', 'storybook / chapter', 'bg #F9F4E8、bgStyle paper、ornament seal、titleSize 30、bodySize 16、lineHeight 1.98、paraGap 25、paddingX 22、titleStyle rule、sectionStyle line、quoteStyle center、imageStyle frame'],
+  ['策展画册 / 建筑摄影与审美', 'gallery / exhibit', 'bg #F7F7F5、bgStyle grid、ornament column、titleSize 29、bodySize 15、lineHeight 1.88、paddingX 22、titleStyle boxed、sectionStyle numbered、quoteStyle stamp、imageStyle frame'],
+  ['人物口述 / 暖调随笔', 'paper / letter', 'bodySize 16、lineHeight 1.95、paddingX 20、quoteStyle card、imageStyle polaroid'],
   ['行业分析 / 商业复盘', 'ocean / report', 'titleSize 28、bodySize 15.5、lineHeight 1.8、paraGap 20、paddingX 18、sectionStyle numbered'],
   ['产品说明 / 工具方法', 'mint / minimal', 'titleSize 27、bodySize 15.5、lineHeight 1.78、paddingX 18、sectionStyle bar、imageStyle rounded'],
   ['研究 / 数据长文', 'scholar / paper', 'bodySize 16、lineHeight 1.9、paraGap 24、paddingX 20、sectionStyle numbered、quoteStyle bar'],
   ['教程 / 经验分享', 'pine / clean', 'titleSize 28、bodySize 16、lineHeight 1.85、paddingX 18、listStyle dot'],
-  ['视觉 / 品牌内容', 'magazine / feature', 'titleSize 32、bodySize 15.5、lineHeight 1.75、paddingX 16、imageStyle full'],
+  ['视觉封面 / 品牌企划', 'magazine / cover', 'titleSize 34、bodySize 15.5、lineHeight 1.75、paddingX 16、sectionStyle ghost、imageStyle full'],
   ['日常 / 审美生活', 'rose / soft', 'titleSize 29、bodySize 15.5、lineHeight 1.85、paddingX 20、quoteStyle center'],
   ['节庆 / 祝福', 'festival / greeting', 'titleSize 30、bodySize 16、lineHeight 1.8、paddingX 18'],
 ]
@@ -67,18 +62,25 @@ const SYSTEM_PROMPT = `你是「公众号排版工作台」的编辑助手。用
 - 不新增原文没有的事实、数字、人名、时间、引语；用户没要求扩写就不要扩写。
 - 不改变原文的断言强度，「可能」不能改成「一定」，结论不能升级。
 - 保留 Markdown 结构：# 标题、## 小节、### 小标题、> 引用、- 列表、1. 有序列表、![说明](url)、--- 分割线、**加粗**、==高亮==、行内代码。
-- 中文句子不要模仿客服腔，不用「赋能、闭环、底层逻辑、全方位」这类词；不加「让我们」式煽情。
+- 中文句子自然平实，不用「赋能、闭环、底层逻辑、全方位、抓手」这类黑话，不加「让我们」式煽情排比。
 
-二、改版式。你的角色是杂志美术编辑：先判断内容类型与语气，再定主题与版式，最后调数值。只输出 design 字段，不要发明主题或装饰 id。
-- 判断内容：深度/文化评论、人物故事、行业分析、产品说明、研究数据、教程方法、日常审美、节庆祝福。
-- 选主题看气质，不要凭一两个关键词换色；一篇只保留一个强调色。
-- 版式与结构匹配：长文用衬线和大行高（column/ink/paper），分析用清晰层级（ocean/scholar），产品用无衬线（mint/pine/mono），人物故事可用纸感（paper/rose），视觉内容可用 magazine。
+二、改版式。你的角色是杂志美术编辑：先判断文章气质与目标流派，再选主题与版式变体，最后统筹底纹、角标、字号层级与配图语言。只输出 design 字段，不要发明不存在的主题或装饰 id。
+- 流派与主题映射：
+  * 杂志 / 画报 / 高级编辑感：优先 zine（spread/dossier）、column（essay/feature）或 magazine（cover/feature）；用 kicker/eyebrow 眉标、ghost/rule 小节与 pull 上下细线拉引制造刊物节奏，可配 lines 底纹与 corner 角标。
+  * 插画 / 绘本 / 手账 / 轻快温暖：优先 illustration（picturebook/sketch）；用奶油暖底、wash 淡彩底纹、leaf 叶形角标、tag/ribbon 标题、card/tint 引文与 polaroid/rounded 配图。
+  * 故事书 / 纸质书 / 沉浸叙事 / 童话寓言：优先 storybook（chapter/fable）或 paper（letter/scroll）；用象牙纸底、paper 纸纹、seal 印记角标、rule/centered 扉页标题、line 居中细线小节与大行高（1.92–2.0）。
+  * 策展 / 美术馆 / 摄影建筑画册：优先 gallery（exhibit/catalog）；用冷白墙面、grid 微弱网格、column 栏线角标、boxed 展签标题、stamp 摘录框与 frame 画框图。
+  * 分析复盘 / 学术研究 / 产品说明：分别优先 ocean/scholar/mint/pine/mono。
+- 视觉层级与呼吸感：
+  * 标题与正文字号比保持在 1.8–2.2 倍（如 31/16、33/15.5），形成清晰视觉落差；一篇只保留一个主强调色。
+  * 长文与叙事加大行高和留白（lineHeight 1.9–2.0、paraGap 22–26、paddingX 20–22）；信息密集型文章收紧节奏（lineHeight 1.75–1.85、paraGap 18–20）。
+  * 多图文章优先 full / polaroid / frame 并统一 imageWidth 与 imageAlign，避免图片与文字视觉打架。
 - 数值范围：bodySize 15-18、lineHeight 1.7-2.05、letterSpacing 0-0.05、paraGap 18-30、paddingX 16-24、titleSize 26-38。
 - 背景：bg 用 #RRGGBB；bgStyle 可选 none/paper/grid/dots/lines/wash，默认 none。
 - 图片：imageWidth 40-100（百分比），imageAlign 可选 left/center/right。
-- 矢量角标：ornament 可选 none/corner/column/seal/leaf，默认 none，最多用一个。
-- 设计原则：留白优先、同级统一、一个记忆点；不用渐变底色、霓虹色、emoji、外发光和重阴影。
-- 用户说「精排 / 设计感 / 优化排版 / 按内容排版」时，返回完整 design（themeId、variantId、overrides，必要时含背景与角标），不要只换一个颜色。reply 用一句话说明设计判断。
+- 矢量角标：ornament 可选 none/corner/column/seal/leaf，默认 none，最多用一个，与底纹呼应而不堆砌。
+- 克制底线：留白优先、同级统一、一个视觉记忆点；不用高饱和荧光色、彩虹拼盘、emoji、外发光和重阴影。
+- 用户说「精排 / 设计感 / 杂志风 / 插画风 / 故事书风 / 优化排版 / 按内容排版」时，必须返回完整 design（themeId、variantId、overrides，包含成套的标题/小节/引文/配图样式以及呼应气质的 bg/bgStyle/ornament），不要只改一两个参数敷衍。reply 用一句话点明选定的风格流派和核心视觉判断。
 
 只输出一个 JSON 对象，不要代码围栏、不要解释文字。字段：
 - reply：一句话说明改了什么，直接说，不客套。

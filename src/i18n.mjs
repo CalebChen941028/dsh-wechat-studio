@@ -739,6 +739,19 @@ const UI_EN = {
   '发布计划': 'Publish plan',
   '计划日期': 'Planned date',
   '计划日期只是本地排期，不会自动发布；到时间在发布面板手动发送。': 'This is a local schedule only; it does not auto-publish. Send manually when the time comes.',
+
+  '画报': 'Zine',
+  '跨页': 'Spread',
+  '特辑': 'Dossier',
+  '插画': 'Illustration',
+  '绘本': 'Picturebook',
+  '手账': 'Sketchbook',
+  '故事书': 'Storybook',
+  '章回': 'Chapter',
+  '寓言': 'Fable',
+  '策展': 'Gallery',
+  '展签': 'Exhibit',
+  '图录': 'Catalog',
 }
 
 

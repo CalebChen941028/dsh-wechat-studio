@@ -225,6 +225,74 @@ export const THEMES = [
       { id: 'plain', name: '素面', titleStyle: 'underline', sectionStyle: 'line', dividerStyle: 'line', quoteStyle: 'center', listStyle: 'dot', imageStyle: 'plain' },
     ],
   },
+  {
+    id: 'zine',
+    name: '画报',
+    tagline: '独立杂志跨页感：衬线大标题、朱砂强调与隐约栏线',
+    mood: ['杂志', '独立', '视觉'],
+    topics: { lifestyle: 0.85, culture: 0.85, beauty: 0.75, travel: 0.8, writing: 0.65, food: 0.65 },
+    palette: {
+      bg: '#FAF8F4', card: '#F2EDE4', text: '#181715', secondary: '#6D675E',
+      accent: '#C4432B', accentSoft: '#F5E6E1', border: '#E2DDD5',
+    },
+    surface: { pattern: 'lines', ornament: 'corner' },
+    type: { titleFont: SERIF, bodyFont: SANS, titleSize: 33, titleWeight: 700, titleTracking: '0.01em', bodySize: 15.5, lineHeight: 1.88, letterSpacing: '0.015em', paraGap: 22, paddingX: 20 },
+    variants: [
+      { id: 'spread', name: '跨页', titleStyle: 'kicker', sectionStyle: 'ghost', dividerStyle: 'line', quoteStyle: 'pull', listStyle: 'num', imageStyle: 'full' },
+      { id: 'dossier', name: '特辑', titleStyle: 'eyebrow', sectionStyle: 'rule', dividerStyle: 'diamond', quoteStyle: 'stamp', listStyle: 'square', imageStyle: 'frame' },
+    ],
+  },
+  {
+    id: 'illustration',
+    name: '插画',
+    tagline: '水粉绘本与手账感：圆润标题、奶油纸底与淡彩叶形',
+    mood: ['插画', '明快', '绘本'],
+    topics: { parent: 0.95, travel: 0.85, food: 0.85, lifestyle: 0.8, emotion: 0.7, education: 0.6 },
+    palette: {
+      bg: '#FFFBF2', card: '#FDF1E3', text: '#2C241E', secondary: '#7A6B5D',
+      accent: '#D96B43', accentSoft: '#FCECE2', border: '#EFE0D0',
+    },
+    surface: { pattern: 'wash', ornament: 'leaf' },
+    type: { titleFont: ROUND, bodyFont: SANS, titleSize: 30, titleWeight: 700, titleTracking: '0.03em', bodySize: 15.5, lineHeight: 1.9, letterSpacing: '0.015em', paraGap: 22, paddingX: 20 },
+    variants: [
+      { id: 'picturebook', name: '绘本', titleStyle: 'tag', sectionStyle: 'dot', dividerStyle: 'ornament', quoteStyle: 'card', listStyle: 'dot', imageStyle: 'polaroid' },
+      { id: 'sketch', name: '手账', titleStyle: 'ribbon', sectionStyle: 'tag', dividerStyle: 'dots', quoteStyle: 'tint', listStyle: 'arrow', imageStyle: 'rounded' },
+    ],
+  },
+  {
+    id: 'storybook',
+    name: '故事书',
+    tagline: '精装书页质感：全衬线扉页、细腻纸纹与藏书印记',
+    mood: ['故事', '书卷', '沉浸'],
+    topics: { emotion: 0.85, culture: 0.85, parent: 0.85, writing: 0.7, travel: 0.65, lifestyle: 0.55 },
+    palette: {
+      bg: '#F9F4E8', card: '#F1E8D5', text: '#2E261E', secondary: '#766A5A',
+      accent: '#3D5A73', accentSoft: '#E8EFF4', border: '#E2D8C5',
+    },
+    surface: { pattern: 'paper', ornament: 'seal' },
+    type: { titleFont: SERIF, bodyFont: SERIF, titleSize: 30, titleWeight: 600, titleTracking: '0.06em', bodySize: 16, lineHeight: 1.98, letterSpacing: '0.02em', paraGap: 25, paddingX: 22 },
+    variants: [
+      { id: 'chapter', name: '章回', titleStyle: 'rule', sectionStyle: 'line', dividerStyle: 'ornament', quoteStyle: 'center', listStyle: 'dot', imageStyle: 'frame' },
+      { id: 'fable', name: '寓言', titleStyle: 'centered', sectionStyle: 'rule', dividerStyle: 'diamond', quoteStyle: 'pull', listStyle: 'num', imageStyle: 'polaroid' },
+    ],
+  },
+  {
+    id: 'gallery',
+    name: '策展',
+    tagline: '美术馆展签与画册感：冷白墙面、微弱网格与青铜细线',
+    mood: ['策展', '建筑', '画册'],
+    topics: { culture: 0.9, beauty: 0.85, lifestyle: 0.8, travel: 0.75, writing: 0.65, tech: 0.45 },
+    palette: {
+      bg: '#F7F7F5', card: '#EFEFEA', text: '#1A1A18', secondary: '#676760',
+      accent: '#5E6B4C', accentSoft: '#EAEDE5', border: '#DFDFDA',
+    },
+    surface: { pattern: 'grid', ornament: 'column' },
+    type: { titleFont: SERIF, bodyFont: SANS, titleSize: 29, titleWeight: 600, titleTracking: '0.05em', bodySize: 15, lineHeight: 1.88, letterSpacing: '0.015em', paraGap: 22, paddingX: 22 },
+    variants: [
+      { id: 'exhibit', name: '展签', titleStyle: 'boxed', sectionStyle: 'numbered', dividerStyle: 'line', quoteStyle: 'stamp', listStyle: 'square', imageStyle: 'frame' },
+      { id: 'catalog', name: '图录', titleStyle: 'kicker', sectionStyle: 'line', dividerStyle: 'none', quoteStyle: 'pull', listStyle: 'num', imageStyle: 'shadow' },
+    ],
+  },
 ]
 
 export const THEME_IDS = THEMES.map(theme => theme.id)

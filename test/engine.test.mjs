@@ -444,3 +444,23 @@ test('auditHouseStyle 检查禁用词、长段与图注', () => {
   assert.deepEqual(normalizeStyleGuide({ bannedWords: '甲，乙 甲' }).bannedWords, ['甲', '乙'])
   assert.equal(DEFAULT_STYLE_GUIDE.tone, 'restrained')
 })
+
+test('高设计感主题（画报/插画/故事书/策展）默认继承氛围纹理与角标并支持显式关闭', () => {
+  const expected = [
+    ['zine', 'spread', 'lines', 'corner'],
+    ['illustration', 'picturebook', 'wash', 'leaf'],
+    ['storybook', 'chapter', 'paper', 'seal'],
+    ['gallery', 'exhibit', 'grid', 'column'],
+  ]
+  const { blocks } = parseArticle(ARTICLE)
+  for (const [themeId, variantId, pattern, ornament] of expected) {
+    const design = composeDesign({ themeId, variantId })
+    assert.equal(design.surface.pattern, pattern, `${themeId} default pattern`)
+    assert.equal(design.surface.ornament, ornament, `${themeId} default ornament`)
+    const html = serializeNodes(buildArticle({ blocks, design, meta: { author: '编辑部' } }).nodes)
+    assert.ok(html.includes('<svg'), `${themeId} renders default ornament`)
+    const stripped = composeDesign({ themeId, variantId, overrides: { bgStyle: 'none', ornament: 'none' } })
+    assert.equal(stripped.surface.pattern, 'none')
+    assert.equal(stripped.surface.ornament, 'none')
+  }
+})

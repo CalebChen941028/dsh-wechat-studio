@@ -255,3 +255,21 @@ test('aiEdit prompt carries recent adopted edits', async () => {
   const prompt = calls[0].messages[0].content[0].text
   assert.match(prompt, /最近采用的改法：标题改短；第二段压到两行/)
 })
+
+test('aiEdit prompt includes editorial style families and deduplicated theme catalog', async () => {
+  const { ctx, calls } = fakeContext({
+    chunks: jsonReply({
+      reply: '按插画绘本风格精排',
+      design: { themeId: 'illustration', variantId: 'picturebook', overrides: { bg: '#FFFBF2', bgStyle: 'wash', ornament: 'leaf' } },
+    }),
+  })
+  const result = await createAiEditor({ ctx }).edit({ instruction: '换成更有设计感的插画风格', text: ARTICLE })
+  const prompt = calls[0].messages[0].content[0].text
+  assert.match(prompt, /zine（画报/)
+  assert.match(prompt, /illustration（插画/)
+  assert.match(prompt, /storybook（故事书/)
+  assert.match(prompt, /gallery（策展/)
+  assert.equal((prompt.match(/column（专栏/g) ?? []).length, 1, 'column should appear once in theme catalog')
+  assert.equal(result.design.themeId, 'illustration')
+  assert.equal(result.design.variantId, 'picturebook')
+})
