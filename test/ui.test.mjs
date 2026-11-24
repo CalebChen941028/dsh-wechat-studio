@@ -727,6 +727,48 @@ test('点击主题卡切换主题，点击变体卡切换版式', async () => {
   }
 })
 
+test('新主题默认底纹与角标在预览中继承，设计面板可显示并关闭', async () => {
+  const { dom, window, container, root } = await mountPanel()
+  try {
+    const zine = [...container.querySelectorAll('.ws-theme')].find(node => node.textContent.includes('画报'))
+    assert.ok(zine, '画报 theme card')
+    zine.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 220))
+
+    let article = container.querySelector('.ws-article')
+    assert.match(article.getAttribute('style') ?? '', /background-image:\s*repeating-linear-gradient/)
+    assert.equal(article.querySelector('svg[width="54"]') !== null, true, 'default corner ornament renders')
+
+    const decorTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.includes('装饰'))
+    decorTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 160))
+
+    const selectFor = label => [...container.querySelectorAll('.ws-field')]
+      .find(field => field.textContent.includes(label))?.querySelector('select')
+    const bg = selectFor('底纹')
+    const ornament = selectFor('矢量角标')
+    assert.equal(bg.value, 'lines')
+    assert.equal(ornament.value, 'corner')
+    assert.ok([...selectFor('标题样式').options].some(option => option.value === 'kicker'), 'kicker option is editable')
+    assert.ok([...selectFor('章节样式').options].some(option => option.value === 'rule'), 'rule option is editable')
+    assert.ok([...selectFor('引用样式').options].some(option => option.value === 'pull'), 'pull option is editable')
+
+    bg.value = 'none'
+    bg.dispatchEvent(new window.Event('change', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 160))
+    const ornamentAfter = selectFor('矢量角标')
+    ornamentAfter.value = 'none'
+    ornamentAfter.dispatchEvent(new window.Event('change', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 220))
+    article = container.querySelector('.ws-article')
+    assert.ok(!(article.getAttribute('style') ?? '').includes('background-image'), 'explicit none removes the pattern')
+    assert.equal(article.querySelector('svg[width="54"]') === null, true, 'explicit none removes the ornament')
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
 test('锁定后可以再解锁', async () => {
   const { dom, window, container, root } = await mountPanel()
   try {

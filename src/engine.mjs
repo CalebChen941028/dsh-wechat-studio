@@ -335,8 +335,11 @@ export function composeDesign(stored) {
     colors.border = mixHex(overrides.accent, colors.bg, 0.2)
   }
 
-  // Background override: keep text readable when the page turns dark.
-  const customBg = typeof overrides.bg === 'string' && /^#[0-9a-fA-F]{6}$/.test(overrides.bg) ? overrides.bg : undefined
+  // Background override: keep text readable when the page turns dark. Setting
+  // the theme's own colour is a no-op, so a preset that restates the palette
+  // does not recompute and wash out card and border tones.
+  const requestedBg = typeof overrides.bg === 'string' && /^#[0-9a-fA-F]{6}$/.test(overrides.bg) ? overrides.bg : undefined
+  const customBg = requestedBg !== undefined && requestedBg.toLowerCase() !== theme.palette.bg.toLowerCase() ? requestedBg : undefined
   if (customBg !== undefined) {
     colors.bg = customBg
     if (readableOn(customBg) === '#FFFFFF') {

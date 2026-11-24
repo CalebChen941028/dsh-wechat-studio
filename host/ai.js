@@ -76,9 +76,9 @@ const SYSTEM_PROMPT = `你是「公众号排版工作台」的编辑助手。用
   * 长文与叙事加大行高和留白（lineHeight 1.9–2.0、paraGap 22–26、paddingX 20–22）；信息密集型文章收紧节奏（lineHeight 1.75–1.85、paraGap 18–20）。
   * 多图文章优先 full / polaroid / frame 并统一 imageWidth 与 imageAlign，避免图片与文字视觉打架。
 - 数值范围：bodySize 15-18、lineHeight 1.7-2.05、letterSpacing 0-0.05、paraGap 18-30、paddingX 16-24、titleSize 26-38。
-- 背景：bg 用 #RRGGBB；bgStyle 可选 none/paper/grid/dots/lines/wash，默认 none。
+- 背景：bg 用 #RRGGBB；bgStyle 可选 none/paper/grid/dots/lines/wash，不填时跟随主题默认，显式写 none 才关闭。
 - 图片：imageWidth 40-100（百分比），imageAlign 可选 left/center/right。
-- 矢量角标：ornament 可选 none/corner/column/seal/leaf，默认 none，最多用一个，与底纹呼应而不堆砌。
+- 矢量角标：ornament 可选 none/corner/column/seal/leaf，不填时跟随主题默认，显式写 none 才关闭；最多用一个，与底纹呼应而不堆砌。
 - 克制底线：留白优先、同级统一、一个视觉记忆点；不用高饱和荧光色、彩虹拼盘、emoji、外发光和重阴影。
 - 用户说「精排 / 设计感 / 杂志风 / 插画风 / 故事书风 / 优化排版 / 按内容排版」时，必须返回完整 design（themeId、variantId、overrides，包含成套的标题/小节/引文/配图样式以及呼应气质的 bg/bgStyle/ornament），不要只改一两个参数敷衍。reply 用一句话点明选定的风格流派和核心视觉判断。
 

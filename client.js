@@ -191,6 +191,7 @@ const UI_EN = {
   '例如：科技 / 生活 / 深度': 'e.g. Tech / Life / Essay',
   '字号超过 17px 后，列表和图片建议同步放大': 'Above 17px, scale lists and images too',
   '通栏细线': 'Full-width rule',
+  '刊头 + 大标题': 'Masthead + title',
   '色块标题': 'Block title',
   '标签 + 标题': 'Tag + title',
   '边框卡片': 'Bordered card',
@@ -199,11 +200,13 @@ const UI_EN = {
   '居中 + 短线': 'Centered + rule',
   '眉标 + 大标题': 'Kicker + title',
   '左侧色条': 'Left bar',
+  '横线 + 编号': 'Rule + number',
   '色块标签': 'Block tag',
   '章节编号': 'Section number',
   '居中细线': 'Centered rule',
   '圆点': 'Dot',
   '大号数字': 'Big number',
+  '上下细线': 'Pull quote',
   '卡片': 'Card',
   '居中引号': 'Centered quote',
   '浅色底': 'Tinted band',
@@ -1535,8 +1538,11 @@ function composeDesign(stored) {
     colors.border = mixHex(overrides.accent, colors.bg, 0.2)
   }
 
-  // Background override: keep text readable when the page turns dark.
-  const customBg = typeof overrides.bg === 'string' && /^#[0-9a-fA-F]{6}$/.test(overrides.bg) ? overrides.bg : undefined
+  // Background override: keep text readable when the page turns dark. Setting
+  // the theme's own colour is a no-op, so a preset that restates the palette
+  // does not recompute and wash out card and border tones.
+  const requestedBg = typeof overrides.bg === 'string' && /^#[0-9a-fA-F]{6}$/.test(overrides.bg) ? overrides.bg : undefined
+  const customBg = requestedBg !== undefined && requestedBg.toLowerCase() !== theme.palette.bg.toLowerCase() ? requestedBg : undefined
   if (customBg !== undefined) {
     colors.bg = customBg
     if (readableOn(customBg) === '#FFFFFF') {
@@ -2829,9 +2835,9 @@ function nodesToReact(nodes, h) {
   return nodes.map((current, index) => {
     if (typeof current === 'string') return current
     if (current === null || current === undefined) return null
-    const props = { key: index, style: reactStyle(current.style) }
+    const props = { key: index, ...(current.attrs ?? {}), style: reactStyle(current.style) }
     if (current.tag === 'img') {
-      return h('img', { ...props, ...current.attrs, loading: 'lazy', decoding: 'async' })
+      return h('img', { ...props, loading: 'lazy', decoding: 'async' })
     }
     return h(current.tag, props, ...nodesToReact(current.children, h))
   })
@@ -6977,7 +6983,7 @@ function ThemeMiniPreview({ theme }) {
   h('span', {
     className: 'ws-theme-mini-title',
     style: {
-      fontFamily: type.titleFont,
+      fontFamily: FONT_STACK[type.titleFont] ?? type.titleFont,
       fontWeight: type.titleWeight,
       fontSize: `${Math.min(15, Math.max(11, type.titleSize / 2.4))}px`,
       letterSpacing: type.titleTracking,
@@ -7255,7 +7261,7 @@ function ThemeSection(props) {
           'data-title-style': variant.titleStyle,
           style: { background: activeTheme.palette.bg, borderColor: activeTheme.palette.border },
         },
-        h('span', { className: 'ws-variant-title', style: { fontFamily: activeTheme.type.titleFont, color: activeTheme.palette.text } }, t('标题')),
+        h('span', { className: 'ws-variant-title', style: { fontFamily: FONT_STACK[activeTheme.type.titleFont] ?? activeTheme.type.titleFont, color: activeTheme.palette.text } }, t('标题')),
         h('span', { className: 'ws-variant-rule', style: { background: activeTheme.palette.accent } }),
         h('span', { className: 'ws-variant-line', style: { background: activeTheme.palette.secondary } }),
         h('span', { className: 'ws-variant-line short', style: { background: activeTheme.palette.secondary } }),
@@ -7558,14 +7564,14 @@ function TypeSection(props) {
 
 const DECOR_OPTIONS = {
   titleStyle: [
-    ['rule', t('通栏细线')], ['ribbon', t('色块标题')], ['tag', t('标签 + 标题')], ['boxed', t('边框卡片')],
+    ['rule', t('通栏细线')], ['kicker', t('刊头 + 大标题')], ['ribbon', t('色块标题')], ['tag', t('标签 + 标题')], ['boxed', t('边框卡片')],
     ['vertical', t('左侧竖线')], ['underline', t('下划短线')], ['centered', t('居中 + 短线')], ['eyebrow', t('眉标 + 大标题')],
   ],
   sectionStyle: [
-    ['bar', t('左侧色条')], ['tag', t('色块标签')], ['numbered', t('章节编号')], ['line', t('居中细线')], ['dot', t('圆点')], ['ghost', t('大号数字')],
+    ['bar', t('左侧色条')], ['rule', t('横线 + 编号')], ['tag', t('色块标签')], ['numbered', t('章节编号')], ['line', t('居中细线')], ['dot', t('圆点')], ['ghost', t('大号数字')],
   ],
   quoteStyle: [
-    ['bar', t('左侧竖线')], ['card', t('卡片')], ['center', t('居中引号')], ['tint', t('浅色底')], ['stamp', t('描边摘录')],
+    ['bar', t('左侧竖线')], ['pull', t('上下细线')], ['card', t('卡片')], ['center', t('居中引号')], ['tint', t('浅色底')], ['stamp', t('描边摘录')],
   ],
   dividerStyle: [
     ['dots', t('三点')], ['diamond', t('菱形')], ['ornament', t('花饰')], ['line', t('细线')], ['dash', t('虚线')], ['none', t('留白')],

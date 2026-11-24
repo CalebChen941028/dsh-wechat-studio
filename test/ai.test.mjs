@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import { createAiEditor } from '../host/ai.js'
 import { createStudioService } from '../host/service.js'
+import { THEMES } from '../src/themes.mjs'
 
 /** Build a fake Cordis context with just the services the AI editor reads. */
 function fakeContext({ selection = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }, chunks = [], failAt = -1 } = {}) {
@@ -269,7 +270,12 @@ test('aiEdit prompt includes editorial style families and deduplicated theme cat
   assert.match(prompt, /illustration（插画/)
   assert.match(prompt, /storybook（故事书/)
   assert.match(prompt, /gallery（策展/)
-  assert.equal((prompt.match(/column（专栏/g) ?? []).length, 1, 'column should appear once in theme catalog')
+  for (const theme of THEMES) {
+    assert.match(prompt, new RegExp(`(?:^|[：；])${theme.id}（${theme.name}`), `${theme.id} should appear in the catalog`)
+    assert.equal((prompt.match(new RegExp(`(?:^|[：；])${theme.id}（`, 'g')) ?? []).length, 1, `${theme.id} should appear once`)
+  }
+  assert.match(calls[0].system, /不填时跟随主题默认/)
+  assert.match(calls[0].system, /显式写 none 才关闭/)
   assert.equal(result.design.themeId, 'illustration')
   assert.equal(result.design.variantId, 'picturebook')
 })

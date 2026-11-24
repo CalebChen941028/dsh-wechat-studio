@@ -438,7 +438,7 @@ function ThemeMiniPreview({ theme }) {
   h('span', {
     className: 'ws-theme-mini-title',
     style: {
-      fontFamily: type.titleFont,
+      fontFamily: FONT_STACK[type.titleFont] ?? type.titleFont,
       fontWeight: type.titleWeight,
       fontSize: `${Math.min(15, Math.max(11, type.titleSize / 2.4))}px`,
       letterSpacing: type.titleTracking,
@@ -716,7 +716,7 @@ function ThemeSection(props) {
           'data-title-style': variant.titleStyle,
           style: { background: activeTheme.palette.bg, borderColor: activeTheme.palette.border },
         },
-        h('span', { className: 'ws-variant-title', style: { fontFamily: activeTheme.type.titleFont, color: activeTheme.palette.text } }, t('标题')),
+        h('span', { className: 'ws-variant-title', style: { fontFamily: FONT_STACK[activeTheme.type.titleFont] ?? activeTheme.type.titleFont, color: activeTheme.palette.text } }, t('标题')),
         h('span', { className: 'ws-variant-rule', style: { background: activeTheme.palette.accent } }),
         h('span', { className: 'ws-variant-line', style: { background: activeTheme.palette.secondary } }),
         h('span', { className: 'ws-variant-line short', style: { background: activeTheme.palette.secondary } }),
@@ -1019,14 +1019,14 @@ function TypeSection(props) {
 
 const DECOR_OPTIONS = {
   titleStyle: [
-    ['rule', t('通栏细线')], ['ribbon', t('色块标题')], ['tag', t('标签 + 标题')], ['boxed', t('边框卡片')],
+    ['rule', t('通栏细线')], ['kicker', t('刊头 + 大标题')], ['ribbon', t('色块标题')], ['tag', t('标签 + 标题')], ['boxed', t('边框卡片')],
     ['vertical', t('左侧竖线')], ['underline', t('下划短线')], ['centered', t('居中 + 短线')], ['eyebrow', t('眉标 + 大标题')],
   ],
   sectionStyle: [
-    ['bar', t('左侧色条')], ['tag', t('色块标签')], ['numbered', t('章节编号')], ['line', t('居中细线')], ['dot', t('圆点')], ['ghost', t('大号数字')],
+    ['bar', t('左侧色条')], ['rule', t('横线 + 编号')], ['tag', t('色块标签')], ['numbered', t('章节编号')], ['line', t('居中细线')], ['dot', t('圆点')], ['ghost', t('大号数字')],
   ],
   quoteStyle: [
-    ['bar', t('左侧竖线')], ['card', t('卡片')], ['center', t('居中引号')], ['tint', t('浅色底')], ['stamp', t('描边摘录')],
+    ['bar', t('左侧竖线')], ['pull', t('上下细线')], ['card', t('卡片')], ['center', t('居中引号')], ['tint', t('浅色底')], ['stamp', t('描边摘录')],
   ],
   dividerStyle: [
     ['dots', t('三点')], ['diamond', t('菱形')], ['ornament', t('花饰')], ['line', t('细线')], ['dash', t('虚线')], ['none', t('留白')],

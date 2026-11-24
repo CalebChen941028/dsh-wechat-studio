@@ -306,6 +306,16 @@ test('背景图案可选，非法值回落到 none', () => {
   assert.equal(wash.surface.ornament, 'seal')
 })
 
+test('背景设成主题同色时不会重算卡片与边框色', () => {
+  for (const themeId of ['zine', 'illustration', 'storybook', 'gallery']) {
+    const base = composeDesign({ themeId })
+    const same = composeDesign({ themeId, overrides: { bg: base.colors.bg.toLowerCase() } })
+    assert.deepEqual(same.colors, base.colors, `${themeId} palette should stay untouched`)
+    assert.equal(same.surface.pattern, base.surface.pattern, `${themeId} pattern should stay inherited`)
+    assert.equal(same.surface.ornament, base.surface.ornament, `${themeId} ornament should stay inherited`)
+  }
+})
+
 test('styleToCss converts camelCase and keeps unitless properties bare', () => {
   assert.equal(styleToCss({ fontSize: '15px', lineHeight: 1.8, fontWeight: 700, borderLeft: '3px solid #000' }),
     'font-size:15px;line-height:1.8;font-weight:700;border-left:3px solid #000')
@@ -453,14 +463,21 @@ test('高设计感主题（画报/插画/故事书/策展）默认继承氛围�
     ['gallery', 'exhibit', 'grid', 'column'],
   ]
   const { blocks } = parseArticle(ARTICLE)
-  for (const [themeId, variantId, pattern, ornament] of expected) {
-    const design = composeDesign({ themeId, variantId })
-    assert.equal(design.surface.pattern, pattern, `${themeId} default pattern`)
-    assert.equal(design.surface.ornament, ornament, `${themeId} default ornament`)
-    const html = serializeNodes(buildArticle({ blocks, design, meta: { author: '编辑部' } }).nodes)
-    assert.ok(html.includes('<svg'), `${themeId} renders default ornament`)
-    const stripped = composeDesign({ themeId, variantId, overrides: { bgStyle: 'none', ornament: 'none' } })
-    assert.equal(stripped.surface.pattern, 'none')
-    assert.equal(stripped.surface.ornament, 'none')
+  for (const [themeId, , pattern, ornament] of expected) {
+    const theme = THEMES.find(entry => entry.id === themeId)
+    for (const variant of theme.variants) {
+      const design = composeDesign({ themeId, variantId: variant.id })
+      assert.equal(design.surface.pattern, pattern, `${themeId}/${variant.id} default pattern`)
+      assert.equal(design.surface.ornament, ornament, `${themeId}/${variant.id} default ornament`)
+      const html = serializeNodes(buildArticle({ blocks, design, meta: { author: '编辑部' } }).nodes)
+      assert.ok(html.includes('background-image'), `${themeId}/${variant.id} renders default pattern`)
+      assert.ok(html.includes('<svg'), `${themeId}/${variant.id} renders default ornament`)
+      const stripped = composeDesign({ themeId, variantId: variant.id, overrides: { bgStyle: 'none', ornament: 'none' } })
+      assert.equal(stripped.surface.pattern, 'none')
+      assert.equal(stripped.surface.ornament, 'none')
+      const strippedHtml = serializeNodes(buildArticle({ blocks, design: stripped, meta: { author: '编辑部' } }).nodes)
+      assert.ok(!strippedHtml.includes('background-image'), `${themeId}/${variant.id} hides pattern`)
+      assert.ok(!strippedHtml.includes('<svg'), `${themeId}/${variant.id} hides ornament`)
+    }
   }
 })
