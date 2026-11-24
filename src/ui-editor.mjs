@@ -1,5 +1,5 @@
 function TopBar(props) {
-  const { store, design, features, narrow, compact, narrowView, setNarrowView, rightOpen, setRightOpen, onCompose, onReshuffle, onCopy, onOpenDesign, onImportDocument, refining, toast, appearance, setAppearance, onHelp } = props
+  const { store, design, features, narrow, compact, narrowView, setNarrowView, rightOpen, setRightOpen, onCopy, onOpenDesign, onImportDocument, toast, appearance, setAppearance, onHelp } = props
   const [menuOpen, setMenuOpen] = React.useState(false)
   const [appearanceOpen, setAppearanceOpen] = React.useState(false)
   React.useEffect(() => {
@@ -57,8 +57,7 @@ function TopBar(props) {
     h('div', { className: 'ws-brand' },
       h(Icon, { name: 'pen', size: 17 }),
       h('span', null, t('公众号排版')),
-      compact ? null : h('span', { className: 'ws-badge' }, [t(design.themeName), t(design.variantName)].join(' · ')),
-      refining ? h('span', { className: 'ws-badge busy' }, t('AI 精排中…')) : null,
+      compact ? null : h('span', { className: 'ws-badge' }, t(design.themeName)),
     ),
     narrow
       ? h('div', { className: 'ws-seg' },
@@ -77,10 +76,6 @@ function TopBar(props) {
     compact
       ? h(IconButton, { icon: 'chat', title: t('AI 对话修改'), onClick: () => onOpenDesign('ai') })
       : h(Button, { icon: 'chat', onClick: () => onOpenDesign('ai'), title: t('用对话让 AI 改文案或版式') }, t('AI 修改')),
-    h(Button, { icon: 'sparkles', variant: 'primary', onClick: onCompose, title: t('按内容自动选择主题与版式') }, t('自动编排')),
-    compact
-      ? h(IconButton, { icon: 'shuffle', title: t('换一版'), onClick: onReshuffle })
-      : h(Button, { icon: 'shuffle', onClick: onReshuffle, title: t('在当前主题里换一个版式') }, t('换一版')),
     compact
       ? h(IconButton, { icon: 'copy', title: t('复制带样式的正文'), onClick: onCopy })
       : h(Button, { icon: 'copy', onClick: onCopy }, t('复制 HTML')),
@@ -89,7 +84,7 @@ function TopBar(props) {
       ? null
       : rightOpen
         ? h(IconButton, { icon: 'panel', title: t('收起设计面板'), onClick: () => setRightOpen(false) })
-        : h(Button, { icon: 'panel', onClick: () => setRightOpen(true), title: t('展开主题与发布面板') }, t('展开设计')),
+        : h(Button, { icon: 'panel', onClick: () => setRightOpen(true), title: t('展开设计与发布面板') }, t('展开设计')),
     h(IconButton, { icon: 'help', title: t('使用提示与快捷键'), onClick: onHelp }),
     h('div', { className: 'ws-menu-anchor' },
       h(IconButton, { icon: 'palette', title: t('外观与主题'), onClick: () => { setAppearanceOpen(value => !value); setMenuOpen(false) } }),
@@ -1081,7 +1076,7 @@ function ArticleBody(props) {
 
 const TABS = [
   { id: 'ai', label: t('AI') },
-  { id: 'theme', label: t('主题') },
+  { id: 'theme', label: t('设计') },
   { id: 'type', label: t('排版') },
   { id: 'decor', label: t('装饰') },
   { id: 'publish', label: t('发布') },

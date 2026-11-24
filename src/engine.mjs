@@ -427,6 +427,7 @@ export function normalizeCustomDesign(raw) {
     imageAlign: pickCustomEnum(optionsRaw.imageAlign, ['left', 'center', 'right'], 'center'),
   }
   return {
+    source: raw.source === 'local' ? 'local' : 'ai',
     name: typeof raw.name === 'string' ? raw.name.trim().slice(0, 24) : '',
     tagline: typeof raw.tagline === 'string' ? raw.tagline.trim().slice(0, 60) : '',
     palette,
@@ -586,25 +587,74 @@ export function composeDesign(stored) {
 }
 
 /**
- * Choose a theme and variant from the copy, then derive a few tasteful
- * adjustments from its length and structure.
+ * Build a neutral, content-aware baseline design. It deliberately has no
+ * preset theme identity: local previews stay readable, and the AI is expected
+ * to replace it with a bespoke token set when the user asks for design work.
  * @param {any[]} blocks parsed blocks.
  * @param {string} text raw copy.
- * @param {number} seed increments the exploration of equally ranked variants.
- * @returns {{ design: object, analysis: object }} stored design plus the reasoning shown in the panel.
+ * @returns {{ custom: object }} stored custom design.
  */
-export function autoCompose(blocks, text, seed = 0) {
+export function defaultDesign(blocks, text) {
   const features = measure(blocks, text)
   const topic = detectTopic(text)
-  const ranked = rankThemes(topic, features)
-  const theme = ranked[0].theme
-  const variant = pickVariant(theme, features, seed)
+  const title = blocks.find(block => block.type === 'title')?.text ?? plainText(text.split('\n')[0] ?? '')
+  const titleLength = title.length
+  const longCopy = features.chars > 2200
+  const denseCopy = features.chars > 3000
+  return {
+    custom: normalizeCustomDesign({
+      source: 'local',
+      name: '基础版式',
+      tagline: '按内容长度与结构生成的纸感底版，可让 AI 重做整套设计',
+      palette: {
+        bg: '#FCFAF6', card: '#F4EFE6', text: '#1E1B18', secondary: '#6F675D',
+        accent: '#9A5B3D', accentSoft: '#F0E4DB', border: '#E3D9CC',
+      },
+      type: {
+        titleFont: 'serif', bodyFont: 'sans',
+        titleSize: titleLength <= 10 ? 34 : titleLength >= 24 ? 28 : 31,
+        titleWeight: 600, titleTracking: '0.01em',
+        bodySize: denseCopy ? 16 : 15.5,
+        lineHeight: longCopy ? 1.92 : 1.86,
+        letterSpacing: '0.015em',
+        paraGap: longCopy ? 24 : 20,
+        paddingX: 20,
+      },
+      surface: { pattern: 'paper', ornament: 'none' },
+      titleStyle: 'rule',
+      sectionStyle: features.headings >= 3 ? 'numbered' : 'rule',
+      quoteStyle: features.quotes >= 2 ? 'card' : 'pull',
+      dividerStyle: 'line',
+      listStyle: features.listItems >= 4 ? 'num' : 'dot',
+      imageStyle: features.images >= 2 ? 'frame' : 'plain',
+      options: {
+        dropCap: true,
+        lead: features.hasLeadCandidate,
+        eyebrow: topic.label,
+        showEyebrow: true,
+        showMeta: true,
+        showFooter: true,
+        imageWidth: 100,
+        imageAlign: 'center',
+      },
+    }),
+  }
+}
+
+/**
+ * Explain the copy's topic and structure. This no longer chooses a theme; it
+ * only reports what the local baseline and the AI can react to.
+ * @param {any[]} blocks parsed blocks.
+ * @param {string} text raw copy.
+ * @returns {{ topic: string, label: string, matches: object, features: object, reasons: string[] }} content analysis.
+ */
+export function analyzeContent(blocks, text) {
+  const features = measure(blocks, text)
+  const topic = detectTopic(text)
   const reasons = []
-
   reasons.push(topic.topic === 'general'
-    ? '主题词命中不多，按结构与长度选版式'
+    ? '主题词命中不多，按结构与长度生成基础版式'
     : `识别为「${topic.label}」主题（命中 ${Math.round(topic.matches[topic.topic] ?? 0)} 个关键词）`)
-
   const structure = []
   if (features.headings > 0) structure.push(`${features.headings} 个小节`)
   if (features.quotes > 0) structure.push(`${features.quotes} 段引用`)
@@ -612,33 +662,21 @@ export function autoCompose(blocks, text, seed = 0) {
   if (features.listItems > 0) structure.push(`${features.listItems} 条列表`)
   if (features.codeBlocks > 0) structure.push(`${features.codeBlocks} 段代码`)
   reasons.push(structure.length > 0 ? `结构：${structure.join(' / ')}` : `结构：${features.paragraphs} 段连续正文`)
-  reasons.push(features.chars > 2200
-    ? `篇幅 ${features.chars} 字，放宽行高到 ${theme.type.lineHeight}`
-    : `篇幅 ${features.chars} 字，约 ${features.readingMinutes} 分钟读完`)
-  reasons.push(`配色「${theme.name}」· 版式「${variant.name}」：${theme.tagline}`)
-  if (features.avgParagraph > 90) reasons.push('长段落偏多，正文按更松的段间距离排')
+  reasons.push(`篇幅 ${features.chars} 字，约 ${features.readingMinutes} 分钟读完`)
+  reasons.push('基础版式只负责可读性；需要专属风格时让 AI 重做整套设计')
+  return { topic: topic.topic, label: topic.label, matches: topic.matches, features, reasons }
+}
 
-  const titleLength = (blocks.find(block => block.type === 'title')?.text ?? plainText(text.split('\n')[0] ?? '')).length
-  const overrides = {
-    eyebrow: topic.label,
-    titleSize: titleLength <= 10 ? theme.type.titleSize + 3 : titleLength >= 24 ? theme.type.titleSize - 3 : theme.type.titleSize,
-    lead: features.hasLeadCandidate,
-    showEyebrow: variant.titleStyle === 'eyebrow' || variant.titleStyle === 'tag' || variant.titleStyle === 'centered' || variant.titleStyle === 'kicker',
-    bodySize: features.chars > 3000 ? Math.max(theme.type.bodySize, 16) : theme.type.bodySize,
-    lineHeight: features.chars > 2200 ? Math.max(theme.type.lineHeight, 1.88) : theme.type.lineHeight,
-  }
-
-  return {
-    design: { themeId: theme.id, variantId: variant.id, overrides },
-    analysis: {
-      topic: topic.topic,
-      label: topic.label,
-      matches: topic.matches,
-      features,
-      reasons,
-      ranked: ranked.map(entry => ({ id: entry.theme.id, name: entry.theme.name, score: Math.round(entry.score * 100) / 100 })),
-    },
-  }
+/**
+ * Produce the local baseline and its content analysis.
+ * @param {any[]} blocks parsed blocks.
+ * @param {string} text raw copy.
+ * @param {number} seed retained for callers; the baseline is deterministic.
+ * @returns {{ design: object, analysis: object }} stored design plus reasoning shown in the panel.
+ */
+export function autoCompose(blocks, text, seed = 0) {
+  void seed
+  return { design: defaultDesign(blocks, text), analysis: analyzeContent(blocks, text) }
 }
 
 /**

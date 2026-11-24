@@ -1798,6 +1798,7 @@ function normalizeCustomDesign(raw) {
     imageAlign: pickCustomEnum(optionsRaw.imageAlign, ['left', 'center', 'right'], 'center'),
   }
   return {
+    source: raw.source === 'local' ? 'local' : 'ai',
     name: typeof raw.name === 'string' ? raw.name.trim().slice(0, 24) : '',
     tagline: typeof raw.tagline === 'string' ? raw.tagline.trim().slice(0, 60) : '',
     palette,
@@ -1957,25 +1958,74 @@ function composeDesign(stored) {
 }
 
 /**
- * Choose a theme and variant from the copy, then derive a few tasteful
- * adjustments from its length and structure.
+ * Build a neutral, content-aware baseline design. It deliberately has no
+ * preset theme identity: local previews stay readable, and the AI is expected
+ * to replace it with a bespoke token set when the user asks for design work.
  * @param {any[]} blocks parsed blocks.
  * @param {string} text raw copy.
- * @param {number} seed increments the exploration of equally ranked variants.
- * @returns {{ design: object, analysis: object }} stored design plus the reasoning shown in the panel.
+ * @returns {{ custom: object }} stored custom design.
  */
-function autoCompose(blocks, text, seed = 0) {
+function defaultDesign(blocks, text) {
   const features = measure(blocks, text)
   const topic = detectTopic(text)
-  const ranked = rankThemes(topic, features)
-  const theme = ranked[0].theme
-  const variant = pickVariant(theme, features, seed)
+  const title = blocks.find(block => block.type === 'title')?.text ?? plainText(text.split('\n')[0] ?? '')
+  const titleLength = title.length
+  const longCopy = features.chars > 2200
+  const denseCopy = features.chars > 3000
+  return {
+    custom: normalizeCustomDesign({
+      source: 'local',
+      name: '基础版式',
+      tagline: '按内容长度与结构生成的纸感底版，可让 AI 重做整套设计',
+      palette: {
+        bg: '#FCFAF6', card: '#F4EFE6', text: '#1E1B18', secondary: '#6F675D',
+        accent: '#9A5B3D', accentSoft: '#F0E4DB', border: '#E3D9CC',
+      },
+      type: {
+        titleFont: 'serif', bodyFont: 'sans',
+        titleSize: titleLength <= 10 ? 34 : titleLength >= 24 ? 28 : 31,
+        titleWeight: 600, titleTracking: '0.01em',
+        bodySize: denseCopy ? 16 : 15.5,
+        lineHeight: longCopy ? 1.92 : 1.86,
+        letterSpacing: '0.015em',
+        paraGap: longCopy ? 24 : 20,
+        paddingX: 20,
+      },
+      surface: { pattern: 'paper', ornament: 'none' },
+      titleStyle: 'rule',
+      sectionStyle: features.headings >= 3 ? 'numbered' : 'rule',
+      quoteStyle: features.quotes >= 2 ? 'card' : 'pull',
+      dividerStyle: 'line',
+      listStyle: features.listItems >= 4 ? 'num' : 'dot',
+      imageStyle: features.images >= 2 ? 'frame' : 'plain',
+      options: {
+        dropCap: true,
+        lead: features.hasLeadCandidate,
+        eyebrow: topic.label,
+        showEyebrow: true,
+        showMeta: true,
+        showFooter: true,
+        imageWidth: 100,
+        imageAlign: 'center',
+      },
+    }),
+  }
+}
+
+/**
+ * Explain the copy's topic and structure. This no longer chooses a theme; it
+ * only reports what the local baseline and the AI can react to.
+ * @param {any[]} blocks parsed blocks.
+ * @param {string} text raw copy.
+ * @returns {{ topic: string, label: string, matches: object, features: object, reasons: string[] }} content analysis.
+ */
+function analyzeContent(blocks, text) {
+  const features = measure(blocks, text)
+  const topic = detectTopic(text)
   const reasons = []
-
   reasons.push(topic.topic === 'general'
-    ? '主题词命中不多，按结构与长度选版式'
+    ? '主题词命中不多，按结构与长度生成基础版式'
     : `识别为「${topic.label}」主题（命中 ${Math.round(topic.matches[topic.topic] ?? 0)} 个关键词）`)
-
   const structure = []
   if (features.headings > 0) structure.push(`${features.headings} 个小节`)
   if (features.quotes > 0) structure.push(`${features.quotes} 段引用`)
@@ -1983,33 +2033,21 @@ function autoCompose(blocks, text, seed = 0) {
   if (features.listItems > 0) structure.push(`${features.listItems} 条列表`)
   if (features.codeBlocks > 0) structure.push(`${features.codeBlocks} 段代码`)
   reasons.push(structure.length > 0 ? `结构：${structure.join(' / ')}` : `结构：${features.paragraphs} 段连续正文`)
-  reasons.push(features.chars > 2200
-    ? `篇幅 ${features.chars} 字，放宽行高到 ${theme.type.lineHeight}`
-    : `篇幅 ${features.chars} 字，约 ${features.readingMinutes} 分钟读完`)
-  reasons.push(`配色「${theme.name}」· 版式「${variant.name}」：${theme.tagline}`)
-  if (features.avgParagraph > 90) reasons.push('长段落偏多，正文按更松的段间距离排')
+  reasons.push(`篇幅 ${features.chars} 字，约 ${features.readingMinutes} 分钟读完`)
+  reasons.push('基础版式只负责可读性；需要专属风格时让 AI 重做整套设计')
+  return { topic: topic.topic, label: topic.label, matches: topic.matches, features, reasons }
+}
 
-  const titleLength = (blocks.find(block => block.type === 'title')?.text ?? plainText(text.split('\n')[0] ?? '')).length
-  const overrides = {
-    eyebrow: topic.label,
-    titleSize: titleLength <= 10 ? theme.type.titleSize + 3 : titleLength >= 24 ? theme.type.titleSize - 3 : theme.type.titleSize,
-    lead: features.hasLeadCandidate,
-    showEyebrow: variant.titleStyle === 'eyebrow' || variant.titleStyle === 'tag' || variant.titleStyle === 'centered' || variant.titleStyle === 'kicker',
-    bodySize: features.chars > 3000 ? Math.max(theme.type.bodySize, 16) : theme.type.bodySize,
-    lineHeight: features.chars > 2200 ? Math.max(theme.type.lineHeight, 1.88) : theme.type.lineHeight,
-  }
-
-  return {
-    design: { themeId: theme.id, variantId: variant.id, overrides },
-    analysis: {
-      topic: topic.topic,
-      label: topic.label,
-      matches: topic.matches,
-      features,
-      reasons,
-      ranked: ranked.map(entry => ({ id: entry.theme.id, name: entry.theme.name, score: Math.round(entry.score * 100) / 100 })),
-    },
-  }
+/**
+ * Produce the local baseline and its content analysis.
+ * @param {any[]} blocks parsed blocks.
+ * @param {string} text raw copy.
+ * @param {number} seed retained for callers; the baseline is deterministic.
+ * @returns {{ design: object, analysis: object }} stored design plus reasoning shown in the panel.
+ */
+function autoCompose(blocks, text, seed = 0) {
+  void seed
+  return { design: defaultDesign(blocks, text), analysis: analyzeContent(blocks, text) }
 }
 
 /**
@@ -4639,7 +4677,7 @@ const SKINS = [
   { id: 'sand', name: t('暖砂'), hint: t('米色柔光') },
 ]
 const UI_ACCENTS = ['#0A84FF', '#3A3A3C', '#0E7C86', '#A2653B', '#B23A3A', '#6E6E73']
-const BG_CHOICES = [['', t('跟随主题')], ['#FFFFFF', t('纸白')], ['#F7F4EE', t('米色')], ['#F3F4F6', t('冷灰')], ['#161616', t('墨黑')]]
+const BG_CHOICES = [['', t('跟随版式')], ['#FFFFFF', t('纸白')], ['#F7F4EE', t('米色')], ['#F3F4F6', t('冷灰')], ['#161616', t('墨黑')]]
 const BG_PATTERNS = [['none', t('无底纹')], ['paper', t('纸纹')], ['grid', t('网格')], ['dots', t('点阵')], ['lines', t('竖线')], ['wash', t('淡彩')], ['watercolor', t('水彩')], ['halftone', t('网点')]]
 const ORNAMENTS = [['none', t('不加角标')], ['corner', t('边角线')], ['column', t('栏线')], ['seal', t('印记')], ['leaf', t('叶形')], ['sprig', t('枝叶')], ['star', t('星标')]]
 
@@ -4724,7 +4762,7 @@ const SAMPLE_ARTICLE = `# 我为什么又开始自己排版
 
 ## 现在我怎么做
 
-先把稿子写成 Markdown，再让工具把它翻译成内联样式。标题、引用、列表、配图各有一套固定的处理方式，改主题只需要换一份配色。
+先把稿子写成 Markdown，再让工具把它翻译成内联样式。标题、引用、列表、配图各有一套固定的处理方式，改版式只需要重做一套配色与层级。
 
 > 排版的目的不是好看，是让读者别分心。
 
@@ -4736,7 +4774,7 @@ const SAMPLE_ARTICLE = `# 我为什么又开始自己排版
 
 ---
 
-写到这里，样式应该已经套好了。你可以改右侧的主题，也可以只调字号和行距。改完复制，粘回公众号编辑器。`
+写到这里，样式应该已经套好了。你可以让 AI 重新设计，也可以只调字号和行距。改完复制，粘回公众号编辑器。`
 
 const SAMPLE_TEXT_FALLBACK = SAMPLE_ARTICLE
 
@@ -5131,31 +5169,12 @@ function StudioPanel(props) {
       // Private mode: the choice just won't survive a reload.
     }
   }, [appearance])
-  const [autoRefine, setAutoRefine] = React.useState(() => {
-    try {
-      return localStorage.getItem('dsh.wechat-studio.autoRefine') !== '0'
-    } catch {
-      return true
-    }
-  })
-  const [refining, setRefining] = React.useState(false)
   const textareaRef = React.useRef(null)
   const toastSeq = React.useRef(0)
   const autoTimerRef = React.useRef(undefined)
-  const refineTimerRef = React.useRef(undefined)
-  const refineTokenRef = React.useRef(0)
-
-  React.useEffect(() => {
-    try {
-      localStorage.setItem('dsh.wechat-studio.autoRefine', autoRefine ? '1' : '0')
-    } catch {
-      // Private mode: the preference just won't survive a reload.
-    }
-  }, [autoRefine])
 
   React.useEffect(() => () => {
     clearTimeout(autoTimerRef.current)
-    clearTimeout(refineTimerRef.current)
   }, [])
 
   const toast = React.useCallback((message, kind = 'info') => {
@@ -5273,25 +5292,6 @@ function StudioPanel(props) {
     setSelectedBlock(found >= 0 ? found : null)
   }, [parsed.blocks])
 
-  const runCompose = () => {
-    const result = autoCompose(parsed.blocks, doc.text, 0)
-    store.updateDoc(current => ({ ...current, design: result.design, meta: current.meta }))
-    setTab('theme')
-    if (narrow) setNarrowView('design')
-    const composed = composeDesign(result.design)
-    toast(`已按「${result.analysis.label}」编排：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
-  }
-
-  const reshuffle = () => {
-    if (doc.design.custom !== undefined && doc.design.custom !== null) {
-      toast(t('当前是 AI 自定义版式，没有预设变体；可以让 AI 再设计一版'))
-      return
-    }
-    store.updateDesign(current => nextVariant(current))
-    const next = composeDesign(nextVariant(doc.design))
-    toast(`换了一版：${t(next.themeName)} · ${t(next.variantName)}`)
-  }
-
   const copyArticle = async () => {
     if (doc.text.trim() === '') {
       toast('编辑区还是空的，先写点内容再复制', 'error')
@@ -5311,11 +5311,6 @@ function StudioPanel(props) {
     }
   }
 
-  /**
-   * Run the local composer on whatever is in the editor now. This is instant
-   * and deterministic, so pasted copy gets a decent layout before the model
-   * even answers.
-   */
   const composeFromCurrent = React.useCallback((announce) => {
     const current = store.getDoc()
     if (!current || current.text.trim().length < 40) return null
@@ -5325,89 +5320,18 @@ function StudioPanel(props) {
     const designNow = autoCompose(parsedNow.blocks, current.text, 0).design
     store.updateDoc(entry => ({ ...entry, design: designNow }))
     if (announce) {
-      const composed = composeDesign(designNow)
-      toast(`已按内容自动编排：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
+      toast('已生成中性基础版式，可让 AI 继续设计')
     }
     return designNow
   }, [store, toast])
 
-  /** Ask the model to pick a layout, without letting it rewrite the copy. */
-  const refineWithAi = React.useCallback(async (force = false) => {
-    if (!autoRefine && force !== true) return
-    const current = store.getDoc()
-    if (!current || current.text.trim().length < 120) return
-    const token = refineTokenRef.current + 1
-    refineTokenRef.current = token
-    const designBefore = JSON.stringify(current.design)
-    setRefining(true)
-    try {
-      const value = await callHost('aiEdit', {
-        instruction: '只做版式编排，不要改正文、标题和摘要。按内容类型做完整的杂志化设计：主题、版式、标题/小节/引文/分割线/列表/配图的装饰组合，必要时调整背景与矢量角标，以及字号、行高、段距、左右留白。reply 用一句话说明设计判断，不要只换一个颜色。',
-        text: current.text,
-        title: current.meta.title,
-        design: current.design,
-        meta: { author: current.meta.author, digest: current.meta.digest },
-        history: [],
-      }, { timeoutMs: 150000 })
-      if (token !== refineTokenRef.current) return
-      const latest = store.getDoc()
-      if (!latest || latest.id !== current.id) return
-      if (JSON.stringify(latest.design) !== designBefore) {
-        toast('你刚手动调过版式，AI 精排的结果没有覆盖它')
-        return
-      }
-      if (!value.design) return
-      if (value.design.custom !== undefined && value.design.custom !== null) {
-        const design = {
-          themeId: 'custom',
-          variantId: 'custom',
-          custom: value.design.custom,
-          overrides: value.design.overrides ?? {},
-        }
-        store.updateDoc(entry => ({ ...entry, design }))
-        const composed = composeDesign(design)
-        toast(`AI 精排完成：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
-        return
-      }
-      if (typeof value.design.themeId !== 'string') return
-      const theme = THEMES.find(entry => entry.id === value.design.themeId)
-      if (theme === undefined) return
-      const variantId = theme.variants.some(entry => entry.id === value.design.variantId)
-        ? value.design.variantId
-        : theme.variants[0].id
-      store.updateDoc(entry => {
-        const themeChanged = theme.id !== entry.design.themeId
-        return {
-          ...entry,
-          design: {
-            themeId: theme.id,
-            variantId,
-            // A theme switch starts from the new theme's own vocabulary;
-            // keeping the old accent/decor would fight the new design.
-            overrides: themeChanged
-              ? (value.design.overrides ?? {})
-              : { ...(entry.design.overrides ?? {}), ...(value.design.overrides ?? {}) },
-          },
-        }
-      })
-      const composed = composeDesign({ themeId: theme.id, variantId, overrides: value.design.overrides ?? {} })
-      toast(`AI 精排完成：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
-    } catch (error) {
-      if (token === refineTokenRef.current) toast(`AI 精排没有完成（${error.message}），已保留自动编排的结果`)
-    } finally {
-      if (token === refineTokenRef.current) setRefining(false)
-    }
-  }, [autoRefine, store, toast])
-
-  /** Debounce the local composer, then hand off to the model when enabled. */
+  /** Debounce the local baseline so typing never waits on the model. */
   const scheduleAutoCompose = React.useCallback((announce) => {
     clearTimeout(autoTimerRef.current)
-    clearTimeout(refineTimerRef.current)
     autoTimerRef.current = setTimeout(() => {
       composeFromCurrent(announce)
-      if (autoRefine) refineTimerRef.current = setTimeout(() => { refineWithAi() }, 700)
     }, 60)
-  }, [composeFromCurrent, refineWithAi, autoRefine])
+  }, [composeFromCurrent])
 
   const importDocument = React.useCallback(async (file) => {
     if (!file) return
@@ -5421,17 +5345,12 @@ function StudioPanel(props) {
       const designNow = autoCompose(parsedNow.blocks, body, 0).design
       store.addDoc(body, designNow)
       if (narrow) setNarrowView('preview')
-      const composed = composeDesign(designNow)
       const imageNote = typeof images === 'number' && images > 0 ? t('，含 {count} 张插图', { count: images }) : ''
-      toast(`已导入「${parsedNow.title || file.name}」，自动编排为 ${t(composed.themeName)} · ${t(composed.variantName)}${imageNote}`, 'success')
-      if (autoRefine) {
-        clearTimeout(refineTimerRef.current)
-        refineTimerRef.current = setTimeout(() => { refineWithAi() }, 900)
-      }
+      toast(`已导入「${parsedNow.title || file.name}」，先使用基础版式${imageNote}`, 'success')
     } catch (error) {
       toast(error.message || t('导入失败'), 'error')
     }
-  }, [store, autoRefine, narrow, refineWithAi, toast, bumpImages])
+  }, [store, narrow, toast, bumpImages])
 
   const openDesign = (nextTab) => {
     setTab(nextTab)
@@ -5449,10 +5368,9 @@ function StudioPanel(props) {
   }
 
   const paletteCommands = [
-    { id: 'compose', label: t('自动编排'), hint: t('按内容选主题与版式'), run: runCompose },
-    { id: 'reshuffle', label: t('换一版'), hint: t('当前主题内换版式'), run: reshuffle },
+    { id: 'design', label: t('打开 AI 设计'), hint: t('在对话里让 AI 直接设计版式'), run: () => openDesign('ai') },
     { id: 'copy', label: t('复制 HTML'), hint: t('复制带内联样式的正文'), run: copyArticle },
-    { id: 'theme', label: t('打开主题面板'), hint: t('主题、版式、版式 DNA'), run: () => openDesign('theme') },
+    { id: 'theme', label: t('打开设计面板'), hint: t('配色、字号、底纹、版式 DNA'), run: () => openDesign('theme') },
     { id: 'publish', label: t('打开发布面板'), hint: t('草稿、对账单、发布检查'), run: () => openDesign('publish') },
     { id: 'ai', label: t('打开 AI 修改'), hint: t('对话修改正文或版式'), run: () => openDesign('ai') },
     { id: 'snapshot', label: t('保存版本快照'), hint: t('当前正文存入历史版本'), run: () => takeSnapshot('manual', true) },
@@ -5487,8 +5405,8 @@ function StudioPanel(props) {
     h('style', { dangerouslySetInnerHTML: { __html: STUDIO_CSS } }),
     h(TopBar, {
       store, design, features, narrow, compact, narrowView, setNarrowView, rightOpen, setRightOpen,
-      onCompose: runCompose, onReshuffle: reshuffle, onCopy: copyArticle, onOpenDesign: openDesign,
-      onImportDocument: importDocument, refining, toast, appearance, setAppearance, onHelp: () => { setHelpFirstRun(false); setHelpOpen(true) },
+      onCopy: copyArticle, onOpenDesign: openDesign,
+      onImportDocument: importDocument, toast, appearance, setAppearance, onHelp: () => { setHelpFirstRun(false); setHelpOpen(true) },
     }),
     store.remoteNotice
       ? h('div', { className: 'ws-remote-banner' },
@@ -5512,7 +5430,6 @@ function StudioPanel(props) {
       h(DesignPanel, {
         store, design, doc, analysis, features, hostStatus, setHostStatus, tab, setTab, toast, parsed, article, selectedBlock,
         narrow, compact, showClose: narrow || compact, onClose: closeDesign,
-        autoRefine, setAutoRefine, refining, onRefineNow: () => refineWithAi(true),
         takeSnapshot, snapshotVersion,
       }),
     ),
@@ -5521,14 +5438,6 @@ function StudioPanel(props) {
     imagesOpen ? h(ImageLibraryDialog, { store, toast, textareaRef, onClose: () => setImagesOpen(false) }) : null,
     helpOpen ? h(HelpDialog, { firstRun: helpFirstRun, onClose: closeHelp, onDiagnostics: () => { setHelpOpen(false); setDiagnosticsOpen(true) } }) : null,
     diagnosticsOpen ? h(DiagnosticsDialog, { onClose: () => setDiagnosticsOpen(false) }) : null,
-    refining
-      ? h('div', { className: 'ws-refining' },
-        h('span', { className: 'ws-typing-dot' }),
-        h('span', { className: 'ws-typing-dot' }),
-        h('span', { className: 'ws-typing-dot' }),
-        h('span', null, t('AI 正在按内容精排版式…')),
-      )
-      : null,
     h(ToastStack, { toasts }),
   )
 }
@@ -5659,7 +5568,7 @@ function CommandPalette({ commands, onClose }) {
           className: 'ws-palette-input',
           autoFocus: true,
           value: query,
-          placeholder: t('搜索动作、草稿、主题…'),
+          placeholder: t('搜索动作、草稿、版式…'),
           onChange: event => setQuery(event.target.value),
         }),
         h('span', { className: 'ws-kbd' }, 'Esc'),
@@ -5894,10 +5803,10 @@ function HelpDialog({ firstRun, onClose, onDiagnostics }) {
       ['拖拽段落', '调整顺序'],
       ['复制这一段', '复制块后继续改'],
       ['图片工具', '图注 / 裁剪'],
-      ['主题收藏', '收藏与最近筛选'],
+      ['AI 设计', '对话生成整套版式'],
       ['段落锁', '锁定后 AI 不会改'],
       ['片段库', '作者简介、关注引导等'],
-      ['品牌包', '导出主题、规范与片段'],
+      ['品牌包', '导出版式 DNA、规范与片段'],
     ]],
   ]
   return h('div', { className: 'ws-modal-scrim', onClick: event => { if (event.target === event.currentTarget) onClose() } },
@@ -5907,7 +5816,7 @@ function HelpDialog({ firstRun, onClose, onDiagnostics }) {
         h('strong', null, firstRun ? t('第一次用？先看这几条') : t('使用提示与快捷键')),
         h(IconButton, { icon: 'close', title: t('关闭'), onClick: onClose }),
       ),
-      h('p', { className: 'ws-hint' }, firstRun ? t('编辑器写 Markdown，中间实时预览，右侧调主题与发布。下面是最容易漏掉的用法。') : t('这些操作在界面里没有全部写出来，需要时回来查。')),
+      h('p', { className: 'ws-hint' }, firstRun ? t('编辑器写 Markdown，中间实时预览，右侧调版式与发布。下面是最容易漏掉的用法。') : t('这些操作在界面里没有全部写出来，需要时回来查。')),
       h('div', { className: 'ws-help-grid' },
         sections.map(([title, rows]) => h('div', { className: 'ws-help-section', key: title },
           h('h4', null, t(title)),
@@ -5931,7 +5840,7 @@ function HelpDialog({ firstRun, onClose, onDiagnostics }) {
 
 /* ===== src/ui-editor.mjs ===== */
 function TopBar(props) {
-  const { store, design, features, narrow, compact, narrowView, setNarrowView, rightOpen, setRightOpen, onCompose, onReshuffle, onCopy, onOpenDesign, onImportDocument, refining, toast, appearance, setAppearance, onHelp } = props
+  const { store, design, features, narrow, compact, narrowView, setNarrowView, rightOpen, setRightOpen, onCopy, onOpenDesign, onImportDocument, toast, appearance, setAppearance, onHelp } = props
   const [menuOpen, setMenuOpen] = React.useState(false)
   const [appearanceOpen, setAppearanceOpen] = React.useState(false)
   React.useEffect(() => {
@@ -5989,8 +5898,7 @@ function TopBar(props) {
     h('div', { className: 'ws-brand' },
       h(Icon, { name: 'pen', size: 17 }),
       h('span', null, t('公众号排版')),
-      compact ? null : h('span', { className: 'ws-badge' }, [t(design.themeName), t(design.variantName)].join(' · ')),
-      refining ? h('span', { className: 'ws-badge busy' }, t('AI 精排中…')) : null,
+      compact ? null : h('span', { className: 'ws-badge' }, t(design.themeName)),
     ),
     narrow
       ? h('div', { className: 'ws-seg' },
@@ -6009,10 +5917,6 @@ function TopBar(props) {
     compact
       ? h(IconButton, { icon: 'chat', title: t('AI 对话修改'), onClick: () => onOpenDesign('ai') })
       : h(Button, { icon: 'chat', onClick: () => onOpenDesign('ai'), title: t('用对话让 AI 改文案或版式') }, t('AI 修改')),
-    h(Button, { icon: 'sparkles', variant: 'primary', onClick: onCompose, title: t('按内容自动选择主题与版式') }, t('自动编排')),
-    compact
-      ? h(IconButton, { icon: 'shuffle', title: t('换一版'), onClick: onReshuffle })
-      : h(Button, { icon: 'shuffle', onClick: onReshuffle, title: t('在当前主题里换一个版式') }, t('换一版')),
     compact
       ? h(IconButton, { icon: 'copy', title: t('复制带样式的正文'), onClick: onCopy })
       : h(Button, { icon: 'copy', onClick: onCopy }, t('复制 HTML')),
@@ -6021,7 +5925,7 @@ function TopBar(props) {
       ? null
       : rightOpen
         ? h(IconButton, { icon: 'panel', title: t('收起设计面板'), onClick: () => setRightOpen(false) })
-        : h(Button, { icon: 'panel', onClick: () => setRightOpen(true), title: t('展开主题与发布面板') }, t('展开设计')),
+        : h(Button, { icon: 'panel', onClick: () => setRightOpen(true), title: t('展开设计与发布面板') }, t('展开设计')),
     h(IconButton, { icon: 'help', title: t('使用提示与快捷键'), onClick: onHelp }),
     h('div', { className: 'ws-menu-anchor' },
       h(IconButton, { icon: 'palette', title: t('外观与主题'), onClick: () => { setAppearanceOpen(value => !value); setMenuOpen(false) } }),
@@ -7013,7 +6917,7 @@ function ArticleBody(props) {
 
 const TABS = [
   { id: 'ai', label: t('AI') },
-  { id: 'theme', label: t('主题') },
+  { id: 'theme', label: t('设计') },
   { id: 'type', label: t('排版') },
   { id: 'decor', label: t('装饰') },
   { id: 'publish', label: t('发布') },
@@ -7021,7 +6925,7 @@ const TABS = [
 
 /* ===== src/ui-design.mjs ===== */
 function DesignPanel(props) {
-  const { store, design, doc, analysis, features, hostStatus, setHostStatus, tab, setTab, toast, parsed, article, selectedBlock, showClose, onClose, autoRefine, setAutoRefine, refining, onRefineNow, takeSnapshot, snapshotVersion } = props
+  const { store, design, doc, analysis, features, hostStatus, setHostStatus, tab, setTab, toast, parsed, article, selectedBlock, showClose, onClose, takeSnapshot, snapshotVersion } = props
   return h('aside', { className: 'ws-right' },
     h('div', { className: 'ws-tabs' },
       TABS.map(entry => h('button', {
@@ -7036,7 +6940,7 @@ function DesignPanel(props) {
       h('div', { className: 'ws-pane' + (tab === 'ai' ? '' : ' ws-pane-hidden') },
         h(AiSection, { store, design, doc, parsed, hostStatus, toast, selectedBlock, takeSnapshot })),
       h('div', { className: 'ws-pane' + (tab === 'theme' ? '' : ' ws-pane-hidden') },
-        h(ThemeSection, { store, design, analysis, doc, toast, autoRefine, setAutoRefine, refining, onRefineNow })),
+        h(ThemeSection, { store, design, analysis, doc, toast })),
       h('div', { className: 'ws-pane' + (tab === 'type' ? '' : ' ws-pane-hidden') },
         h(TypeSection, { store, design, doc, parsed, toast })),
       h('div', { className: 'ws-pane' + (tab === 'decor' ? '' : ' ws-pane-hidden') },
@@ -7198,26 +7102,9 @@ function AiSection(props) {
       if (scopeLines === null && value.design && typeof value.design === 'object') {
         if (value.design.custom !== undefined && value.design.custom !== null) {
           nextDesign = {
-            themeId: 'custom',
-            variantId: 'custom',
             custom: value.design.custom,
             overrides: value.design.overrides ?? {},
           }
-        }
-      }
-      if (scopeLines === null && value.design && typeof value.design === 'object' && nextDesign === undefined) {
-        const theme = THEMES.find(entry => entry.id === value.design.themeId)
-        const themeId = theme === undefined ? current.design.themeId : theme.id
-        const variant = theme === undefined
-          ? current.design.variantId
-          : theme.variants.some(entry => entry.id === value.design.variantId) ? value.design.variantId : theme.variants[0].id
-        const themeChanged = theme !== undefined && theme.id !== current.design.themeId
-        nextDesign = {
-          themeId,
-          variantId: variant,
-          overrides: themeChanged
-            ? (value.design.overrides ?? {})
-            : { ...(current.design.overrides ?? {}), ...(value.design.overrides ?? {}) },
         }
       }
       const nextMeta = scopeLines === null && value.meta && typeof value.meta === 'object' ? { ...current.meta, ...value.meta } : undefined
@@ -7317,7 +7204,7 @@ function AiSection(props) {
     ),
     messages.length === 0
       ? h('div', { className: 'ws-chat-empty' },
-        h('p', null, t('直接说想怎么改，AI 会改正文、换主题或调版式，改完可以撤销。')),
+        h('p', null, t('直接说想怎么改，AI 会改正文、重做版式或调细节，改完可以撤销。')),
         h('div', { className: 'ws-chips' },
           suggestions.map(text => h('button', {
             key: text,
@@ -7374,12 +7261,7 @@ function AiSection(props) {
           : h('p', { className: 'ws-hint' }, t('只调整版式与标题摘要，不改正文')),
         pending.design !== undefined
           ? h('p', { className: 'ws-hint' }, t('版式：{theme}', { theme: (() => {
-            if (pending.design.custom !== undefined && pending.design.custom !== null) {
-              return t(pending.design.custom.name || 'AI 自定义')
-            }
-            const theme = THEMES.find(entry => entry.id === pending.design.themeId)
-            const variant = theme?.variants.find(entry => entry.id === pending.design.variantId)
-            return `${t(theme?.name ?? pending.design.themeId)}${variant === undefined ? '' : ` · ${t(variant.name)}`}`
+            return t(pending.design.custom?.name || 'AI 自定义')
           })() }))
           : null,
         h('div', { className: 'ws-row' },
@@ -7465,47 +7347,11 @@ function AiSection(props) {
         h('button', { type: 'button', className: 'ws-link', onClick: () => { clearStyleEvents().then(refreshMemory).catch(() => {}) } }, t('清空记忆')),
       )
       : null,
-    h('p', { className: 'ws-hint' }, t('模型是当前会话的默认模型；要求改版式时只动主题与装饰，不会重写正文。')),
+    h('p', { className: 'ws-hint' }, t('模型是当前会话的默认模型；要求改版式时只动版式与装饰，不会重写正文。')),
   )
 }
 
-function ThemeMiniPreview({ theme }) {
-  const palette = theme.palette
-  const type = theme.type
-  return h('span', {
-    className: 'ws-theme-mini',
-    style: { background: palette.bg, color: palette.text, borderColor: palette.border },
-    'aria-hidden': 'true',
-  },
-  h('span', {
-    className: 'ws-theme-mini-title',
-    style: {
-      fontFamily: FONT_STACK[type.titleFont] ?? type.titleFont,
-      fontWeight: type.titleWeight,
-      fontSize: `${Math.min(15, Math.max(11, type.titleSize / 2.4))}px`,
-      letterSpacing: type.titleTracking,
-    },
-  }, t('标题')),
-  h('span', { className: 'ws-theme-mini-tag', style: { color: palette.accent, borderColor: palette.accentSoft } }, '01'),
-  h('span', { className: 'ws-theme-mini-rule', style: { background: palette.accent } }),
-  h('span', { className: 'ws-theme-mini-line', style: { background: palette.secondary } }),
-  h('span', { className: 'ws-theme-mini-line short', style: { background: palette.secondary } }),
-  h('span', { className: 'ws-theme-mini-quote', style: { borderLeftColor: palette.accent, color: palette.secondary, fontFamily: type.bodyFont } }, t('一句引文')),
-  )
-}
-
-const THEME_FAVORITES_KEY = 'dsh.wechat-studio.themeFavorites.v1'
-const THEME_RECENT_KEY = 'dsh.wechat-studio.themeRecent.v1'
 const THEME_DNA_KEY = 'dsh.wechat-studio.themeDna.v1'
-
-function loadThemeList(key) {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(key) ?? '[]')
-    return Array.isArray(parsed) ? parsed.filter(id => typeof id === 'string') : []
-  } catch {
-    return []
-  }
-}
 
 function loadDnaPresets() {
   try {
@@ -7531,10 +7377,7 @@ function extractDnaPalette(dataUrl) {
 }
 
 function ThemeSection(props) {
-  const { store, design, analysis, doc, toast, autoRefine, setAutoRefine, refining, onRefineNow } = props
-  const [filter, setFilter] = React.useState('all')
-  const [favorites, setFavorites] = React.useState(() => loadThemeList(THEME_FAVORITES_KEY))
-  const [recent, setRecent] = React.useState(() => loadThemeList(THEME_RECENT_KEY))
+  const { store, design, analysis, doc, toast } = props
   const [dna, setDna] = React.useState(null)
   const [dnaCandidates, setDnaCandidates] = React.useState([])
   const [dnaName, setDnaName] = React.useState('')
@@ -7566,8 +7409,8 @@ function ThemeSection(props) {
   const exportBrandKit = async () => {
     const snippets = await listSnippets().catch(() => [])
     const kit = createBrandKit({
-      favorites,
-      recent,
+      favorites: [],
+      recent: [],
       dnaPresets,
       styleGuide: normalizeStyleGuide(doc.meta.styleGuide),
       snippets,
@@ -7592,19 +7435,15 @@ function ThemeSection(props) {
       const incoming = parseBrandKit(raw)
       if (incoming === null) throw new Error(t('这不是公众号排版工作台的品牌包'))
       const current = createBrandKit({
-        favorites,
-        recent,
+        favorites: [],
+        recent: [],
         dnaPresets,
         styleGuide: normalizeStyleGuide(doc.meta.styleGuide),
         snippets: await listSnippets().catch(() => []),
       })
       const merged = mergeBrandKits(current, incoming)
-      setFavorites(merged.favorites)
-      setRecent(merged.recent)
       setDnaPresets(merged.dnaPresets)
       try {
-        localStorage.setItem(THEME_FAVORITES_KEY, JSON.stringify(merged.favorites))
-        localStorage.setItem(THEME_RECENT_KEY, JSON.stringify(merged.recent))
         localStorage.setItem(THEME_DNA_KEY, JSON.stringify(merged.dnaPresets))
       } catch { /* private mode */ }
       if (merged.styleGuide !== null) store.updateMeta({ styleGuide: merged.styleGuide })
@@ -7627,7 +7466,7 @@ function ThemeSection(props) {
       const dataUrl = await readFileAsDataUrl(file)
       const palette = await extractDnaPalette(dataUrl)
       const baseBackground = palette.background
-      const accent = palette.accent === '' ? activeTheme.palette.accent : palette.accent
+      const accent = palette.accent === '' ? design.colors.accent : palette.accent
       const candidates = [
         { id: 'source', label: t('参考原色'), overrides: { accent, bg: baseBackground } },
         { id: 'deep', label: t('深色纸面'), overrides: { accent, bg: palette.dark ? baseBackground : mixHex(accent, '#111111', 0.72) } },
@@ -7641,56 +7480,6 @@ function ThemeSection(props) {
     } finally {
       setDnaBusy(false)
     }
-  }
-  const customTheme = design.custom === undefined || design.custom === null ? null : {
-    id: 'custom',
-    name: design.themeName,
-    tagline: design.tagline,
-    palette: design.colors,
-    type: design.type,
-    variants: [{ id: 'custom', name: design.variantName, ...design.decor }],
-  }
-  const activeTheme = customTheme ?? THEMES.find(theme => theme.id === design.themeId) ?? THEMES[0]
-  const toggleFavorite = (themeId) => {
-    setFavorites((list) => {
-      const next = list.includes(themeId) ? list.filter(id => id !== themeId) : [themeId, ...list]
-      try { localStorage.setItem(THEME_FAVORITES_KEY, JSON.stringify(next)) } catch { /* private mode */ }
-      return next
-    })
-  }
-  const visibleThemes = filter === 'favorites'
-    ? favorites.map(id => THEMES.find(theme => theme.id === id)).filter(Boolean)
-    : filter === 'recent'
-      ? recent.map(id => THEMES.find(theme => theme.id === id)).filter(Boolean)
-      : THEMES
-  const applyTheme = (theme) => {
-    setRecent((list) => {
-      const next = [theme.id, ...list.filter(id => id !== theme.id)].slice(0, 6)
-      try { localStorage.setItem(THEME_RECENT_KEY, JSON.stringify(next)) } catch { /* private mode */ }
-      return next
-    })
-    store.updateDoc(current => {
-      const previous = current.design?.overrides ?? {}
-      // Keep a deliberately chosen accent; theme decoration and type reset.
-      const preservedAccent = typeof previous.accent === 'string' ? { accent: previous.accent } : {}
-      return {
-        ...current,
-        design: {
-          themeId: theme.id,
-          variantId: theme.variants[0].id,
-          custom: null,
-          overrides: {
-            ...preservedAccent,
-            eyebrow: previous.eyebrow ?? analysis.label,
-            showEyebrow: ['eyebrow', 'tag', 'centered', 'kicker'].includes(theme.variants[0].titleStyle),
-          },
-        },
-      }
-    })
-  }
-  const setVariant = (variantId) => {
-    if (design.custom !== undefined && design.custom !== null) return
-    store.updateDesign(current => ({ ...current, variantId }))
   }
   const setAccent = (accent) => store.updateDesign(current => ({
     ...current,
@@ -7706,91 +7495,9 @@ function ThemeSection(props) {
       ),
       h('ul', { className: 'ws-reasons' },
         analysis.reasons.slice(0, 3).map((reason, index) => h('li', { key: index }, reason)),
-        h('li', { key: 'current' }, `当前使用「${t(design.themeName)}」·「${t(design.variantName)}」`),
+        h('li', { key: 'current' }, `当前版式：「${t(design.themeName)}」`),
       ),
       h('p', { className: 'ws-hint' }, t('这份分析只看标题、结构、关键词与篇幅，不联网，也不改动你的正文。')),
-    ),
-    h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, t('自动编排'))),
-      h('p', { className: 'ws-hint' }, t('粘贴或上传文档后，先本地按内容套一版（不联网、立即出效果），随后可让 AI 再精排一次。')),
-      h(Toggle, { label: t('粘贴 / 上传后让 AI 精排'), checked: autoRefine, onChange: setAutoRefine }),
-      h(Button, { onClick: onRefineNow, disabled: refining }, refining ? t('AI 正在精排…') : t('现在就 AI 精排')),
-    ),
-    h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, t('主题库')), h('span', { className: 'ws-group-note' }, t('{count} 个版式', { count: THEMES.reduce((count, entry) => count + entry.variants.length, 0) }))),
-      h('p', { className: 'ws-hint' }, t('预设只是起点；让 AI 自由设计会生成不限于主题库的版式。')),
-      h('div', { className: 'ws-chips ws-theme-filter' },
-        [['all', t('全部')], ['favorites', t('收藏')], ['recent', t('最近')]].map(([id, label]) => h('button', {
-          key: id,
-          type: 'button',
-          className: 'ws-chip' + (filter === id ? ' on' : ''),
-          onClick: () => setFilter(id),
-        }, label)),
-      ),
-      visibleThemes.length === 0 && customTheme === null
-        ? h('p', { className: 'ws-hint' }, t('还没有收藏主题；点主题卡上的星标即可收藏。'))
-        : h('div', { className: 'ws-themes' },
-          customTheme !== null
-            ? h('div', { key: 'custom', className: 'ws-theme ws-theme-custom on', role: 'group' },
-              h(ThemeMiniPreview, { theme: customTheme }),
-              h('span', { className: 'ws-theme-meta' },
-                h('span', { className: 'ws-theme-name-row' },
-                  h('span', { className: 'ws-theme-name' }, t(customTheme.name)),
-                  h('span', { className: 'ws-badge' }, t('AI 自定义')),
-                ),
-                h('span', { className: 'ws-theme-tag' }, t(customTheme.tagline)),
-              ))
-            : null,
-          visibleThemes.map(theme => h('div', {
-            key: theme.id,
-            role: 'button',
-            tabIndex: 0,
-            className: 'ws-theme' + (theme.id === activeTheme.id ? ' on' : ''),
-            onClick: () => applyTheme(theme),
-            onKeyDown: event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); applyTheme(theme) } },
-          },
-          h(ThemeMiniPreview, { theme }),
-          h('span', { className: 'ws-theme-meta' },
-            h('span', { className: 'ws-theme-name-row' },
-              h('span', { className: 'ws-theme-name' }, t(theme.name)),
-              h('button', {
-                type: 'button',
-                className: 'ws-theme-fav' + (favorites.includes(theme.id) ? ' on' : ''),
-                title: favorites.includes(theme.id) ? t('取消收藏') : t('收藏主题'),
-                onClick: event => { event.stopPropagation(); toggleFavorite(theme.id) },
-              }, favorites.includes(theme.id) ? '★' : '☆'),
-            ),
-            h('span', { className: 'ws-theme-tag' }, t(theme.tagline)),
-            fidelityFor(theme.id) !== null
-              ? h('span', { className: 'ws-theme-fidelity', title: t('真实账号实测：{date}', { date: fidelityFor(theme.id).testedAt.slice(0, 10) }) }, `${t('实测')} ${fidelityFor(theme.id).score}`)
-              : null,
-          ),
-          )),
-        ),
-    ),
-    h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, t('版式变体'))),
-      h('div', { className: 'ws-variant-row' },
-        activeTheme.variants.map(variant => h('button', {
-          key: variant.id,
-          type: 'button',
-          className: 'ws-variant-card' + (variant.id === design.variantId ? ' on' : ''),
-          onClick: () => setVariant(variant.id),
-        },
-        h('span', {
-          className: 'ws-variant-mini',
-          'data-title-style': variant.titleStyle,
-          style: { background: activeTheme.palette.bg, borderColor: activeTheme.palette.border },
-        },
-        h('span', { className: 'ws-variant-title', style: { fontFamily: FONT_STACK[activeTheme.type.titleFont] ?? activeTheme.type.titleFont, color: activeTheme.palette.text } }, t('标题')),
-        h('span', { className: 'ws-variant-rule', style: { background: activeTheme.palette.accent } }),
-        h('span', { className: 'ws-variant-line', style: { background: activeTheme.palette.secondary } }),
-        h('span', { className: 'ws-variant-line short', style: { background: activeTheme.palette.secondary } }),
-        ),
-        h('span', { className: 'ws-variant-name' }, t(variant.name)),
-        )),
-      ),
-      h('p', { className: 'ws-hint' }, t(activeTheme.tagline)),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },
@@ -7838,7 +7545,7 @@ function ThemeSection(props) {
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' }, h('span', null, t('品牌包'))),
-      h('p', { className: 'ws-hint' }, t('把收藏、最近主题、版式 DNA、写作规范和片段一起导出，换机器时导入即可。')),
+      h('p', { className: 'ws-hint' }, t('把版式 DNA、写作规范和片段一起导出，换机器时导入即可。')),
       h('div', { className: 'ws-row' },
         h(Button, { onClick: exportBrandKit }, t('导出品牌包')),
         h(Button, { onClick: () => brandInputRef.current?.click() }, t('导入品牌包')),
@@ -7919,10 +7626,9 @@ function TypeSection(props) {
   ]
   const reset = () => {
     store.updateDesign(current => withoutOverrideKeys(current, TYPE_OVERRIDE_KEYS))
-    toast(t('已恢复当前主题的默认排版'))
+    toast(t('已恢复当前版式的默认排版'))
   }
-  const theme = THEMES.find(entry => entry.id === design.themeId)
-  const base = design.custom !== undefined && design.custom !== null ? design.type : (theme ?? THEMES[0]).type
+  const base = design.type
   const round2 = value => Math.round(value * 100) / 100
   const presetSpecs = [
     {
@@ -7999,7 +7705,7 @@ function TypeSection(props) {
           onClick: () => applyPreset(spec),
         }, spec.label)),
       ),
-      h('p', { className: 'ws-hint' }, t('按主题比例一键切换字号、行高、段距与留白，下面仍可继续微调。')),
+      h('p', { className: 'ws-hint' }, t('按当前版式比例一键切换字号、行高、段距与留白，下面仍可继续微调。')),
     ),
     h('div', { className: 'ws-group' },
       h('div', { className: 'ws-group-head' },
@@ -8117,7 +7823,7 @@ function DecorSection(props) {
   const set = (patch) => store.updateDesign(current => ({ ...current, overrides: { ...(current.overrides ?? {}), ...patch } }))
   const resetDecor = () => {
     store.updateDesign(current => withoutOverrideKeys(current, DECOR_OVERRIDE_KEYS))
-    toast('已恢复主题默认装饰')
+    toast('已恢复当前版式默认装饰')
   }
   const surface = design.surface ?? { bg: design.themeBg, pattern: 'none', ornament: 'none' }
   const bgValue = surface.bg === design.themeBg ? '' : surface.bg
@@ -8367,16 +8073,11 @@ function PublishSection(props) {
     if (houseStyle.bannedHits.length > 0) push('warn', t('禁用词出现 {count} 次', { count: houseStyle.bannedHits.reduce((sum, item) => sum + item.count, 0) }), houseStyle.bannedHits.map(item => item.word).join('、'))
     if (houseStyle.longParagraphs > 0) push('warn', t('超过段落上限 {count} 段', { count: houseStyle.longParagraphs }), `${houseStyle.guide.maxParagraphChars} ${t('字')}`)
     if (houseStyle.missingCaptions > 0) push('warn', t('缺图注 {count} 张', { count: houseStyle.missingCaptions }), t('规范要求正文图片带图注'))
-    const isCustomDesign = doc.design.custom !== undefined && doc.design.custom !== null
-    const measured = isCustomDesign ? null : fidelityFor(doc.design.themeId)
-    if (measured === null) push('warn', t(isCustomDesign ? 'AI 自定义版式还没有真实账号实测' : '这个主题还没有真实账号实测'), '')
-    else if (measured.ok) push('ok', t('主题实测保真 {score}', { score: measured.score }), `${measured.testedAt.slice(0, 10)} · ${t('真实草稿读回')}`)
-    else push('warn', t('主题实测保真 {score}', { score: measured.score }), t('有样式在微信端被清洗'))
     if (coverDataUrl !== '' || doc.meta.coverCustom === true) push('ok', t('封面已就绪'), '')
     else push('warn', t('封面还在生成'), t('等封面出现或手动上传'))
     if (bundleIds.length > 0) push('ok', t('合集共 {count} 篇', { count: bundleIds.length + 1 }), t('保存时会逐篇上传'))
     return checks
-  }, [previewHtmlLength, article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length, doc.design.themeId, doc.design.custom, houseStyle])
+  }, [previewHtmlLength, article, title, author, digest, hostStatus.configured, coverDataUrl, doc.text, doc.meta.coverCustom, bundleIds.length, doc.design.custom, houseStyle])
 
   const qa = React.useMemo(() => {
     const errors = preflight.filter(item => item.level === 'error').length
@@ -8403,12 +8104,12 @@ function PublishSection(props) {
     } catch {
       // Canvas may be unavailable in unusual embedders; the publish step reports it.
     }
-  }, [title, design.themeId, design.variantId, design.colors.accent, coverDataUrl, doc.meta.coverCustom, coverLayout])
+  }, [title, design.custom, design.colors.accent, coverDataUrl, doc.meta.coverCustom, coverLayout])
 
   const regenerateCover = () => {
     try {
       store.updateMeta({ coverDataUrl: renderCover({ title, design, layout: coverLayout }), coverCustom: false })
-      toast('已按新主题重绘封面')
+      toast('已按新版式重绘封面')
     } catch (failure) {
       toast(failure.message || t('封面生成失败'), 'error')
     }
@@ -8980,7 +8681,7 @@ function PublishSection(props) {
       })(),
     ),
     h('div', { className: 'ws-group' },
-      h('div', { className: 'ws-group-head' }, h('span', null, t('封面（2.35:1）')), h('span', { className: 'ws-group-note' }, doc.meta.coverCustom === true ? t('当前是自定义封面') : t('自动按主题生成'))),
+      h('div', { className: 'ws-group-head' }, h('span', null, t('封面（2.35:1）')), h('span', { className: 'ws-group-note' }, doc.meta.coverCustom === true ? t('当前是自定义封面') : t('自动按版式生成'))),
       coverDataUrl !== ''
         ? h('img', { className: 'ws-cover', src: coverDataUrl, alt: t('封面预览') })
         : h('div', { className: 'ws-cover ws-cover-empty' }, t('封面生成中…')),
@@ -8993,7 +8694,7 @@ function PublishSection(props) {
         }, label)),
       ),
       h('div', { className: 'ws-row' },
-        h(Button, { onClick: regenerateCover, disabled: coverBusy }, t('按主题重绘')),
+        h(Button, { onClick: regenerateCover, disabled: coverBusy }, t('按版式重绘')),
         h(Button, { onClick: () => coverInputRef.current?.click(), disabled: coverBusy }, coverBusy ? t('处理中…') : t('上传图片')),
         h('input', { ref: coverInputRef, type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: uploadCoverFile }),
       ),
@@ -9047,7 +8748,7 @@ function PublishSection(props) {
             h('div', { className: 'ws-ledger-summary' },
               h('strong', null, t('当前与「{type}」的差异', { type: ledgerLabel(latest.type) })),
               h('span', null, t('新增 {added} 行 · 删除 {removed} 行', { added, removed })),
-              latest.theme !== '' && latest.theme !== currentTheme ? h('span', null, t('主题已从 {old} 改为 {now}', { old: localizeThemeLabel(latest.theme), now: localizeThemeLabel(currentTheme) })) : null,
+              latest.theme !== '' && latest.theme !== currentTheme ? h('span', null, t('版式已从 {old} 改为 {now}', { old: localizeThemeLabel(latest.theme), now: localizeThemeLabel(currentTheme) })) : null,
             ),
             ledger.map(event => h(React.Fragment, { key: event.id },
               h('div', { className: 'ws-ledger-row' },
@@ -9112,10 +8813,6 @@ function PublishSection(props) {
       ),
       h('div', { className: 'ws-qa-grid' },
         h('div', { className: 'ws-qa-item' },
-          h('span', { className: 'ws-qa-label' }, t('实测保真')),
-          h('strong', null, fidelityFor(doc.design.themeId) === null ? t('未实测') : `${fidelityFor(doc.design.themeId).score}/100`),
-        ),
-        h('div', { className: 'ws-qa-item' },
           h('span', { className: 'ws-qa-label' }, t('AI 改写 / 锁定')),
           h('strong', null, `${qa.aiCount} / ${qa.lockedCount}`),
         ),
@@ -9135,7 +8832,7 @@ function PublishSection(props) {
       qa.issues > 0
         ? h('div', { className: 'ws-qa-issues' }, preflight.filter(item => item.level !== 'ok').slice(0, 4).map((item, index) => h('span', { key: index, className: 'ws-qa-issue ' + item.level }, item.label)))
         : h('p', { className: 'ws-hint' }, t('没有发现会阻断发布的问题。')),
-      h('p', { className: 'ws-hint' }, t('质检汇总发布检查、实测保真、AI 来源、段落锁与分发场景；下面的细节仍可逐条查看。')),
+      h('p', { className: 'ws-hint' }, t('质检汇总发布检查、AI 来源、段落锁与分发场景；下面的细节仍可逐条查看。')),
     ),
     h('div', { className: 'ws-card ws-preflight' },
       h('div', { className: 'ws-card-head' },

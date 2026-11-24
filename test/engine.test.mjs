@@ -112,28 +112,33 @@ test('measure reports structure that composition can use', () => {
   assert.ok(features.readingMinutes >= 1)
 })
 
-test('autoCompose is deterministic and returns explainable reasons', () => {
+test('autoCompose returns a deterministic neutral baseline and explainable reasons', () => {
   const { blocks } = parseArticle(ARTICLE)
   const first = autoCompose(blocks, ARTICLE, 0)
   const second = autoCompose(blocks, ARTICLE, 0)
   assert.deepEqual(first.design, second.design)
+  assert.equal(first.design.custom.name, '基础版式')
+  assert.equal(first.design.custom.source, 'local')
   assert.ok(first.analysis.reasons.length >= 3)
   assert.equal(first.analysis.label, '写作与内容')
-  assert.ok(THEMES.some(theme => theme.id === first.design.themeId))
-  assert.ok(first.design.overrides.eyebrow.length > 0)
+  assert.ok(!JSON.stringify(first.design).includes('themeId'))
+  assert.equal(first.design.custom.options.eyebrow, '写作与内容')
 })
 
-test('autoCompose sends technical code copy toward a code-friendly theme', () => {
+test('autoCompose keeps the baseline neutral for technical copy', () => {
   const { blocks } = parseArticle(CODE_ARTICLE)
   const result = autoCompose(blocks, CODE_ARTICLE, 0)
-  assert.ok(['mint', 'night', 'mono', 'ocean'].includes(result.design.themeId), `got ${result.design.themeId}`)
+  assert.equal(result.design.custom.source, 'local')
+  assert.equal(result.design.custom.name, '基础版式')
+  assert.ok(result.analysis.reasons.some(reason => reason.includes('代码')))
 })
 
-test('专栏：写作类内容默认落到杂志版式', () => {
+test('autoCompose 不返回主题或版式 id', () => {
   const { blocks } = parseArticle(ARTICLE)
   const result = autoCompose(blocks, ARTICLE, 0)
-  assert.equal(result.design.themeId, 'column')
-  assert.ok(['essay', 'feature'].includes(result.design.variantId))
+  assert.equal(result.design.themeId, undefined)
+  assert.equal(result.design.variantId, undefined)
+  assert.equal(result.design.custom.sectionStyle, 'numbered')
 })
 
 test('专栏：正文只用细线与衬线，不出现渐变和投影', () => {
@@ -146,10 +151,11 @@ test('专栏：正文只用细线与衬线，不出现渐变和投影', () => {
   assert.ok(html.includes("font-family:'Songti SC'"))
 })
 
-test('autoCompose sends story copy toward a warmer theme', () => {
+test('autoCompose 的情绪文案仍使用中性基础版式', () => {
   const { blocks } = parseArticle(EMOTION_ARTICLE)
   const result = autoCompose(blocks, EMOTION_ARTICLE, 0)
-  assert.ok(['amber', 'paper', 'rose', 'ink'].includes(result.design.themeId), `got ${result.design.themeId}`)
+  assert.equal(result.design.custom.source, 'local')
+  assert.equal(result.design.custom.type.titleFont, 'serif')
 })
 
 test('rankThemes ranks every theme and puts a plausible winner first', () => {

@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 
 import { createAiEditor } from '../host/ai.js'
 import { createStudioService } from '../host/service.js'
-import { THEMES } from '../src/themes.mjs'
 
 /** Build a fake Cordis context with just the services the AI editor reads. */
 function fakeContext({ selection = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }, chunks = [], failAt = -1 } = {}) {
@@ -71,17 +70,15 @@ test('aiEdit sends the article and returns a structured text change', async () =
   assert.ok(calls[0].system.includes('JSON'))
 })
 
-test('aiEdit keeps only whitelisted design overrides and drops unknown themes as-is', async () => {
+test('aiEdit ignores legacy theme ids and only accepts custom designs', async () => {
   const { ctx } = fakeContext({
     chunks: jsonReply({
       reply: '换成暖色',
-      design: { themeId: 'amber', variantId: 'warm', overrides: { accent: '#C0603A', titleStyle: 'ribbon', evil: 'x', bodySize: 16, imageStyle: 'nope' } },
+      design: { themeId: 'amber', variantId: 'warm', overrides: { accent: '#C0603A', bodySize: 16 } },
     }),
   })
   const result = await createAiEditor({ ctx }).edit({ instruction: '换成暖色主题', text: ARTICLE })
-  assert.equal(result.design.themeId, 'amber')
-  assert.equal(result.design.variantId, 'warm')
-  assert.deepEqual(result.design.overrides, { bodySize: 16, titleStyle: 'ribbon', accent: '#C0603A' })
+  assert.equal(result.design, undefined)
   assert.equal(result.text, undefined)
 })
 
@@ -139,9 +136,12 @@ test('service.aiEdit converts AI failures into StudioError with the same code', 
 })
 
 
-test('aiEdit prompt carries content analysis, editorial presets and the design brief', async () => {
+test('aiEdit prompt carries content analysis and a custom-only design brief', async () => {
   const { ctx, calls } = fakeContext({
-    chunks: jsonReply({ reply: '按文化评论处理', design: { themeId: 'column', variantId: 'essay', overrides: { bg: '#F7F4EE', bgStyle: 'paper', ornament: 'corner', bodySize: 16, lineHeight: 1.92 } } }),
+    chunks: jsonReply({
+      reply: '按文化评论处理',
+      design: { custom: { name: '文化评论', palette: { bg: '#F7F4EE', accent: '#8E5E2F' }, surface: { pattern: 'paper', ornament: 'corner' }, options: { bodySize: 16 } } },
+    }),
   })
   const result = await createAiEditor({ ctx }).edit({
     instruction: '按内容重新精排，做得有设计感',
@@ -150,25 +150,14 @@ test('aiEdit prompt carries content analysis, editorial presets and the design b
   })
   const prompt = calls[0].messages[0].content[0].text
   assert.match(prompt, /内容分析/)
-  assert.match(prompt, /编辑预设/)
+  assert.match(prompt, /当前是旧版预设版式/)
   assert.match(calls[0].system, /独立美术指导/)
+  assert.match(calls[0].system, /系统没有主题库/)
   assert.match(calls[0].system, /ornament/)
-  assert.match(calls[0].system, /bgStyle/)
-  assert.equal(result.design.themeId, 'column')
-  assert.deepEqual(result.design.overrides, { bg: '#F7F4EE', bgStyle: 'paper', ornament: 'corner', bodySize: 16, lineHeight: 1.92 })
+  assert.equal(result.design.themeId, undefined)
+  assert.equal(result.design.custom.name, '文化评论')
+  assert.equal(result.design.custom.palette.bg, '#F7F4EE')
 })
-
-test('aiEdit drops unknown background and ornament values', async () => {
-  const { ctx } = fakeContext({
-    chunks: jsonReply({ reply: '换背景', design: { themeId: 'column', overrides: { bg: 'red', bgStyle: 'stripes', ornament: 'crown', bodySize: 16 } } }),
-  })
-  const result = await createAiEditor({ ctx }).edit({ instruction: '换个背景', text: ARTICLE })
-  assert.equal(result.design.overrides.bg, undefined)
-  assert.equal(result.design.overrides.bgStyle, undefined)
-  assert.equal(result.design.overrides.ornament, undefined)
-  assert.equal(result.design.overrides.bodySize, 16)
-})
-
 
 const MIN_EXPECTED = 4096
 
@@ -217,13 +206,13 @@ test('aiEdit 在模型 max-tokens 截断时给出可执行的错误', async () =
 })
 
 
-test('aiEdit 接受图片宽度与对齐覆盖', async () => {
+test('aiEdit 接受 custom 设计里的图片宽度与对齐', async () => {
   const { ctx } = fakeContext({
-    chunks: jsonReply({ reply: '图片调窄', design: { themeId: 'column', overrides: { imageWidth: 70, imageAlign: 'left' } } }),
+    chunks: jsonReply({ reply: '图片调窄', design: { custom: { name: '窄图', options: { imageWidth: 70, imageAlign: 'left' } } } }),
   })
   const result = await createAiEditor({ ctx }).edit({ instruction: '图片窄一点，左对齐', text: ARTICLE })
-  assert.equal(result.design.overrides.imageWidth, 70)
-  assert.equal(result.design.overrides.imageAlign, 'left')
+  assert.equal(result.design.custom.options.imageWidth, 70)
+  assert.equal(result.design.custom.options.imageAlign, 'left')
 })
 
 
@@ -257,49 +246,6 @@ test('aiEdit prompt carries recent adopted edits', async () => {
   assert.match(prompt, /最近采用的改法：标题改短；第二段压到两行/)
 })
 
-test('aiEdit prompt includes editorial style families and deduplicated theme catalog', async () => {
-  const { ctx, calls } = fakeContext({
-    chunks: jsonReply({
-      reply: '按插画绘本风格精排',
-      design: { themeId: 'illustration', variantId: 'picturebook', overrides: { bg: '#FFFBF2', bgStyle: 'wash', ornament: 'leaf' } },
-    }),
-  })
-  const result = await createAiEditor({ ctx }).edit({ instruction: '换成更有设计感的插画风格', text: ARTICLE })
-  const prompt = calls[0].messages[0].content[0].text
-  assert.match(prompt, /zine（画报/)
-  assert.match(prompt, /illustration（插画/)
-  assert.match(prompt, /storybook（故事书/)
-  assert.match(prompt, /gallery（策展/)
-  assert.match(prompt, /watercolor（水彩/)
-  assert.match(prompt, /poster（海报/)
-  assert.match(prompt, /folio（画册/)
-  assert.match(prompt, /bauhaus（构成/)
-  for (const theme of THEMES) {
-    assert.match(prompt, new RegExp(`(?:^|[：；])${theme.id}（${theme.name}`), `${theme.id} should appear in the catalog`)
-    assert.equal((prompt.match(new RegExp(`(?:^|[：；])${theme.id}（`, 'g')) ?? []).length, 1, `${theme.id} should appear once`)
-  }
-  assert.match(calls[0].system, /不填时跟随主题默认/)
-  assert.match(calls[0].system, /显式写 none 才关闭/)
-  assert.equal(result.design.themeId, 'illustration')
-  assert.equal(result.design.variantId, 'picturebook')
-})
-
-test('aiEdit 接受海报与画册的成套版面参数', async () => {
-  const overrides = {
-    titleStyle: 'poster', sectionStyle: 'band', quoteStyle: 'poster', dividerStyle: 'star',
-    listStyle: 'dash', imageStyle: 'plate', bgStyle: 'halftone', ornament: 'star',
-    titleSize: 34, bodySize: 15.5, lineHeight: 1.72,
-  }
-  const { ctx } = fakeContext({
-    chunks: jsonReply({ reply: '按演出海报处理', design: { themeId: 'poster', variantId: 'bill', overrides } }),
-  })
-  const result = await createAiEditor({ ctx }).edit({ instruction: '做成海报感', text: ARTICLE })
-  assert.equal(result.design.themeId, 'poster')
-  assert.equal(result.design.variantId, 'bill')
-  assert.deepEqual(result.design.overrides, overrides)
-})
-
-
 test('aiEdit 接受 AI 原创 custom 设计而不是只选主题', async () => {
   const { ctx, calls } = fakeContext({
     chunks: jsonReply({
@@ -322,8 +268,9 @@ test('aiEdit 接受 AI 原创 custom 设计而不是只选主题', async () => {
   assert.equal(result.design.custom.titleStyle, 'stacked')
   assert.equal(result.design.custom.options.dropCap, true)
   assert.match(calls[0].system, /原创优先/)
+  assert.match(calls[0].system, /系统没有主题库/)
   assert.match(calls[0].system, /design\.custom/)
-  assert.match(calls[0].messages[0].content[0].text, /参考主题（只作方向/)
+  assert.match(calls[0].messages[0].content[0].text, /当前没有自定义版式/)
   await createAiEditor({ ctx }).edit({ instruction: '再暗一点', text: ARTICLE, design: { custom: { name: '夜色' } } })
   assert.match(calls[1].messages[0].content[0].text, /当前是 AI 自定义版式/)
 })

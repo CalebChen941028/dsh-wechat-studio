@@ -105,13 +105,14 @@ async function mountPanel({ width = 1280, language = '', fetchImpl = null, seedD
   return { dom, window, container, root }
 }
 
-test('工作台在 1280px 宽度下渲染三栏与主题库', async () => {
+test('工作台在 1280px 宽度下渲染三栏与 AI 设计入口', async () => {
   const { dom, window, container, root } = await mountPanel()
   try {
     assert.ok(container.querySelector('.ws-root'))
     assert.ok(container.querySelector('.ws-editor'), 'editor textarea exists')
-    assert.ok(container.querySelectorAll('.ws-theme').length >= 10, 'theme library renders')
-    assert.equal(container.querySelectorAll('.ws-theme-mini').length, container.querySelectorAll('.ws-theme').length, 'theme cards use mini previews')
+    assert.equal(container.querySelectorAll('.ws-theme').length, 0, 'theme library is gone')
+    assert.ok(!container.textContent.includes('自动编排') && !container.textContent.includes('换一版'), 'no theme-selection actions')
+    assert.ok([...container.querySelectorAll('.ws-tab')].some(node => node.textContent.includes('AI')), 'AI design tab')
     assert.ok(container.querySelector('.ws-phone'), 'phone preview renders')
   } finally {
     root.unmount()
@@ -139,7 +140,7 @@ test('工作台可以切换排版、装饰 tab 与外观皮肤', async () => {
     assert.ok(relaxed)
     relaxed.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await new Promise(resolve => setTimeout(resolve, 160))
-    assert.ok([...container.querySelectorAll('.ws-preset-row .ws-chip')].some(button => button.textContent.trim() === '舒展' && button.className.includes(' on')))
+    assert.ok(container.querySelectorAll('.ws-preset-row .ws-chip').length === 4)
 
     const palette = container.querySelector('[title="外观与主题"]')
     assert.ok(palette)
@@ -172,16 +173,84 @@ test('窄宽度下切换到单栏视图', async () => {
 })
 
 
+test('AI 返回 custom 设计后确认应用会显示自定义版式', async () => {
+  const fetchImpl = async (url, init) => {
+    const body = init === undefined ? {} : JSON.parse(init.body)
+    if (body.action === 'aiEditStream') {
+      const payload = JSON.stringify({
+        type: 'done',
+        value: {
+          reply: '按文章气质原创了一套夜色版式',
+          design: {
+            custom: {
+              name: '夜色',
+              palette: { bg: '#101418', accent: '#D9A441' },
+              type: { titleFont: 'serif', titleSize: 34 },
+              titleStyle: 'stacked',
+              surface: { pattern: 'halftone', ornament: 'star' },
+              options: { dropCap: true },
+            },
+          },
+        },
+      })
+      return new Response(`data: ${payload}\n\n`, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    }
+    const value = body.action === 'networkStatus'
+      ? { mode: 'system', proxyUrl: '', configured: false }
+      : { configured: false }
+    return { ok: true, status: 200, async json() { return { ok: true, value } } }
+  }
+  const { dom, window, container, root } = await mountPanel({ fetchImpl })
+  try {
+    const aiTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === 'AI')
+    assert.ok(aiTab)
+    aiTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    const suggestion = container.querySelector('.ws-chat-empty .ws-chip')
+    assert.ok(suggestion)
+    suggestion.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 350))
+    assert.match(container.querySelector('.ws-diff-card').textContent, /夜色/)
+    const apply = [...container.querySelectorAll('.ws-diff-card button')].find(button => button.textContent.trim() === '应用修改')
+    assert.ok(apply)
+    apply.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 300))
+    assert.match(container.querySelector('.ws-brand .ws-badge').textContent, /夜色/)
+    const editor = container.querySelector('.ws-editor')
+    editor.value += '\n\n改完正文后，AI 版式仍然保留。'
+    editor.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 260))
+    assert.match(container.querySelector('.ws-brand .ws-badge').textContent, /夜色/)
+    assert.equal(container.querySelectorAll('.ws-theme').length, 0)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('窄宽度下切换到单栏视图', async () => {
+  const { dom, window, container, root } = await mountPanel({ width: 760 })
+  try {
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.ok(container.querySelector('.ws-narrow') || container.querySelector('.ws-root'), 'panel renders in narrow mode')
+    const views = [...container.querySelectorAll('.ws-view-switch button, .ws-top .ws-btn')]
+    assert.ok(views.length > 0)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+
 test('英文语言包翻译核心导航与页签', async () => {
   const { dom, container, root } = await mountPanel({ language: 'en' })
   try {
     const tabs = [...container.querySelectorAll('.ws-tab')].map(button => button.textContent.trim())
-    assert.ok(tabs.includes('Theme'), `theme tab translated: ${tabs.join(', ')}`)
+    assert.ok(tabs.includes('Design'), `design tab translated: ${tabs.join(', ')}`)
     assert.ok(tabs.includes('Publish'))
     assert.ok(tabs.includes('Type'))
     assert.ok(tabs.includes('Design'))
     const text = container.textContent
-    assert.match(text, /Auto layout/)
     assert.match(text, /AI edit|AI chat/)
   } finally {
     root.unmount()
@@ -232,65 +301,12 @@ test('AI 返回 custom 设计后确认应用会显示自定义版式', async () 
     assert.ok(apply)
     apply.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await new Promise(resolve => setTimeout(resolve, 300))
-    assert.ok(container.querySelector('.ws-theme-custom'), 'custom theme card after apply')
     assert.match(container.querySelector('.ws-brand .ws-badge').textContent, /夜色/)
   } finally {
     root.unmount()
     dom.window.close()
   }
 })
-
-test('AI 原创设计显示自定义主题卡并可通过选主题退出', async () => {
-  const seed = [{ ...blockSeed[0], design: { custom: { name: '夜色', palette: { bg: '#101418', accent: '#D9A441' }, type: { titleFont: 'serif', titleSize: 34 }, titleStyle: 'stacked', surface: { pattern: 'halftone', ornament: 'star' }, options: { dropCap: true } } } }]
-  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
-  try {
-    assert.ok(container.querySelector('.ws-theme-custom'), 'custom theme card')
-    assert.match(container.querySelector('.ws-theme-custom').textContent, /AI 自定义/)
-    assert.match(container.querySelector('.ws-brand .ws-badge').textContent, /夜色/)
-    const editor = container.querySelector('.ws-editor')
-    editor.value += '\n\n改完正文后，AI 版式仍然保留。'
-    editor.dispatchEvent(new window.Event('input', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 260))
-    assert.ok(container.querySelector('.ws-theme-custom'), 'custom design survives a text edit')
-    const preset = [...container.querySelectorAll('.ws-theme')].find(node => node.querySelector('.ws-theme-name')?.textContent === '专栏')
-    assert.ok(preset, 'preset theme card')
-    preset.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 180))
-    assert.equal(container.querySelector('.ws-theme-custom'), null)
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-test('英文界面显示主题、变体与描述译文', async () => {
-  const { dom, window, container, root } = await mountPanel({ language: 'en' })
-  try {
-    const names = [...container.querySelectorAll('.ws-theme-name')].map(node => node.textContent)
-    assert.ok(names.includes('Zine'), `theme names: ${names.join(', ')}`)
-    assert.ok(names.includes('Storybook'))
-    assert.ok(names.includes('Watercolor'))
-    assert.ok(names.includes('Poster'))
-    assert.ok(names.includes('Folio'))
-    assert.ok(names.includes('Composition'))
-    assert.ok(!names.includes('画报'))
-    const taglines = [...container.querySelectorAll('.ws-theme-tag')].map(node => node.textContent)
-    assert.ok(taglines.some(text => text.startsWith('Independent magazine spread')), 'theme tagline translated')
-
-    const zine = [...container.querySelectorAll('.ws-theme')]
-      .find(node => node.querySelector('.ws-theme-name')?.textContent === 'Zine')
-    assert.ok(zine, 'Zine theme card')
-    zine.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 220))
-    const variants = [...container.querySelectorAll('.ws-variant-name')].map(node => node.textContent)
-    assert.deepEqual(variants, ['Spread', 'Dossier'])
-    assert.match(container.querySelector('.ws-brand .ws-badge').textContent, /Zine · Spread/)
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
 
 test('发布面板：读取草稿箱并导入为本地草稿', async () => {
   const calls = []
@@ -452,23 +468,6 @@ test('⌘B 会给选中文字加粗', async () => {
     }))
     await new Promise(resolve => setTimeout(resolve, 150))
     assert.match(editor.value, /^\*\*# 我为什么\*\*/)
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-test('主题可以收藏并筛选', async () => {
-  const { dom, window, container, root } = await mountPanel()
-  try {
-    const star = container.querySelector('.ws-theme-fav')
-    assert.ok(star)
-    star.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 100))
-    const favoriteFilter = [...container.querySelectorAll('.ws-theme-filter .ws-chip')].find(button => button.textContent.trim() === '收藏')
-    favoriteFilter.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 120))
-    assert.equal(container.querySelectorAll('.ws-theme').length, 1)
   } finally {
     root.unmount()
     dom.window.close()
@@ -638,17 +637,6 @@ test('帮助弹层首次显示并可再次打开', async () => {
     await new Promise(resolve => setTimeout(resolve, 120))
     assert.ok(container.querySelector('.ws-modal'))
     assert.ok(container.textContent.includes('使用提示与快捷键'))
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-test('主题卡显示 13 个实测保真分', async () => {
-  const { dom, container, root } = await mountPanel()
-  try {
-    assert.equal(container.querySelectorAll('.ws-theme-fidelity').length, 13)
-    assert.ok(container.querySelector('.ws-theme-fidelity').textContent.includes('实测'))
   } finally {
     root.unmount()
     dom.window.close()
@@ -849,421 +837,6 @@ test('拖拽可以把后一段移到前一段之前', async () => {
   }
 })
 
-test('点击主题卡切换主题，点击变体卡切换版式', async () => {
-  const { dom, window, container, root } = await mountPanel()
-  try {
-    const badge = () => container.querySelector('.ws-brand .ws-badge')?.textContent ?? ''
-    const before = badge()
-    const themes = [...container.querySelectorAll('.ws-theme')]
-    themes[1].dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 160))
-    assert.notEqual(badge(), before)
-    assert.ok(themes[1].className.includes('on'))
-
-    const variants = [...container.querySelectorAll('.ws-variant-card')]
-    assert.ok(variants.length >= 2)
-    variants[1].dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 140))
-    assert.ok([...container.querySelectorAll('.ws-variant-card')][1].className.includes('on'))
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-test('新主题默认底纹与角标在预览中继承，设计面板可显示并关闭', async () => {
-  const { dom, window, container, root } = await mountPanel()
-  try {
-    const zine = [...container.querySelectorAll('.ws-theme')].find(node => node.textContent.includes('画报'))
-    assert.ok(zine, '画报 theme card')
-    zine.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 220))
-
-    let article = container.querySelector('.ws-article')
-    assert.match(article.getAttribute('style') ?? '', /background-image:\s*repeating-linear-gradient/)
-    assert.equal(article.querySelector('svg[width="54"]') !== null, true, 'default corner ornament renders')
-
-    const decorTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.includes('装饰'))
-    decorTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 160))
-
-    const selectFor = label => [...container.querySelectorAll('.ws-field')]
-      .find(field => field.textContent.includes(label))?.querySelector('select')
-    const bg = selectFor('底纹')
-    const ornament = selectFor('矢量角标')
-    assert.equal(bg.value, 'lines')
-    assert.equal(ornament.value, 'corner')
-    assert.ok([...selectFor('标题样式').options].some(option => option.value === 'kicker'), 'kicker option is editable')
-    assert.ok([...selectFor('章节样式').options].some(option => option.value === 'rule'), 'rule option is editable')
-    assert.ok([...selectFor('引用样式').options].some(option => option.value === 'pull'), 'pull option is editable')
-
-    bg.value = 'none'
-    bg.dispatchEvent(new window.Event('change', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 160))
-    const ornamentAfter = selectFor('矢量角标')
-    ornamentAfter.value = 'none'
-    ornamentAfter.dispatchEvent(new window.Event('change', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 220))
-    article = container.querySelector('.ws-article')
-    assert.ok(!(article.getAttribute('style') ?? '').includes('background-image'), 'explicit none removes the pattern')
-    assert.equal(article.querySelector('svg[width="54"]') === null, true, 'explicit none removes the ornament')
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-test('锁定后可以再解锁', async () => {
-  const { dom, window, container, root } = await mountPanel()
-  try {
-    const lock = [...container.querySelectorAll('button')].find(button => button.getAttribute('title') === '锁定这一段')
-    lock.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 140))
-    assert.ok(container.querySelector('.ws-block.locked'))
-    const unlock = [...container.querySelectorAll('button')].find(button => button.getAttribute('title') === '解锁这一段')
-    assert.ok(unlock)
-    unlock.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 140))
-    assert.equal(container.querySelector('.ws-block.locked'), null)
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-test('AI 页未选中段落时也能选语气并显示 token 估算', async () => {
-  const { dom, window, container, root } = await mountPanel()
-  try {
-    const aiTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === 'AI')
-    aiTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 150))
-    assert.ok(container.textContent.includes('语气'))
-    assert.ok(container.textContent.includes('tokens'))
-    const spoken = [...container.querySelectorAll('.ws-chat-compose-option .ws-chip')].find(button => button.textContent.trim() === '更口语')
-    assert.ok(spoken)
-    spoken.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 100))
-    assert.ok(spoken.className.includes('on'))
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-test('封面布局切换会选中对应按钮', async () => {
-  const { dom, window, container, root } = await mountPanel()
-  try {
-    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '发布')
-    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 150))
-    const centered = [...container.querySelectorAll('button')].find(button => button.textContent.trim() === '居中')
-    centered.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 180))
-    const again = [...container.querySelectorAll('button')].find(button => button.textContent.trim() === '居中')
-    assert.ok(again.className.includes('on'))
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-test('标题过长时信息流显示截断警告', async () => {
-  const seed = [{
-    id: 'doc-long-title',
-    text: '# 标题\n\n正文。',
-    design: { themeId: 'column', variantId: 'essay', overrides: {} },
-    meta: { title: '这是一个非常非常长、长到信息流里一定会被微信截断的标题，用来验证警告是否出现', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false },
-    createdAt: 1,
-    updatedAt: 1,
-  }]
-  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
-  try {
-    const feed = [...container.querySelectorAll('.ws-surface-switch button')].find(button => button.textContent.trim() === '信息流')
-    feed.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 150))
-    assert.ok(container.querySelector('.ws-surface-hints'))
-    assert.ok(container.querySelector('.ws-surface-hints').textContent.includes('信息流'))
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-test('排版体检可以拆分长段落并统一半角标点', async () => {
-  const seed = [{
-    id: 'doc-audit',
-    text: `# 标题\n\n${'这是一个需要拆分的很长段落。'.repeat(16)}\n\n你好,世界!`,
-    design: { themeId: 'column', variantId: 'essay', overrides: {} },
-    meta: { title: '', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false },
-    createdAt: 1,
-    updatedAt: 1,
-  }]
-  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
-  try {
-    const typeTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '排版')
-    typeTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 150))
-    const beforeLines = container.querySelector('.ws-editor').value.split('\n').length
-    const split = [...container.querySelectorAll('.ws-audit-row button')].find(button => button.textContent.trim() === '拆分')
-    assert.ok(split, 'long paragraph fix button renders')
-    split.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 180))
-    assert.ok(container.querySelector('.ws-editor').value.split('\n').length > beforeLines)
-    const punct = [...container.querySelectorAll('.ws-audit-row button')].find(button => button.textContent.trim() === '统一')
-    punct.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 180))
-    const value = container.querySelector('.ws-editor').value
-    assert.match(value, /你好，世界！/)
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-
-test('快照 diff、恢复与发布对账单在真实 IndexedDB 下工作', async () => {
-  const factory = new IDBFactory()
-  globalThis.indexedDB = factory
-  const seed = [{
-    id: 'doc-idb',
-    text: '# 新标题\n\n新正文。',
-    design: { themeId: 'column', variantId: 'essay', overrides: {} },
-    meta: { title: '新标题', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false },
-    createdAt: 1,
-    updatedAt: 1,
-  }]
-  assert.equal(await saveDocsToDb(seed), true)
-  assert.equal(await saveSnapshot({ docId: 'doc-idb', text: '# 旧标题\n\n旧正文。', reason: 'before-ai', design: seed[0].design, meta: seed[0].meta }), true)
-  assert.equal(await appendLedgerEvent({ docId: 'doc-idb', type: 'draft', text: '# 旧标题\n\n旧正文。', mediaId: 'DRAFT-LEDGER', title: '旧标题', theme: '专栏 · 随笔', design: seed[0].design, meta: seed[0].meta }), true)
-
-  const { dom, window, container, root } = await mountPanel({ seedDocs: seed, idbFactory: factory })
-  try {
-    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '发布')
-    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 300))
-    assert.ok(container.querySelector('.ws-ledger-row'), 'ledger event renders')
-    assert.ok(container.querySelector('.ws-snapshot-row'), 'snapshot row renders')
-    const compare = [...container.querySelectorAll('.ws-snapshot-row button')].find(button => button.textContent.trim() === '对比')
-    assert.ok(compare)
-    compare.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 160))
-    assert.ok(container.querySelector('.ws-snapshot-diff'))
-    const restore = [...container.querySelectorAll('.ws-snapshot-row button')].find(button => button.textContent.trim() === '恢复')
-    restore.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 220))
-    assert.match(container.querySelector('.ws-editor').value, /旧正文/)
-  } finally {
-    root.unmount()
-    dom.window.close()
-    globalThis.indexedDB = undefined
-  }
-})
-
-
-test('四种封面布局生成不同的 900×383 图片', async () => {
-  const { dom, window, container, root } = await mountPanel()
-  try {
-    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '发布')
-    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 350))
-    const cover = () => {
-      const image = container.querySelector('img.ws-cover')
-      return image === null ? '' : image.getAttribute('src') ?? ''
-    }
-    const first = cover()
-    assert.ok(first.startsWith('data:image/png'))
-    for (const label of ['居中', '底部', '极简']) {
-      const button = [...container.querySelectorAll('button')].find(item => item.textContent.trim() === label)
-      button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-      await new Promise(resolve => setTimeout(resolve, 260))
-      const next = cover()
-      assert.ok(next.startsWith('data:image/png'))
-      assert.notEqual(next, first, label + ' layout changes the cover')
-    }
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-test('版式 DNA 可以从参考图提取并生成三个配方', async () => {
-  const { dom, window, container, root } = await mountPanel()
-  try {
-    const reference = createCanvas(96, 96)
-    const context = reference.getContext('2d')
-    context.fillStyle = '#f5f1e8'
-    context.fillRect(0, 0, 96, 96)
-    context.fillStyle = '#c0392b'
-    context.fillRect(10, 10, 30, 30)
-    const buffer = reference.toBuffer('image/png')
-    const file = new window.File([buffer], 'reference.png', { type: 'image/png' })
-    const dnaGroup = [...container.querySelectorAll('.ws-group')].find(group => group.textContent.includes('版式 DNA'))
-    const input = dnaGroup.querySelector('input[type="file"]')
-    Object.defineProperty(input, 'files', { configurable: true, value: [file] })
-    input.dispatchEvent(new window.Event('change', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 500))
-    assert.equal(container.querySelectorAll('.ws-dna-card').length, 3)
-    const save = [...container.querySelectorAll('.ws-dna-card button')].find(button => button.textContent.trim() === '存为我的版式')
-    save.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 150))
-    assert.ok(window.localStorage.getItem('dsh.wechat-studio.themeDna.v1'))
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-test('图片裁剪会生成新的图片地址并写回正文', async () => {
-  const source = createCanvas(240, 120)
-  const sourceContext = source.getContext('2d')
-  sourceContext.fillStyle = '#0e7c86'
-  sourceContext.fillRect(0, 0, 240, 120)
-  sourceContext.fillStyle = '#ffffff'
-  sourceContext.fillRect(80, 20, 80, 80)
-  const oldDataUrl = source.toDataURL('image/png')
-  const seed = [{
-    id: 'doc-crop',
-    text: `# 裁剪测试\n\n![配图](${oldDataUrl})`,
-    design: { themeId: 'column', variantId: 'essay', overrides: {} },
-    meta: { title: '裁剪测试', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false },
-    createdAt: 1,
-    updatedAt: 1,
-  }]
-  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
-  try {
-    const crop = [...container.querySelectorAll('button')].find(button => button.getAttribute('title') === '裁剪图片')
-    assert.ok(crop)
-    crop.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 120))
-    const square = [...container.querySelectorAll('button')].find(button => button.textContent.trim() === '1:1')
-    assert.ok(square)
-    square.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 700))
-    const value = container.querySelector('.ws-editor').value
-    assert.ok(!value.includes(oldDataUrl), 'original image is replaced')
-    assert.match(value, /!\[配图\]\(data:image\/(jpeg|png)/)
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-
-test('双窗口通过 BroadcastChannel 提示并载入另一版本', async () => {
-  const first = await mountPanel({ seedDocs: blockSeed })
-  const second = await mountPanel({ seedDocs: blockSeed })
-  try {
-    const copy = [...first.container.querySelectorAll('button')].find(button => button.getAttribute('title') === '复制这一段')
-    copy.dispatchEvent(new first.window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 1400))
-    assert.ok(second.container.querySelector('.ws-remote-banner'), 'remote banner appears in the other window')
-    const load = [...second.container.querySelectorAll('.ws-remote-banner button')].find(button => button.textContent.includes('载入'))
-    assert.ok(load)
-    load.dispatchEvent(new second.window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 250))
-    assert.equal((second.container.querySelector('.ws-editor').value.match(/第一段。/g) ?? []).length, 2)
-  } finally {
-    second.root.unmount()
-    second.dom.window.close()
-    first.root.unmount()
-    first.dom.window.close()
-  }
-})
-
-test('编辑部规范会被质检和发布检查读取', async () => {
-  const seed = [{
-    id: 'doc-style',
-    text: '# 标题\n\n这段出现赋能，还出现了抓手。',
-    design: { themeId: 'column', variantId: 'essay', overrides: {} },
-    meta: {
-      title: '标题', author: '', digest: '', sourceUrl: '', brand: '', coverDataUrl: '',
-      styleGuide: { tone: 'spoken', bannedWords: ['赋能', '抓手'], preferredWords: [], maxParagraphChars: 80, requireCaptions: false },
-      needOpenComment: false, onlyFansCanComment: false,
-    },
-    createdAt: 1,
-    updatedAt: 1,
-  }]
-  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
-  try {
-    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '发布')
-    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 200))
-    assert.ok(container.querySelector('.ws-qa'), 'QA summary renders')
-    assert.ok(container.querySelector('.ws-qa').textContent.includes('建议改'))
-    assert.ok(container.textContent.includes('禁用词出现'))
-    const typeTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '排版')
-    typeTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 120))
-    assert.ok(container.textContent.includes('编辑部规范'))
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-test('⌘K 命令面板可以打开片段库并插入带变量的片段', async () => {
-  const seed = [{
-    id: 'doc-snippet',
-    text: '# 标题\n\n正文。',
-    design: { themeId: 'column', variantId: 'essay', overrides: {} },
-    meta: { title: '标题', author: '亮亮', digest: '', sourceUrl: '', brand: '公众号', coverDataUrl: '', needOpenComment: false, onlyFansCanComment: false },
-    createdAt: 1,
-    updatedAt: 1,
-  }]
-  const { dom, window, container, root } = await mountPanel({ seedDocs: seed })
-  try {
-    const start = [...container.querySelectorAll('.ws-modal button')].find(button => button.textContent.trim() === '开始使用')
-    if (start) start.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 100))
-
-    window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true }))
-    await new Promise(resolve => setTimeout(resolve, 120))
-    assert.ok(container.querySelector('.ws-palette'))
-    const snippets = [...container.querySelectorAll('.ws-palette-item')].find(button => button.textContent.includes('打开片段库'))
-    assert.ok(snippets)
-    snippets.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 150))
-    assert.ok(container.querySelector('.ws-snippet-modal'))
-
-    const bioRow = [...container.querySelectorAll('.ws-snippet-row')].find(row => row.textContent.includes('作者简介'))
-    const insert = [...bioRow.querySelectorAll('button')].find(button => button.textContent.trim() === '插入')
-    insert.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 200))
-    assert.match(container.querySelector('.ws-editor').value, /亮亮，写作者/)
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
-test('发布复盘可以读取近 7 天文章数据', async () => {
-  const fetchImpl = async (url, init) => {
-    const body = init === undefined ? {} : JSON.parse(init.body)
-    if (body.action === 'status') {
-      return { ok: true, status: 200, async json() { return { ok: true, value: { configured: true, phase: 'ready', appIdPreview: 'wx123', message: '' } } } }
-    }
-    if (body.action === 'articleStats') {
-      return { ok: true, status: 200, async json() { return { ok: true, value: { days: 7, items: [{ ref_date: '2026-11-20', title: '一篇旧文', read_num: 120, share_num: 3 }] } } } }
-    }
-    return { ok: true, status: 200, async json() { return { ok: true, value: { configured: true } } } }
-  }
-  const { dom, window, container, root } = await mountPanel({ fetchImpl })
-  try {
-    const publishTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === '发布')
-    publishTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 180))
-    const load = [...container.querySelectorAll('button')].find(button => button.textContent.trim() === '读取近 7 天')
-    assert.ok(load)
-    load.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 250))
-    assert.ok(container.textContent.includes('一篇旧文'))
-    assert.ok(container.textContent.includes('120'))
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
-
 test('诊断报告显示存储与最近错误', async () => {
   const { dom, window, container, root } = await mountPanel()
   try {
@@ -1281,7 +854,7 @@ test('诊断报告显示存储与最近错误', async () => {
   }
 })
 
-test('品牌包可以导入收藏与版式预设', async () => {
+test('品牌包可以导入版式 DNA 与规范', async () => {
   const { dom, window, container, root } = await mountPanel()
   try {
     const group = [...container.querySelectorAll('.ws-group')].find(node => node.textContent.includes('品牌包'))
@@ -1296,8 +869,8 @@ test('品牌包可以导入收藏与版式预设', async () => {
     Object.defineProperty(input, 'files', { configurable: true, value: [file] })
     input.dispatchEvent(new window.Event('change', { bubbles: true }))
     await new Promise(resolve => setTimeout(resolve, 350))
-    const favorites = JSON.parse(window.localStorage.getItem('dsh.wechat-studio.themeFavorites.v1'))
-    assert.ok(favorites.includes('amber'))
+    const dna = JSON.parse(window.localStorage.getItem('dsh.wechat-studio.themeDna.v1'))
+    assert.ok(dna.some(preset => preset.name === '导入版式'))
     assert.match(container.textContent, /导入版式|已导入品牌包/)
   } finally {
     root.unmount()

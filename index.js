@@ -209,15 +209,13 @@ export function apply(ctx, config) {
   if (tools !== undefined && tools !== null && typeof tools.register === 'function') {
     const definition = {
       name: 'wechat_studio_ai_edit',
-      description: 'Edit a WeChat article draft from a natural-language instruction: rewrite copy, design an original layout, or tune an existing theme. Returns the full revised Markdown plus the design change; nothing is published.',
+      description: 'Edit a WeChat article draft from a natural-language instruction: rewrite copy or design an original custom layout. Returns the full revised Markdown plus the custom design tokens; nothing is published.',
       parameters: {
         type: 'object',
         properties: {
           instruction: { type: 'string', description: 'What to change, in the user\'s words, e.g. "标题更有冲击力" or "换成暖色主题".' },
           markdown: { type: 'string', description: 'The complete current article source in Markdown.' },
-          themeId: { type: 'string', description: 'Optional current theme id. Omit it to let the model design an original custom layout instead of picking a preset.' },
-          variantId: { type: 'string', description: 'Current variant id inside that theme, when themeId is given.' },
-          custom: { type: 'object', description: 'Current AI custom design token set, when continuing an AI-designed layout.' },
+          custom: { type: 'object', description: 'Current custom design token set, when continuing an AI-designed layout.' },
           title: { type: 'string', description: 'Current title field, when the Markdown has no H1.' },
           author: { type: 'string', description: 'Current author byline.' },
         },
@@ -233,11 +231,9 @@ export function apply(ctx, config) {
             instruction: String(args?.instruction ?? ''),
             text: String(args?.markdown ?? ''),
             title: typeof args?.title === 'string' ? args.title : '',
-            design: {
-              ...(typeof args?.themeId === 'string' ? { themeId: args.themeId } : {}),
-              ...(typeof args?.variantId === 'string' ? { variantId: args.variantId } : {}),
-              ...(args?.custom !== null && typeof args?.custom === 'object' && !Array.isArray(args.custom) ? { custom: args.custom } : {}),
-            },
+            design: args?.custom !== null && typeof args?.custom === 'object' && !Array.isArray(args.custom)
+              ? { custom: args.custom }
+              : {},
             meta: { author: typeof args?.author === 'string' ? args.author : '' },
             history: [],
           })

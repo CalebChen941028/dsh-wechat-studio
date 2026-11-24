@@ -1,6 +1,6 @@
 # WeChat article studio — detail page
 
-![The studio panel: copy on the left, a live phone preview in the middle, theme swatches on the right](preview.svg)
+![The studio panel: copy on the left, a live phone preview in the middle, design controls on the right](preview.svg)
 
 ## What it is
 
@@ -13,10 +13,10 @@ A DeepSeek Harness (DSH) sidebar bundle for turning Markdown into WeChat Officia
   - `wechat.js` — WeChat API client (`token`, `stable_token`, image upload, draft add/list/delete, freepublish).
   - `service.js` — action layer with credential reads, token caching, image download/upload, draft and publish actions.
   - `http.js` — JSON body limits, same-origin checks, error responses.
-  - `ai.js` — model call, prompt construction, JSON contract validation, design override sanitizing.
+  - `ai.js` — model call, prompt construction, JSON contract validation, custom design token sanitizing.
 - `src/` — browser half, concatenated into `client.js` by `build.mjs`:
-  - `engine.mjs` — Markdown parsing, topic detection, theme ranking, design composition.
-  - `themes.mjs` — 13 themes × 2 variants.
+  - `engine.mjs` — Markdown parsing, content analysis, custom design composition, legacy theme compatibility.
+  - `themes.mjs` — legacy theme definitions kept for old documents only.
   - `render.mjs` — one node tree projected both to React (preview) and to inline-style HTML (clipboard/publish).
   - `docparse.mjs` — `.docx` ZIP/XML parsing, `.html` → Markdown, embedded image extraction.
   - `bridge.mjs` — host calls, clipboard, image compression.

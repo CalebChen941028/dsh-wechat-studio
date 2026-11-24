@@ -20,7 +20,7 @@ const SKINS = [
   { id: 'sand', name: t('暖砂'), hint: t('米色柔光') },
 ]
 const UI_ACCENTS = ['#0A84FF', '#3A3A3C', '#0E7C86', '#A2653B', '#B23A3A', '#6E6E73']
-const BG_CHOICES = [['', t('跟随主题')], ['#FFFFFF', t('纸白')], ['#F7F4EE', t('米色')], ['#F3F4F6', t('冷灰')], ['#161616', t('墨黑')]]
+const BG_CHOICES = [['', t('跟随版式')], ['#FFFFFF', t('纸白')], ['#F7F4EE', t('米色')], ['#F3F4F6', t('冷灰')], ['#161616', t('墨黑')]]
 const BG_PATTERNS = [['none', t('无底纹')], ['paper', t('纸纹')], ['grid', t('网格')], ['dots', t('点阵')], ['lines', t('竖线')], ['wash', t('淡彩')], ['watercolor', t('水彩')], ['halftone', t('网点')]]
 const ORNAMENTS = [['none', t('不加角标')], ['corner', t('边角线')], ['column', t('栏线')], ['seal', t('印记')], ['leaf', t('叶形')], ['sprig', t('枝叶')], ['star', t('星标')]]
 
@@ -105,7 +105,7 @@ const SAMPLE_ARTICLE = `# 我为什么又开始自己排版
 
 ## 现在我怎么做
 
-先把稿子写成 Markdown，再让工具把它翻译成内联样式。标题、引用、列表、配图各有一套固定的处理方式，改主题只需要换一份配色。
+先把稿子写成 Markdown，再让工具把它翻译成内联样式。标题、引用、列表、配图各有一套固定的处理方式，改版式只需要重做一套配色与层级。
 
 > 排版的目的不是好看，是让读者别分心。
 
@@ -117,7 +117,7 @@ const SAMPLE_ARTICLE = `# 我为什么又开始自己排版
 
 ---
 
-写到这里，样式应该已经套好了。你可以改右侧的主题，也可以只调字号和行距。改完复制，粘回公众号编辑器。`
+写到这里，样式应该已经套好了。你可以让 AI 重新设计，也可以只调字号和行距。改完复制，粘回公众号编辑器。`
 
 const SAMPLE_TEXT_FALLBACK = SAMPLE_ARTICLE
 
@@ -512,31 +512,12 @@ function StudioPanel(props) {
       // Private mode: the choice just won't survive a reload.
     }
   }, [appearance])
-  const [autoRefine, setAutoRefine] = React.useState(() => {
-    try {
-      return localStorage.getItem('dsh.wechat-studio.autoRefine') !== '0'
-    } catch {
-      return true
-    }
-  })
-  const [refining, setRefining] = React.useState(false)
   const textareaRef = React.useRef(null)
   const toastSeq = React.useRef(0)
   const autoTimerRef = React.useRef(undefined)
-  const refineTimerRef = React.useRef(undefined)
-  const refineTokenRef = React.useRef(0)
-
-  React.useEffect(() => {
-    try {
-      localStorage.setItem('dsh.wechat-studio.autoRefine', autoRefine ? '1' : '0')
-    } catch {
-      // Private mode: the preference just won't survive a reload.
-    }
-  }, [autoRefine])
 
   React.useEffect(() => () => {
     clearTimeout(autoTimerRef.current)
-    clearTimeout(refineTimerRef.current)
   }, [])
 
   const toast = React.useCallback((message, kind = 'info') => {
@@ -654,25 +635,6 @@ function StudioPanel(props) {
     setSelectedBlock(found >= 0 ? found : null)
   }, [parsed.blocks])
 
-  const runCompose = () => {
-    const result = autoCompose(parsed.blocks, doc.text, 0)
-    store.updateDoc(current => ({ ...current, design: result.design, meta: current.meta }))
-    setTab('theme')
-    if (narrow) setNarrowView('design')
-    const composed = composeDesign(result.design)
-    toast(`已按「${result.analysis.label}」编排：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
-  }
-
-  const reshuffle = () => {
-    if (doc.design.custom !== undefined && doc.design.custom !== null) {
-      toast(t('当前是 AI 自定义版式，没有预设变体；可以让 AI 再设计一版'))
-      return
-    }
-    store.updateDesign(current => nextVariant(current))
-    const next = composeDesign(nextVariant(doc.design))
-    toast(`换了一版：${t(next.themeName)} · ${t(next.variantName)}`)
-  }
-
   const copyArticle = async () => {
     if (doc.text.trim() === '') {
       toast('编辑区还是空的，先写点内容再复制', 'error')
@@ -692,11 +654,6 @@ function StudioPanel(props) {
     }
   }
 
-  /**
-   * Run the local composer on whatever is in the editor now. This is instant
-   * and deterministic, so pasted copy gets a decent layout before the model
-   * even answers.
-   */
   const composeFromCurrent = React.useCallback((announce) => {
     const current = store.getDoc()
     if (!current || current.text.trim().length < 40) return null
@@ -706,89 +663,18 @@ function StudioPanel(props) {
     const designNow = autoCompose(parsedNow.blocks, current.text, 0).design
     store.updateDoc(entry => ({ ...entry, design: designNow }))
     if (announce) {
-      const composed = composeDesign(designNow)
-      toast(`已按内容自动编排：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
+      toast('已生成中性基础版式，可让 AI 继续设计')
     }
     return designNow
   }, [store, toast])
 
-  /** Ask the model to pick a layout, without letting it rewrite the copy. */
-  const refineWithAi = React.useCallback(async (force = false) => {
-    if (!autoRefine && force !== true) return
-    const current = store.getDoc()
-    if (!current || current.text.trim().length < 120) return
-    const token = refineTokenRef.current + 1
-    refineTokenRef.current = token
-    const designBefore = JSON.stringify(current.design)
-    setRefining(true)
-    try {
-      const value = await callHost('aiEdit', {
-        instruction: '只做版式编排，不要改正文、标题和摘要。按内容类型做完整的杂志化设计：主题、版式、标题/小节/引文/分割线/列表/配图的装饰组合，必要时调整背景与矢量角标，以及字号、行高、段距、左右留白。reply 用一句话说明设计判断，不要只换一个颜色。',
-        text: current.text,
-        title: current.meta.title,
-        design: current.design,
-        meta: { author: current.meta.author, digest: current.meta.digest },
-        history: [],
-      }, { timeoutMs: 150000 })
-      if (token !== refineTokenRef.current) return
-      const latest = store.getDoc()
-      if (!latest || latest.id !== current.id) return
-      if (JSON.stringify(latest.design) !== designBefore) {
-        toast('你刚手动调过版式，AI 精排的结果没有覆盖它')
-        return
-      }
-      if (!value.design) return
-      if (value.design.custom !== undefined && value.design.custom !== null) {
-        const design = {
-          themeId: 'custom',
-          variantId: 'custom',
-          custom: value.design.custom,
-          overrides: value.design.overrides ?? {},
-        }
-        store.updateDoc(entry => ({ ...entry, design }))
-        const composed = composeDesign(design)
-        toast(`AI 精排完成：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
-        return
-      }
-      if (typeof value.design.themeId !== 'string') return
-      const theme = THEMES.find(entry => entry.id === value.design.themeId)
-      if (theme === undefined) return
-      const variantId = theme.variants.some(entry => entry.id === value.design.variantId)
-        ? value.design.variantId
-        : theme.variants[0].id
-      store.updateDoc(entry => {
-        const themeChanged = theme.id !== entry.design.themeId
-        return {
-          ...entry,
-          design: {
-            themeId: theme.id,
-            variantId,
-            // A theme switch starts from the new theme's own vocabulary;
-            // keeping the old accent/decor would fight the new design.
-            overrides: themeChanged
-              ? (value.design.overrides ?? {})
-              : { ...(entry.design.overrides ?? {}), ...(value.design.overrides ?? {}) },
-          },
-        }
-      })
-      const composed = composeDesign({ themeId: theme.id, variantId, overrides: value.design.overrides ?? {} })
-      toast(`AI 精排完成：${t(composed.themeName)} · ${t(composed.variantName)}`, 'success')
-    } catch (error) {
-      if (token === refineTokenRef.current) toast(`AI 精排没有完成（${error.message}），已保留自动编排的结果`)
-    } finally {
-      if (token === refineTokenRef.current) setRefining(false)
-    }
-  }, [autoRefine, store, toast])
-
-  /** Debounce the local composer, then hand off to the model when enabled. */
+  /** Debounce the local baseline so typing never waits on the model. */
   const scheduleAutoCompose = React.useCallback((announce) => {
     clearTimeout(autoTimerRef.current)
-    clearTimeout(refineTimerRef.current)
     autoTimerRef.current = setTimeout(() => {
       composeFromCurrent(announce)
-      if (autoRefine) refineTimerRef.current = setTimeout(() => { refineWithAi() }, 700)
     }, 60)
-  }, [composeFromCurrent, refineWithAi, autoRefine])
+  }, [composeFromCurrent])
 
   const importDocument = React.useCallback(async (file) => {
     if (!file) return
@@ -802,17 +688,12 @@ function StudioPanel(props) {
       const designNow = autoCompose(parsedNow.blocks, body, 0).design
       store.addDoc(body, designNow)
       if (narrow) setNarrowView('preview')
-      const composed = composeDesign(designNow)
       const imageNote = typeof images === 'number' && images > 0 ? t('，含 {count} 张插图', { count: images }) : ''
-      toast(`已导入「${parsedNow.title || file.name}」，自动编排为 ${t(composed.themeName)} · ${t(composed.variantName)}${imageNote}`, 'success')
-      if (autoRefine) {
-        clearTimeout(refineTimerRef.current)
-        refineTimerRef.current = setTimeout(() => { refineWithAi() }, 900)
-      }
+      toast(`已导入「${parsedNow.title || file.name}」，先使用基础版式${imageNote}`, 'success')
     } catch (error) {
       toast(error.message || t('导入失败'), 'error')
     }
-  }, [store, autoRefine, narrow, refineWithAi, toast, bumpImages])
+  }, [store, narrow, toast, bumpImages])
 
   const openDesign = (nextTab) => {
     setTab(nextTab)
@@ -830,10 +711,9 @@ function StudioPanel(props) {
   }
 
   const paletteCommands = [
-    { id: 'compose', label: t('自动编排'), hint: t('按内容选主题与版式'), run: runCompose },
-    { id: 'reshuffle', label: t('换一版'), hint: t('当前主题内换版式'), run: reshuffle },
+    { id: 'design', label: t('打开 AI 设计'), hint: t('在对话里让 AI 直接设计版式'), run: () => openDesign('ai') },
     { id: 'copy', label: t('复制 HTML'), hint: t('复制带内联样式的正文'), run: copyArticle },
-    { id: 'theme', label: t('打开主题面板'), hint: t('主题、版式、版式 DNA'), run: () => openDesign('theme') },
+    { id: 'theme', label: t('打开设计面板'), hint: t('配色、字号、底纹、版式 DNA'), run: () => openDesign('theme') },
     { id: 'publish', label: t('打开发布面板'), hint: t('草稿、对账单、发布检查'), run: () => openDesign('publish') },
     { id: 'ai', label: t('打开 AI 修改'), hint: t('对话修改正文或版式'), run: () => openDesign('ai') },
     { id: 'snapshot', label: t('保存版本快照'), hint: t('当前正文存入历史版本'), run: () => takeSnapshot('manual', true) },
@@ -868,8 +748,8 @@ function StudioPanel(props) {
     h('style', { dangerouslySetInnerHTML: { __html: STUDIO_CSS } }),
     h(TopBar, {
       store, design, features, narrow, compact, narrowView, setNarrowView, rightOpen, setRightOpen,
-      onCompose: runCompose, onReshuffle: reshuffle, onCopy: copyArticle, onOpenDesign: openDesign,
-      onImportDocument: importDocument, refining, toast, appearance, setAppearance, onHelp: () => { setHelpFirstRun(false); setHelpOpen(true) },
+      onCopy: copyArticle, onOpenDesign: openDesign,
+      onImportDocument: importDocument, toast, appearance, setAppearance, onHelp: () => { setHelpFirstRun(false); setHelpOpen(true) },
     }),
     store.remoteNotice
       ? h('div', { className: 'ws-remote-banner' },
@@ -893,7 +773,6 @@ function StudioPanel(props) {
       h(DesignPanel, {
         store, design, doc, analysis, features, hostStatus, setHostStatus, tab, setTab, toast, parsed, article, selectedBlock,
         narrow, compact, showClose: narrow || compact, onClose: closeDesign,
-        autoRefine, setAutoRefine, refining, onRefineNow: () => refineWithAi(true),
         takeSnapshot, snapshotVersion,
       }),
     ),
@@ -902,14 +781,6 @@ function StudioPanel(props) {
     imagesOpen ? h(ImageLibraryDialog, { store, toast, textareaRef, onClose: () => setImagesOpen(false) }) : null,
     helpOpen ? h(HelpDialog, { firstRun: helpFirstRun, onClose: closeHelp, onDiagnostics: () => { setHelpOpen(false); setDiagnosticsOpen(true) } }) : null,
     diagnosticsOpen ? h(DiagnosticsDialog, { onClose: () => setDiagnosticsOpen(false) }) : null,
-    refining
-      ? h('div', { className: 'ws-refining' },
-        h('span', { className: 'ws-typing-dot' }),
-        h('span', { className: 'ws-typing-dot' }),
-        h('span', { className: 'ws-typing-dot' }),
-        h('span', null, t('AI 正在按内容精排版式…')),
-      )
-      : null,
     h(ToastStack, { toasts }),
   )
 }
@@ -1040,7 +911,7 @@ function CommandPalette({ commands, onClose }) {
           className: 'ws-palette-input',
           autoFocus: true,
           value: query,
-          placeholder: t('搜索动作、草稿、主题…'),
+          placeholder: t('搜索动作、草稿、版式…'),
           onChange: event => setQuery(event.target.value),
         }),
         h('span', { className: 'ws-kbd' }, 'Esc'),
@@ -1275,10 +1146,10 @@ function HelpDialog({ firstRun, onClose, onDiagnostics }) {
       ['拖拽段落', '调整顺序'],
       ['复制这一段', '复制块后继续改'],
       ['图片工具', '图注 / 裁剪'],
-      ['主题收藏', '收藏与最近筛选'],
+      ['AI 设计', '对话生成整套版式'],
       ['段落锁', '锁定后 AI 不会改'],
       ['片段库', '作者简介、关注引导等'],
-      ['品牌包', '导出主题、规范与片段'],
+      ['品牌包', '导出版式 DNA、规范与片段'],
     ]],
   ]
   return h('div', { className: 'ws-modal-scrim', onClick: event => { if (event.target === event.currentTarget) onClose() } },
@@ -1288,7 +1159,7 @@ function HelpDialog({ firstRun, onClose, onDiagnostics }) {
         h('strong', null, firstRun ? t('第一次用？先看这几条') : t('使用提示与快捷键')),
         h(IconButton, { icon: 'close', title: t('关闭'), onClick: onClose }),
       ),
-      h('p', { className: 'ws-hint' }, firstRun ? t('编辑器写 Markdown，中间实时预览，右侧调主题与发布。下面是最容易漏掉的用法。') : t('这些操作在界面里没有全部写出来，需要时回来查。')),
+      h('p', { className: 'ws-hint' }, firstRun ? t('编辑器写 Markdown，中间实时预览，右侧调版式与发布。下面是最容易漏掉的用法。') : t('这些操作在界面里没有全部写出来，需要时回来查。')),
       h('div', { className: 'ws-help-grid' },
         sections.map(([title, rows]) => h('div', { className: 'ws-help-section', key: title },
           h('h4', null, t(title)),

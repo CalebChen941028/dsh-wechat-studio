@@ -1067,7 +1067,7 @@ test('index.js：aiEditStream 用 SSE 推送进度与最终结果', async () => 
     async listModels() { return [{ id: 'deepseek-v4-flash' }] },
     async *stream() {
       yield { type: 'text-delta', text: '{"reply":"' }
-      yield { type: 'text-delta', text: '已改好","design":{"themeId":"column"}}' }
+      yield { type: 'text-delta', text: '已改好","design":{"custom":{"name":"夜色","palette":{"bg":"#101418","accent":"#D9A441"},"titleStyle":"stacked"}}}' }
       yield { type: 'finish', reason: { kind: 'stop' } }
     },
   }
@@ -1086,7 +1086,7 @@ test('index.js：aiEditStream 用 SSE 推送进度与最终结果', async () => 
   const done = events.find(event => event.type === 'done')
   assert.ok(done)
   assert.equal(done.value.reply, '已改好')
-  assert.equal(done.value.design.themeId, 'column')
+  assert.equal(done.value.design.custom.name, '夜色')
 })
 
 
