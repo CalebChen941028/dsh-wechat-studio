@@ -9215,7 +9215,8 @@ const STUDIO_CSS = `
 .ws-block:hover .ws-block-origin,.ws-block.selected .ws-block-origin{opacity:1}
 .ws-block.dragging{opacity:.45;outline:1px dashed var(--ws-brand)}
 .ws-block.selected{outline:2px solid var(--ws-brand);outline-offset:2px}
-.ws-block-tools{position:absolute;top:-13px;right:2px;display:none;align-items:center;gap:1px;padding:2px;border-radius:7px;background:#212226;box-shadow:0 6px 18px rgba(0,0,0,.28);z-index:4}
+.ws-block:hover,.ws-block.selected{content-visibility:visible;contain:none;z-index:6}
+.ws-block-tools{position:absolute;top:-13px;right:2px;display:none;align-items:center;gap:1px;padding:2px;border-radius:7px;background:#212226;box-shadow:0 6px 18px rgba(0,0,0,.28);z-index:30}
 .ws-block:hover .ws-block-tools{display:flex}
 .ws-block-tools button{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:0;border-radius:5px;background:transparent;color:#e6e6e6;cursor:pointer}
 .ws-block-tools button:hover{background:#3a3b40}
