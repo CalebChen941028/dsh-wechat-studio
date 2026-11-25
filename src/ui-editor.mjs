@@ -789,6 +789,7 @@ function PreviewStage(props) {
   }
   const root = article.nodes[0]
   const blockStart = Number.isInteger(article.blockStart) ? article.blockStart : (article.title !== '' ? 1 : 0)
+  const blockMap = Array.isArray(article.blockMap) ? article.blockMap : null
   const sourceBlocks = parsed.blocks.filter(block => block.type !== 'title')
 
   const moveBlock = (index, direction) => {
@@ -894,7 +895,7 @@ function PreviewStage(props) {
     h('div', { className: 'ws-stage' },
       h(WechatPhoneChrome, { brand: surfaceBrand, source: surface === 'article' ? source : '', empty: doc.text.trim() === '' && surface === 'article', device, surface },
         surface === 'article' ? h(ArticleBody, {
-          root, blockStart, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel,
+          root, blockStart, blockMap, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel,
           captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption,
           dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage,
           aiHashes, lockedHashes, toggleLock,
@@ -993,7 +994,7 @@ function SurfacePreview({ surface, title, digest, cover, account, date }) {
 }
 
 function ArticleBody(props) {
-  const { root, blockStart, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption, dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage, aiHashes, lockedHashes, toggleLock } = props
+  const { root, blockStart, blockMap, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption, dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage, aiHashes, lockedHashes, toggleLock } = props
   const [hovered, setHovered] = React.useState(null)
   const children = root.children
 
@@ -1001,7 +1002,7 @@ function ArticleBody(props) {
     className: 'ws-article',
     style: root.style,
   }, children.map((child, index) => {
-    const blockIndex = index - blockStart
+    const blockIndex = Array.isArray(blockMap) ? (blockMap[index] ?? -1) : index - blockStart
     const block = blockIndex >= 0 && blockIndex < sourceBlocks.length ? sourceBlocks[blockIndex] : null
     const content = nodesToReact([child], h)
     if (!block) return h('div', { key: index, className: 'ws-block' }, content)

@@ -38,6 +38,7 @@ function AiSection(props) {
   const [pending, setPending] = React.useState(null)
   const [scopeMode, setScopeMode] = React.useState('selection')
   const [stylePreset, setStylePreset] = React.useState('')
+  const [fresh, setFresh] = React.useState(true)
   const [memoryEvents, setMemoryEvents] = React.useState([])
   const abortRef = React.useRef(null)
   const refreshMemory = React.useCallback(() => {
@@ -151,6 +152,7 @@ function AiSection(props) {
           history: messages.slice(-6).map(message => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
           styleGuide: doc.meta.styleGuide ?? DEFAULT_STYLE_GUIDE,
           styleMemory: memoryEvents.filter(item => item.type === 'accepted').slice(0, 3).map(item => item.instruction),
+          mode: fresh ? 'fresh' : 'refine',
         }, { timeoutMs: 150000, onProgress: chars => setProgress(chars), signal: controller?.signal })
       }
 
@@ -384,6 +386,9 @@ function AiSection(props) {
             h('button', { type: 'button', className: 'ws-chip' + (scopeMode === 'document' ? ' on' : ''), onClick: () => setScopeMode('document') }, t('整篇')),
           )
           : null,
+        h('div', { className: 'ws-scope-row' },
+          h(Toggle, { label: t('全新设计（不沿用当前版式）'), checked: fresh, onChange: setFresh }),
+        ),
         h('div', { className: 'ws-scope-row' },
           h('span', { className: 'ws-hint' }, t('语气')),
           [['', t('原样')], ['concise', t('更克制')], ['spoken', t('更口语')], ['shorter', t('更短')]].map(([id, label]) => h('button', {

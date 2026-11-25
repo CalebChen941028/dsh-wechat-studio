@@ -551,3 +551,34 @@ test('AI 自定义设计不依赖主题库，并支持覆盖与兜底', () => {
   assert.equal(legacy.titleStyle, 'kicker')
   assert.equal(legacy.source, 'ai')
 })
+
+test('版式蓝图能生成杂志封面、目录，并把首图从正文中消费掉', () => {
+  const source = `# 夜班车\n\n凌晨一点。\n\n![站台](https://example.com/a.png)\n\n## 路线\n\n二十七站。\n\n## 乘客\n\n代驾和护士。`
+  const { blocks } = parseArticle(source)
+  const custom = normalizeCustomDesign({
+    blueprint: {
+      cover: {
+        enabled: true, style: 'magazine', masthead: 'CITY EDITION', issue: 'VOL. 04',
+        kicker: 'NIGHT SHIFT', lines: ['末班车', '城市静音'], image: 'first', align: 'left',
+      },
+      contents: true,
+    },
+    palette: { bg: '#F7F3EA', accent: '#9A5B3D' },
+  })
+  const design = composeDesign({ custom })
+  assert.equal(design.blueprint.cover.enabled, true)
+  assert.equal(design.blueprint.cover.style, 'magazine')
+  const article = buildArticle({ blocks, design, meta: { author: '作者' } })
+  const html = serializeNodes(article.nodes)
+  assert.match(html, /CITY EDITION/)
+  assert.match(html, /NIGHT SHIFT/)
+  assert.match(html, /CONTENTS/)
+  assert.equal((html.match(/<img/g) ?? []).length, 1, 'cover consumes the first image')
+  assert.ok(article.blockMap.some(index => index === null), 'cover and contents have no source block')
+  assert.ok(!article.blockMap.includes(1), 'the image source block is skipped in the body')
+  for (const style of ['poster', 'split', 'minimal']) {
+    const variant = normalizeCustomDesign({ blueprint: { cover: { ...custom.blueprint.cover, style } } })
+    const rendered = buildArticle({ blocks, design: composeDesign({ custom: variant }), meta: { author: '作者' } })
+    assert.match(serializeNodes(rendered.nodes), /CITY EDITION/)
+  }
+})

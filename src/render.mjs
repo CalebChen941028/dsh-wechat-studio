@@ -141,6 +141,92 @@ function ornamentNode(surface, colors) {
   return section({ margin: '0 0 6px', lineHeight: 0 }, [svg])
 }
 
+/** Magazine-style opening block, using only inline styles WeChat keeps. */
+function renderCoverBlock(title, cover, ctx, meta, imageBlock) {
+  const { colors, type, layout, titleFont } = ctx
+  const ink = colors.accentInk
+  const padding = `${layout.paddingX}px`
+  const imageNode = imageBlock === null
+    ? null
+    : image({ src: imageBlock.src, alt: imageBlock.alt ?? '' }, { width: '100%', display: 'block', margin: '0' })
+  const imageCaption = imageBlock !== null && String(imageBlock.alt ?? '').trim() !== ''
+    ? section({ fontFamily: titleFont, fontStyle: 'italic', fontSize: '11px', lineHeight: 1.6, color: colors.secondary, marginTop: '8px' }, text(imageBlock.alt))
+    : null
+  const label = color => section({ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px', fontSize: '10px', lineHeight: 1.4, letterSpacing: '0.22em', textTransform: 'uppercase', color }, [
+    span({}, text(cover.masthead || 'EDITION')),
+    cover.issue === '' ? null : span({}, text(cover.issue)),
+  ])
+  const kicker = cover.kicker === '' ? null : section({ fontSize: '11px', lineHeight: 1.6, letterSpacing: '0.14em', color: colors.accent, textTransform: 'uppercase', margin: '18px 0 8px' }, text(cover.kicker))
+  const lineList = cover.lines.length === 0 ? null : section({ marginTop: '18px', borderTop: `1px solid ${colors.border}`, paddingTop: '12px' }, cover.lines.map((line, index) => section({ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '7px' }, [
+    span({ color: colors.accent, fontSize: '10px', letterSpacing: '0.08em' }, text(String(index + 1).padStart(2, '0'))),
+    span({ color: colors.secondary, fontSize: '12px', lineHeight: 1.6 }, text(line)),
+  ])))
+  const titleBlock = size => section({ fontFamily: titleFont, fontSize: `${size}px`, fontWeight: type.titleWeight, lineHeight: 0.98, letterSpacing: '-0.02em', margin: '0 0 14px', color: colors.text }, text(title))
+
+  if (cover.style === 'poster') {
+    return section({ margin: `0 -${padding} 28px`, background: colors.accent, padding: `24px ${padding} 28px`, textAlign: cover.align }, [
+      label(ink),
+      kicker,
+      section({ color: ink, fontFamily: titleFont, fontSize: `${Math.min(54, type.titleSize + 12)}px`, fontWeight: type.titleWeight, lineHeight: 0.96, letterSpacing: '-0.02em', margin: '0 0 14px' }, text(title)),
+      cover.lines.length === 0 ? null : section({ textAlign: 'left', color: ink }, cover.lines.map((line, index) => section({ display: 'flex', gap: '10px', marginBottom: '7px', fontSize: '12px', lineHeight: 1.6 }, [
+        span({ opacity: 0.6 }, text(String(index + 1).padStart(2, '0'))),
+        span({}, text(line)),
+      ]))),
+      imageNode === null ? null : section({ margin: `20px -${padding} -28px` }, [imageNode, imageCaption]),
+    ])
+  }
+
+  if (cover.style === 'split') {
+    return section({ margin: `0 -${padding} 28px`, background: colors.card, padding: '18px' }, [
+      section({ display: 'flex', alignItems: 'stretch', gap: '14px' }, [
+        section({ flex: '1', minWidth: 0 }, [
+          label(colors.secondary),
+          kicker,
+          titleBlock(Math.min(40, type.titleSize + 4)),
+          lineList,
+        ]),
+        imageNode === null ? null : section({ width: '44%', flexShrink: 0 }, [imageNode, imageCaption]),
+      ]),
+    ])
+  }
+
+  if (cover.style === 'minimal') {
+    return section({ margin: `0 -${padding} 30px`, background: colors.bg, padding: `18px ${padding} 0`, textAlign: cover.align === 'center' ? 'center' : 'left' }, [
+      label(colors.secondary),
+      kicker,
+      titleBlock(Math.min(44, type.titleSize + 6)),
+      section({ width: '52px', height: '2px', background: colors.accent, margin: cover.align === 'center' ? '4px auto 16px' : '4px 0 16px' }),
+      lineList,
+      imageNode === null ? null : section({ marginTop: '20px' }, [imageNode, imageCaption]),
+    ])
+  }
+
+  return section({ margin: `0 -${padding} 28px`, background: colors.card, padding: `22px 22px 24px`, borderTop: `6px solid ${colors.accent}` }, [
+    label(colors.secondary),
+    kicker,
+    titleBlock(Math.min(52, type.titleSize + 10)),
+    lineList,
+    imageNode === null ? null : section({ margin: '20px 0 0' }, [imageNode, imageCaption]),
+  ])
+}
+
+/** Contents strip generated from the article headings. */
+function renderContentsBlock(blocks, ctx) {
+  const { colors, titleFont } = ctx
+  const headings = blocks.filter(block => block.type === 'heading').slice(0, 8)
+  if (headings.length === 0) return null
+  return section({ margin: '0 0 30px', borderTop: `1px solid ${colors.border}`, paddingTop: '13px' }, [
+    section({ display: 'flex', justifyContent: 'space-between', fontSize: '10px', letterSpacing: '0.24em', color: colors.accent, marginBottom: '10px' }, [
+      span({}, text('CONTENTS')),
+      span({}, text(String(headings.length).padStart(2, '0'))),
+    ]),
+    ...headings.map((heading, index) => section({ display: 'flex', alignItems: 'baseline', gap: '10px', padding: '5px 0', borderBottom: `1px solid ${colors.border}` }, [
+      span({ color: colors.accent, fontSize: '10px', minWidth: '18px' }, text(String(index + 1).padStart(2, '0'))),
+      span({ fontFamily: titleFont, fontSize: '14px', lineHeight: 1.5, color: colors.text }, text(plainText(heading.text))),
+    ])),
+  ])
+}
+
 /**
  * Build the article node tree.
  * @param {object} input blocks, design spec, and document metadata.
@@ -176,20 +262,39 @@ export function buildArticle(input) {
 
   let headingIndex = 0
   const children = []
+  const blockMap = []
+  const push = (child, sourceIndex = null) => {
+    children.push(child)
+    blockMap.push(sourceIndex)
+  }
   const mark = ornamentNode(surface, colors)
-  if (mark !== null) children.push(mark)
-  if (titleText !== '') children.push(renderTitle(titleText, ctx, meta))
+  if (mark !== null) push(mark)
+
+  const blueprint = design.blueprint ?? null
+  const cover = blueprint?.cover?.enabled === true && titleText !== '' ? blueprint.cover : null
+  const sourceBlocks = blocks.filter(block => block.type !== 'title')
+  const coverImageBlock = cover !== null && cover.image === 'first'
+    ? sourceBlocks.find(block => block.type === 'image')
+    : null
+
+  if (cover !== null) push(renderCoverBlock(titleText, cover, ctx, meta, coverImageBlock ?? null))
+  else if (titleText !== '') push(renderTitle(titleText, ctx, meta))
+  if (blueprint?.contents === true) {
+    const contents = renderContentsBlock(sourceBlocks, ctx)
+    if (contents !== null) push(contents)
+  }
   const blockStart = children.length
 
-  const paragraphs = blocks.filter(block => block.type === 'paragraph')
+  const paragraphs = sourceBlocks.filter(block => block.type === 'paragraph')
   const firstParagraph = paragraphs[0]
   let didLead = false
   let didDropCap = false
 
-  for (const block of blocks) {
+  for (let sourceIndex = 0; sourceIndex < sourceBlocks.length; sourceIndex += 1) {
+    const block = sourceBlocks[sourceIndex]
+    if (block === coverImageBlock) continue
+    const before = children.length
     switch (block.type) {
-      case 'title':
-        break
       case 'heading':
         headingIndex += 1
         children.push(renderHeading(block, headingIndex, ctx))
@@ -220,9 +325,10 @@ export function buildArticle(input) {
       default:
         break
     }
+    if (children.length > before) blockMap.push(sourceIndex)
   }
 
-  if (design.decor.showFooter && children.length > 1) children.push(renderFooter(ctx, meta))
+  if (design.decor.showFooter && children.length > 1) push(renderFooter(ctx, meta))
 
   const root = section(
     {
@@ -236,7 +342,7 @@ export function buildArticle(input) {
     children,
   )
 
-  return { nodes: [root], title: titleText, blockStart }
+  return { nodes: [root], title: titleText, blockStart, blockMap }
 }
 
 /* ------------------------------------------------------------------ *

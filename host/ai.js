@@ -39,6 +39,7 @@ const SYSTEM_PROMPT = `你是「公众号排版工作台」的编辑助手。用
 
 二、改版式。你的角色是独立美术指导。系统没有主题库、没有预设版式可挑；每次都要从文章气质出发，生成一套完整 custom 设计：配色、字体、字号层级、留白、底纹、角标，以及标题/小节/引文/列表/配图的组合。
 - 原创优先：用户说「精排 / 设计感 / 改版 / 换个风格 / 杂志风 / 插画风 / 海报风 / 画册风 / 构成风」时，直接输出 design.custom。不要引用 themeId、variantId 或任何主题名，也不要说“选了某个模板”。
+- 全新设计、时尚杂志、画册、人物特稿类请求，默认启用 blueprint.cover 和 contents；封面是开头版式，不是单独封面图。至少让标题层级、首屏、目录和正文节奏发生结构变化，不要只换配色或字号。
 - 风格方向（只定方向，不是限制）：杂志/画报用手写感眉标、编号小节、细线与大留白；插画/手账用奶油底、淡彩、圆角与拍立得；故事书/非虚构用象牙纸、衬线扉页、大行高；策展/画册用冷白或象牙底、网格、图版与页边注；海报/活动用整版标题、反白色带、网点与星号；分析/产品用低饱和纸色、编号与清晰层级。
 - 视觉层级与呼吸感：标题与正文字号比 1.8–2.2 倍；长文 lineHeight 1.9–2.0、paraGap 22–26、paddingX 20–22；信息密集内容 lineHeight 1.75–1.85、paraGap 18–20；多图统一 imageWidth 与 imageAlign。
 - 数值范围：bodySize 15-18、lineHeight 1.7-2.05、letterSpacing 0-0.05em、paraGap 18-30、paddingX 16-24、titleSize 20-40、titleWeight 400-800。
@@ -51,6 +52,7 @@ const SYSTEM_PROMPT = `你是「公众号排版工作台」的编辑助手。用
   * surface：pattern 取 none|paper|grid|dots|lines|wash|watercolor|halftone；ornament 取 none|corner|column|seal|leaf|sprig|star。
   * titleStyle、sectionStyle、quoteStyle、dividerStyle、listStyle、imageStyle：取值见用户消息里的「可用装饰」。
   * options：dropCap/lead/showMeta/showFooter/showEyebrow 布尔；eyebrow/footerText/footerSign 文本；imageWidth 40-100；imageAlign 取 left|center|right。
+  * blueprint：可选，做杂志封面或画册开头时启用。cover = { enabled, style（magazine|poster|split|minimal）, masthead, issue, kicker, lines（最多 3 条短导读）, image（first|none）, align（left|center） }；contents 为布尔，按小节生成目录。
 - 用户只要求微调时，也在当前 custom 基础上返回完整一套，不要只给一个颜色。
 - 只要用户要求改版式，就必须返回 design.custom；只回一句说明、不返回 custom，视为没有完成设计任务。
 - 只输出 design = { "custom": { ... } }。不要输出 themeId、variantId、overrides、HTML 或 CSS，不要发明装饰 id。
@@ -167,8 +169,11 @@ function buildUserPrompt(payload) {
   if (style.bannedWords.length > 0) lines.push(`禁用词（不要出现）：${style.bannedWords.join('、')}`)
   if (style.preferredWords.length > 0) lines.push(`偏好词（优先使用）：${style.preferredWords.join('、')}`)
   if (memory.length > 0) lines.push(`最近采用的改法：${memory.join('；')}`)
-  if (design.custom !== undefined && design.custom !== null && typeof design.custom === 'object') {
-    lines.push(`当前是 AI 自定义版式，可在此基础上继续改：${JSON.stringify(design.custom)}`)
+  const mode = payload?.mode === 'fresh' ? 'fresh' : 'refine'
+  if (mode === 'fresh') {
+    lines.push('设计模式：全新设计。不要沿用当前版式、主题或旧配色；先为这篇文章重新定封面、字体、层级、留白和节奏，再给完整 custom 设计。')
+  } else if (design.custom !== undefined && design.custom !== null && typeof design.custom === 'object') {
+    lines.push(`当前是 AI 自定义版式，可在此基础上微调：${JSON.stringify(design.custom)}`)
   } else if (typeof design.themeId === 'string') {
     lines.push(`当前是旧版预设版式（${design.themeId}）；请把它转换成完整的 custom 设计，不要引用主题 id。`)
   } else {

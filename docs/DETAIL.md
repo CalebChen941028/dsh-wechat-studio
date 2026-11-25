@@ -15,7 +15,7 @@ A DeepSeek Harness (DSH) sidebar bundle for turning Markdown into WeChat Officia
   - `http.js` — JSON body limits, same-origin checks, error responses.
   - `ai.js` — model call, prompt construction, JSON contract validation, custom design token sanitizing.
 - `src/` — browser half, concatenated into `client.js` by `build.mjs`:
-  - `engine.mjs` — Markdown parsing, content analysis, custom design composition, legacy theme compatibility.
+  - `engine.mjs` — Markdown parsing, content analysis, custom design composition (including cover/contents blueprints), legacy theme compatibility.
   - `themes.mjs` — legacy theme definitions kept for old documents only.
   - `render.mjs` — one node tree projected both to React (preview) and to inline-style HTML (clipboard/publish).
   - `docparse.mjs` — `.docx` ZIP/XML parsing, `.html` → Markdown, embedded image extraction.

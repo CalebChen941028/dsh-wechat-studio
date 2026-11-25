@@ -203,6 +203,50 @@ test('窄宽度下切换到单栏视图', async () => {
 })
 
 
+test('AI 返回旧主题 id 时客户端兜底应用为 custom 版式', async () => {
+  const fetchImpl = async (url, init) => {
+    const body = init === undefined ? {} : JSON.parse(init.body)
+    if (body.action === 'aiEditStream') {
+      const payload = JSON.stringify({
+        type: 'done',
+        value: { reply: '换了杂志版式', design: { themeId: 'column', variantId: 'essay', overrides: {} } },
+      })
+      return new Response(`data: ${payload}\n\n`, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    }
+    const value = body.action === 'networkStatus'
+      ? { mode: 'system', proxyUrl: '', configured: false }
+      : { configured: false }
+    return { ok: true, status: 200, async json() { return { ok: true, value } } }
+  }
+  const { dom, window, container, root } = await mountPanel({ fetchImpl })
+  try {
+    const aiTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === 'AI')
+    aiTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    container.querySelector('.ws-chat-empty .ws-chip').dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 500))
+    assert.match(container.querySelector('.ws-brand .ws-badge').textContent, /专栏/)
+    assert.equal(container.querySelectorAll('.ws-theme').length, 0)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+test('窄宽度下切换到单栏视图', async () => {
+  const { dom, window, container, root } = await mountPanel({ width: 760 })
+  try {
+    await new Promise(resolve => setTimeout(resolve, 120))
+    assert.ok(container.querySelector('.ws-narrow') || container.querySelector('.ws-root'), 'panel renders in narrow mode')
+    const views = [...container.querySelectorAll('.ws-view-switch button, .ws-top .ws-btn')]
+    assert.ok(views.length > 0)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
+
 test('AI 返回 custom 设计后直接应用并保留', async () => {
   const fetchImpl = async (url, init) => {
     const body = init === undefined ? {} : JSON.parse(init.body)

@@ -10,7 +10,7 @@ DeepSeek Harness（DSH）的侧边栏 bundle：把 Markdown 变成公众号文�
 
 - `index.js`：Host 入口，注册 `POST /wechat-studio/api`、`/wechat-studio` 精确路由和 Agent 工具（状态检查、AI 编辑、保存草稿等）。
 - `host/`：Node 侧代码。`wechat.js` 封装微信接口（token、stable_token、图片上传、草稿增删查、发布）；`service.js` 是动作层，处理凭据、token 缓存、图片转存、草稿与发布；`http.js` 做请求体限制与同源校验；`ai.js` 负责模型调用、提示词、JSON 校验和 custom 设计 token 清洗。
-- `src/`：浏览器侧代码，由 `build.mjs` 拼成 `client.js`。`engine.mjs` 解析 Markdown、分析内容并合成 AI custom 设计；`themes.mjs` 仅保留旧文档兼容的主题定义；`render.mjs` 生成一棵节点树，同时投影成 React 预览和内联样式 HTML；`docparse.mjs` 解析 `.docx`/`.html` 并提取内嵌图片；`bridge.mjs` 负责 Host 调用、剪贴板和图片压缩；`i18n.mjs` 负责界面文案，源文案保持中文、`t()` 查英文词表，语言依次取显式设置、DSH locale、页面 `lang`；`host/network.js` 管理出站网络：可选系统直连或固定 HTTP(S) 代理，代理地址存凭据库、密码只回传掩码，微信接口可单独走代理；`images.mjs` 是图片注册表：正文保留 `wsimg://id` 短引用，图片数据存 IndexedDB，解析、渲染和发布前再把引用展开成 data URL；`ui.mjs` 是三栏面板、编辑器、预览、设计控件、发布面板与 AI 对话。
+- `src/`：浏览器侧代码，由 `build.mjs` 拼成 `client.js`。`engine.mjs` 解析 Markdown、分析内容并合成 AI custom 设计；`custom.blueprint` 可带杂志封面、目录和首图消费，`themeId` 仅保留旧文档兼容；`render.mjs` 生成一棵节点树，同时投影成 React 预览和内联样式 HTML；`docparse.mjs` 解析 `.docx`/`.html` 并提取内嵌图片；`bridge.mjs` 负责 Host 调用、剪贴板和图片压缩；`i18n.mjs` 负责界面文案，源文案保持中文、`t()` 查英文词表，语言依次取显式设置、DSH locale、页面 `lang`；`host/network.js` 管理出站网络：可选系统直连或固定 HTTP(S) 代理，代理地址存凭据库、密码只回传掩码，微信接口可单独走代理；`images.mjs` 是图片注册表：正文保留 `wsimg://id` 短引用，图片数据存 IndexedDB，解析、渲染和发布前再把引用展开成 data URL；`ui.mjs` 是三栏面板、编辑器、预览、设计控件、发布面板与 AI 对话。
 
 ## 数据流
 

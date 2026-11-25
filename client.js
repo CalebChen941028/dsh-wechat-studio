@@ -833,6 +833,7 @@ const UI_EN = {
   '做成构成感': 'Make it Bauhaus-like',
   'AI 自定义': 'AI custom',
   '已重新设计版式': 'The layout has been redesigned',
+  '全新设计（不沿用当前版式）': 'Design from scratch (ignore the current layout)',
   '模型只回了说明，没有返回可应用的版式；请再试一次，或直接说「改版式」。': 'The model replied without an applicable layout. Try again or say “change the layout”.',
   '模型没有返回版式，请再试一次': 'The model returned no layout; try again',
   '已应用 AI 版式：{name}': 'Applied AI layout: {name}',
@@ -1392,6 +1393,7 @@ const DESIGN_QUOTE_STYLES = ['bar', 'pull', 'card', 'center', 'tint', 'stamp', '
 const DESIGN_DIVIDER_STYLES = ['dots', 'diamond', 'ornament', 'line', 'dash', 'none', 'star']
 const DESIGN_LIST_STYLES = ['dot', 'num', 'square', 'arrow', 'dash']
 const DESIGN_IMAGE_STYLES = ['plain', 'rounded', 'shadow', 'frame', 'polaroid', 'full', 'plate']
+const DESIGN_COVER_STYLES = ['magazine', 'poster', 'split', 'minimal']
 const DESIGN_FONT_KINDS = ['serif', 'sans', 'round']
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
 
@@ -1751,7 +1753,7 @@ const pickCustomEm = (value, fallback, min = 0, max = 0.08) => {
  */
 function normalizeCustomDesign(raw) {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null
-  const meaningful = ['palette', 'type', 'surface', 'titleStyle', 'sectionStyle', 'quoteStyle', 'dividerStyle', 'listStyle', 'imageStyle', 'options']
+  const meaningful = ['palette', 'type', 'surface', 'titleStyle', 'sectionStyle', 'quoteStyle', 'dividerStyle', 'listStyle', 'imageStyle', 'options', 'blueprint']
   if (!meaningful.some(key => raw[key] !== undefined)) return null
   const base = themeOf('column')
   const paletteRaw = raw.palette !== null && typeof raw.palette === 'object' && !Array.isArray(raw.palette) ? raw.palette : {}
@@ -1801,10 +1803,30 @@ function normalizeCustomDesign(raw) {
     imageWidth: Math.round(pickCustomNumber(optionsRaw.imageWidth, 100, 40, 100)),
     imageAlign: pickCustomEnum(optionsRaw.imageAlign, ['left', 'center', 'right'], 'center'),
   }
+  const blueprintRaw = raw.blueprint !== null && typeof raw.blueprint === 'object' && !Array.isArray(raw.blueprint) ? raw.blueprint : {}
+  const coverRaw = blueprintRaw.cover !== null && typeof blueprintRaw.cover === 'object' && !Array.isArray(blueprintRaw.cover) ? blueprintRaw.cover : {}
+  const coverText = (key, max) => typeof coverRaw[key] === 'string' ? coverRaw[key].trim().slice(0, max) : ''
+  const lines = Array.isArray(coverRaw.lines)
+    ? coverRaw.lines.filter(line => typeof line === 'string' && line.trim() !== '').map(line => line.trim().slice(0, 48)).slice(0, 3)
+    : []
+  const blueprint = {
+    cover: {
+      enabled: coverRaw.enabled === true,
+      style: pickCustomEnum(coverRaw.style, DESIGN_COVER_STYLES, 'magazine'),
+      masthead: coverText('masthead', 24),
+      issue: coverText('issue', 24),
+      kicker: coverText('kicker', 40),
+      lines,
+      image: pickCustomEnum(coverRaw.image, ['first', 'none'], 'first'),
+      align: pickCustomEnum(coverRaw.align, ['left', 'center'], 'left'),
+    },
+    contents: blueprintRaw.contents === true,
+  }
   return {
     source: raw.source === 'local' ? 'local' : 'ai',
     name: typeof raw.name === 'string' ? raw.name.trim().slice(0, 24) : '',
     tagline: typeof raw.tagline === 'string' ? raw.tagline.trim().slice(0, 60) : '',
+    blueprint,
     palette,
     type,
     surface,
@@ -1954,6 +1976,7 @@ function composeDesign(stored) {
     variantName: variant.name,
     tagline: theme.tagline,
     custom: custom ?? undefined,
+    blueprint: custom?.blueprint ?? null,
     colors,
     type,
     layout,
@@ -1976,6 +1999,7 @@ function customDesignFromLegacy(stored) {
     source: 'ai',
     name: composed.themeName,
     tagline: composed.tagline,
+    blueprint: null,
     palette: { bg, card, text, secondary, accent, accentSoft, border },
     type: { ...composed.type },
     surface: { pattern: composed.surface.pattern, ornament: composed.surface.ornament },
@@ -2671,6 +2695,92 @@ function ornamentNode(surface, colors) {
   return section({ margin: '0 0 6px', lineHeight: 0 }, [svg])
 }
 
+/** Magazine-style opening block, using only inline styles WeChat keeps. */
+function renderCoverBlock(title, cover, ctx, meta, imageBlock) {
+  const { colors, type, layout, titleFont } = ctx
+  const ink = colors.accentInk
+  const padding = `${layout.paddingX}px`
+  const imageNode = imageBlock === null
+    ? null
+    : image({ src: imageBlock.src, alt: imageBlock.alt ?? '' }, { width: '100%', display: 'block', margin: '0' })
+  const imageCaption = imageBlock !== null && String(imageBlock.alt ?? '').trim() !== ''
+    ? section({ fontFamily: titleFont, fontStyle: 'italic', fontSize: '11px', lineHeight: 1.6, color: colors.secondary, marginTop: '8px' }, text(imageBlock.alt))
+    : null
+  const label = color => section({ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px', fontSize: '10px', lineHeight: 1.4, letterSpacing: '0.22em', textTransform: 'uppercase', color }, [
+    span({}, text(cover.masthead || 'EDITION')),
+    cover.issue === '' ? null : span({}, text(cover.issue)),
+  ])
+  const kicker = cover.kicker === '' ? null : section({ fontSize: '11px', lineHeight: 1.6, letterSpacing: '0.14em', color: colors.accent, textTransform: 'uppercase', margin: '18px 0 8px' }, text(cover.kicker))
+  const lineList = cover.lines.length === 0 ? null : section({ marginTop: '18px', borderTop: `1px solid ${colors.border}`, paddingTop: '12px' }, cover.lines.map((line, index) => section({ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '7px' }, [
+    span({ color: colors.accent, fontSize: '10px', letterSpacing: '0.08em' }, text(String(index + 1).padStart(2, '0'))),
+    span({ color: colors.secondary, fontSize: '12px', lineHeight: 1.6 }, text(line)),
+  ])))
+  const titleBlock = size => section({ fontFamily: titleFont, fontSize: `${size}px`, fontWeight: type.titleWeight, lineHeight: 0.98, letterSpacing: '-0.02em', margin: '0 0 14px', color: colors.text }, text(title))
+
+  if (cover.style === 'poster') {
+    return section({ margin: `0 -${padding} 28px`, background: colors.accent, padding: `24px ${padding} 28px`, textAlign: cover.align }, [
+      label(ink),
+      kicker,
+      section({ color: ink, fontFamily: titleFont, fontSize: `${Math.min(54, type.titleSize + 12)}px`, fontWeight: type.titleWeight, lineHeight: 0.96, letterSpacing: '-0.02em', margin: '0 0 14px' }, text(title)),
+      cover.lines.length === 0 ? null : section({ textAlign: 'left', color: ink }, cover.lines.map((line, index) => section({ display: 'flex', gap: '10px', marginBottom: '7px', fontSize: '12px', lineHeight: 1.6 }, [
+        span({ opacity: 0.6 }, text(String(index + 1).padStart(2, '0'))),
+        span({}, text(line)),
+      ]))),
+      imageNode === null ? null : section({ margin: `20px -${padding} -28px` }, [imageNode, imageCaption]),
+    ])
+  }
+
+  if (cover.style === 'split') {
+    return section({ margin: `0 -${padding} 28px`, background: colors.card, padding: '18px' }, [
+      section({ display: 'flex', alignItems: 'stretch', gap: '14px' }, [
+        section({ flex: '1', minWidth: 0 }, [
+          label(colors.secondary),
+          kicker,
+          titleBlock(Math.min(40, type.titleSize + 4)),
+          lineList,
+        ]),
+        imageNode === null ? null : section({ width: '44%', flexShrink: 0 }, [imageNode, imageCaption]),
+      ]),
+    ])
+  }
+
+  if (cover.style === 'minimal') {
+    return section({ margin: `0 -${padding} 30px`, background: colors.bg, padding: `18px ${padding} 0`, textAlign: cover.align === 'center' ? 'center' : 'left' }, [
+      label(colors.secondary),
+      kicker,
+      titleBlock(Math.min(44, type.titleSize + 6)),
+      section({ width: '52px', height: '2px', background: colors.accent, margin: cover.align === 'center' ? '4px auto 16px' : '4px 0 16px' }),
+      lineList,
+      imageNode === null ? null : section({ marginTop: '20px' }, [imageNode, imageCaption]),
+    ])
+  }
+
+  return section({ margin: `0 -${padding} 28px`, background: colors.card, padding: `22px 22px 24px`, borderTop: `6px solid ${colors.accent}` }, [
+    label(colors.secondary),
+    kicker,
+    titleBlock(Math.min(52, type.titleSize + 10)),
+    lineList,
+    imageNode === null ? null : section({ margin: '20px 0 0' }, [imageNode, imageCaption]),
+  ])
+}
+
+/** Contents strip generated from the article headings. */
+function renderContentsBlock(blocks, ctx) {
+  const { colors, titleFont } = ctx
+  const headings = blocks.filter(block => block.type === 'heading').slice(0, 8)
+  if (headings.length === 0) return null
+  return section({ margin: '0 0 30px', borderTop: `1px solid ${colors.border}`, paddingTop: '13px' }, [
+    section({ display: 'flex', justifyContent: 'space-between', fontSize: '10px', letterSpacing: '0.24em', color: colors.accent, marginBottom: '10px' }, [
+      span({}, text('CONTENTS')),
+      span({}, text(String(headings.length).padStart(2, '0'))),
+    ]),
+    ...headings.map((heading, index) => section({ display: 'flex', alignItems: 'baseline', gap: '10px', padding: '5px 0', borderBottom: `1px solid ${colors.border}` }, [
+      span({ color: colors.accent, fontSize: '10px', minWidth: '18px' }, text(String(index + 1).padStart(2, '0'))),
+      span({ fontFamily: titleFont, fontSize: '14px', lineHeight: 1.5, color: colors.text }, text(plainText(heading.text))),
+    ])),
+  ])
+}
+
 /**
  * Build the article node tree.
  * @param {object} input blocks, design spec, and document metadata.
@@ -2706,20 +2816,39 @@ function buildArticle(input) {
 
   let headingIndex = 0
   const children = []
+  const blockMap = []
+  const push = (child, sourceIndex = null) => {
+    children.push(child)
+    blockMap.push(sourceIndex)
+  }
   const mark = ornamentNode(surface, colors)
-  if (mark !== null) children.push(mark)
-  if (titleText !== '') children.push(renderTitle(titleText, ctx, meta))
+  if (mark !== null) push(mark)
+
+  const blueprint = design.blueprint ?? null
+  const cover = blueprint?.cover?.enabled === true && titleText !== '' ? blueprint.cover : null
+  const sourceBlocks = blocks.filter(block => block.type !== 'title')
+  const coverImageBlock = cover !== null && cover.image === 'first'
+    ? sourceBlocks.find(block => block.type === 'image')
+    : null
+
+  if (cover !== null) push(renderCoverBlock(titleText, cover, ctx, meta, coverImageBlock ?? null))
+  else if (titleText !== '') push(renderTitle(titleText, ctx, meta))
+  if (blueprint?.contents === true) {
+    const contents = renderContentsBlock(sourceBlocks, ctx)
+    if (contents !== null) push(contents)
+  }
   const blockStart = children.length
 
-  const paragraphs = blocks.filter(block => block.type === 'paragraph')
+  const paragraphs = sourceBlocks.filter(block => block.type === 'paragraph')
   const firstParagraph = paragraphs[0]
   let didLead = false
   let didDropCap = false
 
-  for (const block of blocks) {
+  for (let sourceIndex = 0; sourceIndex < sourceBlocks.length; sourceIndex += 1) {
+    const block = sourceBlocks[sourceIndex]
+    if (block === coverImageBlock) continue
+    const before = children.length
     switch (block.type) {
-      case 'title':
-        break
       case 'heading':
         headingIndex += 1
         children.push(renderHeading(block, headingIndex, ctx))
@@ -2750,9 +2879,10 @@ function buildArticle(input) {
       default:
         break
     }
+    if (children.length > before) blockMap.push(sourceIndex)
   }
 
-  if (design.decor.showFooter && children.length > 1) children.push(renderFooter(ctx, meta))
+  if (design.decor.showFooter && children.length > 1) push(renderFooter(ctx, meta))
 
   const root = section(
     {
@@ -2766,7 +2896,7 @@ function buildArticle(input) {
     children,
   )
 
-  return { nodes: [root], title: titleText, blockStart }
+  return { nodes: [root], title: titleText, blockStart, blockMap }
 }
 
 /* ------------------------------------------------------------------ *
@@ -6673,6 +6803,7 @@ function PreviewStage(props) {
   }
   const root = article.nodes[0]
   const blockStart = Number.isInteger(article.blockStart) ? article.blockStart : (article.title !== '' ? 1 : 0)
+  const blockMap = Array.isArray(article.blockMap) ? article.blockMap : null
   const sourceBlocks = parsed.blocks.filter(block => block.type !== 'title')
 
   const moveBlock = (index, direction) => {
@@ -6778,7 +6909,7 @@ function PreviewStage(props) {
     h('div', { className: 'ws-stage' },
       h(WechatPhoneChrome, { brand: surfaceBrand, source: surface === 'article' ? source : '', empty: doc.text.trim() === '' && surface === 'article', device, surface },
         surface === 'article' ? h(ArticleBody, {
-          root, blockStart, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel,
+          root, blockStart, blockMap, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel,
           captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption,
           dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage,
           aiHashes, lockedHashes, toggleLock,
@@ -6877,7 +7008,7 @@ function SurfacePreview({ surface, title, digest, cover, account, date }) {
 }
 
 function ArticleBody(props) {
-  const { root, blockStart, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption, dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage, aiHashes, lockedHashes, toggleLock } = props
+  const { root, blockStart, blockMap, sourceBlocks, selectedBlock, setSelectedBlock, moveBlock, removeBlock, blockLabel, replaceImage, captionBlock, captionDraft, setCaptionDraft, startCaption, saveCaption, cancelCaption, dragIndex, setDragIndex, moveBlockTo, duplicateBlock, cropBlock, setCropBlock, cropBusy, cropImage, aiHashes, lockedHashes, toggleLock } = props
   const [hovered, setHovered] = React.useState(null)
   const children = root.children
 
@@ -6885,7 +7016,7 @@ function ArticleBody(props) {
     className: 'ws-article',
     style: root.style,
   }, children.map((child, index) => {
-    const blockIndex = index - blockStart
+    const blockIndex = Array.isArray(blockMap) ? (blockMap[index] ?? -1) : index - blockStart
     const block = blockIndex >= 0 && blockIndex < sourceBlocks.length ? sourceBlocks[blockIndex] : null
     const content = nodesToReact([child], h)
     if (!block) return h('div', { key: index, className: 'ws-block' }, content)
@@ -7007,6 +7138,7 @@ function AiSection(props) {
   const [pending, setPending] = React.useState(null)
   const [scopeMode, setScopeMode] = React.useState('selection')
   const [stylePreset, setStylePreset] = React.useState('')
+  const [fresh, setFresh] = React.useState(true)
   const [memoryEvents, setMemoryEvents] = React.useState([])
   const abortRef = React.useRef(null)
   const refreshMemory = React.useCallback(() => {
@@ -7120,6 +7252,7 @@ function AiSection(props) {
           history: messages.slice(-6).map(message => ({ role: message.role === 'assistant' ? 'assistant' : 'user', content: message.content })),
           styleGuide: doc.meta.styleGuide ?? DEFAULT_STYLE_GUIDE,
           styleMemory: memoryEvents.filter(item => item.type === 'accepted').slice(0, 3).map(item => item.instruction),
+          mode: fresh ? 'fresh' : 'refine',
         }, { timeoutMs: 150000, onProgress: chars => setProgress(chars), signal: controller?.signal })
       }
 
@@ -7353,6 +7486,9 @@ function AiSection(props) {
             h('button', { type: 'button', className: 'ws-chip' + (scopeMode === 'document' ? ' on' : ''), onClick: () => setScopeMode('document') }, t('整篇')),
           )
           : null,
+        h('div', { className: 'ws-scope-row' },
+          h(Toggle, { label: t('全新设计（不沿用当前版式）'), checked: fresh, onChange: setFresh }),
+        ),
         h('div', { className: 'ws-scope-row' },
           h('span', { className: 'ws-hint' }, t('语气')),
           [['', t('原样')], ['concise', t('更克制')], ['spoken', t('更口语')], ['shorter', t('更短')]].map(([id, label]) => h('button', {

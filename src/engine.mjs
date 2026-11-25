@@ -17,6 +17,7 @@ const DESIGN_QUOTE_STYLES = ['bar', 'pull', 'card', 'center', 'tint', 'stamp', '
 const DESIGN_DIVIDER_STYLES = ['dots', 'diamond', 'ornament', 'line', 'dash', 'none', 'star']
 const DESIGN_LIST_STYLES = ['dot', 'num', 'square', 'arrow', 'dash']
 const DESIGN_IMAGE_STYLES = ['plain', 'rounded', 'shadow', 'frame', 'polaroid', 'full', 'plate']
+const DESIGN_COVER_STYLES = ['magazine', 'poster', 'split', 'minimal']
 const DESIGN_FONT_KINDS = ['serif', 'sans', 'round']
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
 
@@ -376,7 +377,7 @@ const pickCustomEm = (value, fallback, min = 0, max = 0.08) => {
  */
 export function normalizeCustomDesign(raw) {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null
-  const meaningful = ['palette', 'type', 'surface', 'titleStyle', 'sectionStyle', 'quoteStyle', 'dividerStyle', 'listStyle', 'imageStyle', 'options']
+  const meaningful = ['palette', 'type', 'surface', 'titleStyle', 'sectionStyle', 'quoteStyle', 'dividerStyle', 'listStyle', 'imageStyle', 'options', 'blueprint']
   if (!meaningful.some(key => raw[key] !== undefined)) return null
   const base = themeOf('column')
   const paletteRaw = raw.palette !== null && typeof raw.palette === 'object' && !Array.isArray(raw.palette) ? raw.palette : {}
@@ -426,10 +427,30 @@ export function normalizeCustomDesign(raw) {
     imageWidth: Math.round(pickCustomNumber(optionsRaw.imageWidth, 100, 40, 100)),
     imageAlign: pickCustomEnum(optionsRaw.imageAlign, ['left', 'center', 'right'], 'center'),
   }
+  const blueprintRaw = raw.blueprint !== null && typeof raw.blueprint === 'object' && !Array.isArray(raw.blueprint) ? raw.blueprint : {}
+  const coverRaw = blueprintRaw.cover !== null && typeof blueprintRaw.cover === 'object' && !Array.isArray(blueprintRaw.cover) ? blueprintRaw.cover : {}
+  const coverText = (key, max) => typeof coverRaw[key] === 'string' ? coverRaw[key].trim().slice(0, max) : ''
+  const lines = Array.isArray(coverRaw.lines)
+    ? coverRaw.lines.filter(line => typeof line === 'string' && line.trim() !== '').map(line => line.trim().slice(0, 48)).slice(0, 3)
+    : []
+  const blueprint = {
+    cover: {
+      enabled: coverRaw.enabled === true,
+      style: pickCustomEnum(coverRaw.style, DESIGN_COVER_STYLES, 'magazine'),
+      masthead: coverText('masthead', 24),
+      issue: coverText('issue', 24),
+      kicker: coverText('kicker', 40),
+      lines,
+      image: pickCustomEnum(coverRaw.image, ['first', 'none'], 'first'),
+      align: pickCustomEnum(coverRaw.align, ['left', 'center'], 'left'),
+    },
+    contents: blueprintRaw.contents === true,
+  }
   return {
     source: raw.source === 'local' ? 'local' : 'ai',
     name: typeof raw.name === 'string' ? raw.name.trim().slice(0, 24) : '',
     tagline: typeof raw.tagline === 'string' ? raw.tagline.trim().slice(0, 60) : '',
+    blueprint,
     palette,
     type,
     surface,
@@ -579,6 +600,7 @@ export function composeDesign(stored) {
     variantName: variant.name,
     tagline: theme.tagline,
     custom: custom ?? undefined,
+    blueprint: custom?.blueprint ?? null,
     colors,
     type,
     layout,
@@ -601,6 +623,7 @@ export function customDesignFromLegacy(stored) {
     source: 'ai',
     name: composed.themeName,
     tagline: composed.tagline,
+    blueprint: null,
     palette: { bg, card, text, secondary, accent, accentSoft, border },
     type: { ...composed.type },
     surface: { pattern: composed.surface.pattern, ornament: composed.surface.ornament },
