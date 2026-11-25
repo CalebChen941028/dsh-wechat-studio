@@ -159,6 +159,36 @@ test('工作台可以切换排版、装饰 tab 与外观皮肤', async () => {
   }
 })
 
+test('AI 返回旧主题 id 时客户端兜底应用为 custom 版式', async () => {
+  const fetchImpl = async (url, init) => {
+    const body = init === undefined ? {} : JSON.parse(init.body)
+    if (body.action === 'aiEditStream') {
+      const payload = JSON.stringify({
+        type: 'done',
+        value: { reply: '换了杂志版式', design: { themeId: 'column', variantId: 'essay', overrides: {} } },
+      })
+      return new Response(`data: ${payload}\n\n`, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    }
+    const value = body.action === 'networkStatus'
+      ? { mode: 'system', proxyUrl: '', configured: false }
+      : { configured: false }
+    return { ok: true, status: 200, async json() { return { ok: true, value } } }
+  }
+  const { dom, window, container, root } = await mountPanel({ fetchImpl })
+  try {
+    const aiTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === 'AI')
+    aiTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 120))
+    container.querySelector('.ws-chat-empty .ws-chip').dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 500))
+    assert.match(container.querySelector('.ws-brand .ws-badge').textContent, /专栏/)
+    assert.equal(container.querySelectorAll('.ws-theme').length, 0)
+  } finally {
+    root.unmount()
+    dom.window.close()
+  }
+})
+
 test('窄宽度下切换到单栏视图', async () => {
   const { dom, window, container, root } = await mountPanel({ width: 760 })
   try {
@@ -173,7 +203,7 @@ test('窄宽度下切换到单栏视图', async () => {
 })
 
 
-test('AI 返回 custom 设计后确认应用会显示自定义版式', async () => {
+test('AI 返回 custom 设计后直接应用并保留', async () => {
   const fetchImpl = async (url, init) => {
     const body = init === undefined ? {} : JSON.parse(init.body)
     if (body.action === 'aiEditStream') {
@@ -209,12 +239,8 @@ test('AI 返回 custom 设计后确认应用会显示自定义版式', async () 
     const suggestion = container.querySelector('.ws-chat-empty .ws-chip')
     assert.ok(suggestion)
     suggestion.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 350))
-    assert.match(container.querySelector('.ws-diff-card').textContent, /夜色/)
-    const apply = [...container.querySelectorAll('.ws-diff-card button')].find(button => button.textContent.trim() === '应用修改')
-    assert.ok(apply)
-    apply.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 300))
+    await new Promise(resolve => setTimeout(resolve, 500))
+    assert.equal(container.querySelector('.ws-diff-card'), null, 'design-only result applies without a confirm card')
     assert.match(container.querySelector('.ws-brand .ws-badge').textContent, /夜色/)
     const editor = container.querySelector('.ws-editor')
     editor.value += '\n\n改完正文后，AI 版式仍然保留。'
@@ -258,55 +284,6 @@ test('英文语言包翻译核心导航与页签', async () => {
   }
 })
 
-
-test('AI 返回 custom 设计后确认应用会显示自定义版式', async () => {
-  const fetchImpl = async (url, init) => {
-    const body = init === undefined ? {} : JSON.parse(init.body)
-    if (body.action === 'aiEditStream') {
-      const payload = JSON.stringify({
-        type: 'done',
-        value: {
-          reply: '按文章气质原创了一套夜色版式',
-          design: {
-            custom: {
-              name: '夜色',
-              palette: { bg: '#101418', accent: '#D9A441' },
-              type: { titleFont: 'serif', titleSize: 34 },
-              titleStyle: 'stacked',
-              surface: { pattern: 'halftone', ornament: 'star' },
-              options: { dropCap: true },
-            },
-          },
-        },
-      })
-      return new Response(`data: ${payload}\n\n`, { status: 200, headers: { 'content-type': 'text/event-stream' } })
-    }
-    const value = body.action === 'networkStatus'
-      ? { mode: 'system', proxyUrl: '', configured: false }
-      : { configured: false }
-    return { ok: true, status: 200, async json() { return { ok: true, value } } }
-  }
-  const { dom, window, container, root } = await mountPanel({ fetchImpl })
-  try {
-    const aiTab = [...container.querySelectorAll('.ws-tab')].find(button => button.textContent.trim() === 'AI')
-    assert.ok(aiTab)
-    aiTab.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 120))
-    const suggestion = container.querySelector('.ws-chat-empty .ws-chip')
-    assert.ok(suggestion)
-    suggestion.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 350))
-    assert.match(container.querySelector('.ws-diff-card').textContent, /夜色/)
-    const apply = [...container.querySelectorAll('.ws-diff-card button')].find(button => button.textContent.trim() === '应用修改')
-    assert.ok(apply)
-    apply.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await new Promise(resolve => setTimeout(resolve, 300))
-    assert.match(container.querySelector('.ws-brand .ws-badge').textContent, /夜色/)
-  } finally {
-    root.unmount()
-    dom.window.close()
-  }
-})
 
 test('发布面板：读取草稿箱并导入为本地草稿', async () => {
   const calls = []

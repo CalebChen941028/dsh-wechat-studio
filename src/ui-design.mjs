@@ -179,9 +179,33 @@ function AiSection(props) {
             custom: value.design.custom,
             overrides: value.design.overrides ?? {},
           }
+        } else if (typeof value.design.themeId === 'string') {
+          // Compatibility for an older Host still returning a theme id.
+          nextDesign = { custom: customDesignFromLegacy(value.design), overrides: {} }
         }
       }
       const nextMeta = scopeLines === null && value.meta && typeof value.meta === 'object' ? { ...current.meta, ...value.meta } : undefined
+
+      // Design-only changes are reversible and are the point of the AI flow:
+      // apply them immediately instead of hiding the result behind a confirm card.
+      if (scopeLines === null && nextDesign !== undefined && nextText === undefined && nextMeta === undefined && !typedMeanwhile) {
+        if (typeof takeSnapshot === 'function') {
+          try { await takeSnapshot('before-ai') } catch { /* snapshot is best-effort; never block the design */ }
+        }
+        store.updateDoc(state => ({ ...state, design: nextDesign }))
+        appendStyleEvent({ docId: current.id, type: 'accepted', instruction, stylePreset, scope: scopeMode }).then(refreshMemory).catch(() => {})
+        const appliedName = composeDesign(nextDesign).themeName
+        setMessages(list => [...list, {
+          role: 'assistant',
+          content: value.reply || t('已重新设计版式'),
+          applied: [t('版式')],
+          canUndo: true,
+          model: value.model?.model ?? '',
+          parseError: value.parseError === true,
+        }])
+        toast(t('已应用 AI 版式：{name}', { name: t(appliedName) }), 'success')
+        return
+      }
 
       const changes = []
       if (nextText !== undefined) changes.push(t('正文'))
@@ -223,7 +247,9 @@ function AiSection(props) {
 
   const applyPending = async () => {
     if (pending === null) return
-    if (typeof takeSnapshot === 'function') await takeSnapshot('before-ai')
+    if (typeof takeSnapshot === 'function') {
+      try { await takeSnapshot('before-ai') } catch { /* snapshot is best-effort */ }
+    }
     const applied = []
     const patch = {}
     const current = store.doc

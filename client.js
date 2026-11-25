@@ -832,6 +832,8 @@ const UI_EN = {
   '做成画册感': 'Make it art-book-like',
   '做成构成感': 'Make it Bauhaus-like',
   'AI 自定义': 'AI custom',
+  '已重新设计版式': 'The layout has been redesigned',
+  '已应用 AI 版式：{name}': 'Applied AI layout: {name}',
   '自定义': 'Custom',
   'AI 自定义版式还没有真实账号实测': 'This AI-designed layout has not been tested against a real account yet',
   '当前是 AI 自定义版式，没有预设变体；可以让 AI 再设计一版': 'This is an AI-designed layout with no preset variants; ask AI to design another version.',
@@ -1954,6 +1956,45 @@ function composeDesign(stored) {
     type,
     layout,
     decor,
+  }
+}
+
+/**
+ * Convert a stored legacy theme design into the custom token shape. Used only
+ * as a compatibility bridge for old documents or a model that still returns a
+ * theme id; new designs never need a theme.
+ * @param {object} stored legacy design.
+ * @returns {object} custom design.
+ */
+function customDesignFromLegacy(stored) {
+  const composed = composeDesign(stored)
+  if (composed.custom !== undefined) return composed.custom
+  const { bg, card, text, secondary, accent, accentSoft, border } = composed.colors
+  return {
+    source: 'ai',
+    name: composed.themeName,
+    tagline: composed.tagline,
+    palette: { bg, card, text, secondary, accent, accentSoft, border },
+    type: { ...composed.type },
+    surface: { pattern: composed.surface.pattern, ornament: composed.surface.ornament },
+    titleStyle: composed.decor.titleStyle,
+    sectionStyle: composed.decor.sectionStyle,
+    quoteStyle: composed.decor.quoteStyle,
+    dividerStyle: composed.decor.dividerStyle,
+    listStyle: composed.decor.listStyle,
+    imageStyle: composed.decor.imageStyle,
+    options: {
+      dropCap: composed.decor.dropCap,
+      lead: composed.decor.lead,
+      showMeta: composed.decor.showMeta,
+      showFooter: composed.decor.showFooter,
+      showEyebrow: composed.decor.showEyebrow,
+      eyebrow: composed.decor.eyebrow,
+      footerText: composed.decor.footerText,
+      footerSign: composed.decor.footerSign,
+      imageWidth: composed.decor.imageWidth,
+      imageAlign: composed.decor.imageAlign,
+    },
   }
 }
 
@@ -7105,9 +7146,33 @@ function AiSection(props) {
             custom: value.design.custom,
             overrides: value.design.overrides ?? {},
           }
+        } else if (typeof value.design.themeId === 'string') {
+          // Compatibility for an older Host still returning a theme id.
+          nextDesign = { custom: customDesignFromLegacy(value.design), overrides: {} }
         }
       }
       const nextMeta = scopeLines === null && value.meta && typeof value.meta === 'object' ? { ...current.meta, ...value.meta } : undefined
+
+      // Design-only changes are reversible and are the point of the AI flow:
+      // apply them immediately instead of hiding the result behind a confirm card.
+      if (scopeLines === null && nextDesign !== undefined && nextText === undefined && nextMeta === undefined && !typedMeanwhile) {
+        if (typeof takeSnapshot === 'function') {
+          try { await takeSnapshot('before-ai') } catch { /* snapshot is best-effort; never block the design */ }
+        }
+        store.updateDoc(state => ({ ...state, design: nextDesign }))
+        appendStyleEvent({ docId: current.id, type: 'accepted', instruction, stylePreset, scope: scopeMode }).then(refreshMemory).catch(() => {})
+        const appliedName = composeDesign(nextDesign).themeName
+        setMessages(list => [...list, {
+          role: 'assistant',
+          content: value.reply || t('已重新设计版式'),
+          applied: [t('版式')],
+          canUndo: true,
+          model: value.model?.model ?? '',
+          parseError: value.parseError === true,
+        }])
+        toast(t('已应用 AI 版式：{name}', { name: t(appliedName) }), 'success')
+        return
+      }
 
       const changes = []
       if (nextText !== undefined) changes.push(t('正文'))
@@ -7149,7 +7214,9 @@ function AiSection(props) {
 
   const applyPending = async () => {
     if (pending === null) return
-    if (typeof takeSnapshot === 'function') await takeSnapshot('before-ai')
+    if (typeof takeSnapshot === 'function') {
+      try { await takeSnapshot('before-ai') } catch { /* snapshot is best-effort */ }
+    }
     const applied = []
     const patch = {}
     const current = store.doc

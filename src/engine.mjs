@@ -587,6 +587,45 @@ export function composeDesign(stored) {
 }
 
 /**
+ * Convert a stored legacy theme design into the custom token shape. Used only
+ * as a compatibility bridge for old documents or a model that still returns a
+ * theme id; new designs never need a theme.
+ * @param {object} stored legacy design.
+ * @returns {object} custom design.
+ */
+export function customDesignFromLegacy(stored) {
+  const composed = composeDesign(stored)
+  if (composed.custom !== undefined) return composed.custom
+  const { bg, card, text, secondary, accent, accentSoft, border } = composed.colors
+  return {
+    source: 'ai',
+    name: composed.themeName,
+    tagline: composed.tagline,
+    palette: { bg, card, text, secondary, accent, accentSoft, border },
+    type: { ...composed.type },
+    surface: { pattern: composed.surface.pattern, ornament: composed.surface.ornament },
+    titleStyle: composed.decor.titleStyle,
+    sectionStyle: composed.decor.sectionStyle,
+    quoteStyle: composed.decor.quoteStyle,
+    dividerStyle: composed.decor.dividerStyle,
+    listStyle: composed.decor.listStyle,
+    imageStyle: composed.decor.imageStyle,
+    options: {
+      dropCap: composed.decor.dropCap,
+      lead: composed.decor.lead,
+      showMeta: composed.decor.showMeta,
+      showFooter: composed.decor.showFooter,
+      showEyebrow: composed.decor.showEyebrow,
+      eyebrow: composed.decor.eyebrow,
+      footerText: composed.decor.footerText,
+      footerSign: composed.decor.footerSign,
+      imageWidth: composed.decor.imageWidth,
+      imageAlign: composed.decor.imageAlign,
+    },
+  }
+}
+
+/**
  * Build a neutral, content-aware baseline design. It deliberately has no
  * preset theme identity: local previews stay readable, and the AI is expected
  * to replace it with a bespoke token set when the user asks for design work.

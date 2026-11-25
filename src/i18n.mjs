@@ -821,6 +821,8 @@ const UI_EN = {
   '做成画册感': 'Make it art-book-like',
   '做成构成感': 'Make it Bauhaus-like',
   'AI 自定义': 'AI custom',
+  '已重新设计版式': 'The layout has been redesigned',
+  '已应用 AI 版式：{name}': 'Applied AI layout: {name}',
   '自定义': 'Custom',
   'AI 自定义版式还没有真实账号实测': 'This AI-designed layout has not been tested against a real account yet',
   '当前是 AI 自定义版式，没有预设变体；可以让 AI 再设计一版': 'This is an AI-designed layout with no preset variants; ask AI to design another version.',

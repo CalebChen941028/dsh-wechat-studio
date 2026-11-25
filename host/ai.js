@@ -16,7 +16,7 @@ const LONG_TEXT_DESIGN_ONLY = 7000
 const TIMEOUT_MS = 120000
 
 /** 主题目录。直接从浏览器端 themes.mjs 生成，保持单一数据源。 */
-import { detectTopic, measure, normalizeCustomDesign, normalizeStyleGuide, parseArticle } from '../src/engine.mjs'
+import { customDesignFromLegacy, detectTopic, measure, normalizeCustomDesign, normalizeStyleGuide, parseArticle } from '../src/engine.mjs'
 
 /** 装饰选项。与浏览器端 render/decor 选项一致。 */
 const DECOR_OPTIONS = {
@@ -52,6 +52,7 @@ const SYSTEM_PROMPT = `你是「公众号排版工作台」的编辑助手。用
   * titleStyle、sectionStyle、quoteStyle、dividerStyle、listStyle、imageStyle：取值见用户消息里的「可用装饰」。
   * options：dropCap/lead/showMeta/showFooter/showEyebrow 布尔；eyebrow/footerText/footerSign 文本；imageWidth 40-100；imageAlign 取 left|center|right。
 - 用户只要求微调时，也在当前 custom 基础上返回完整一套，不要只给一个颜色。
+- 只要用户要求改版式，就必须返回 design.custom；只回一句说明、不返回 custom，视为没有完成设计任务。
 - 只输出 design = { "custom": { ... } }。不要输出 themeId、variantId、overrides、HTML 或 CSS，不要发明装饰 id。
 
 只输出一个 JSON 对象，不要代码围栏、不要解释文字。字段：
@@ -257,7 +258,7 @@ export function createAiEditor({ ctx }) {
           ...(sessionId === undefined ? {} : { sessionId }),
           system: SYSTEM_PROMPT,
           messages: [{ role: 'user', content: [{ type: 'text', text: userPrompt }] }],
-          temperature: creativeBrief ? 0.6 : 0.3,
+          temperature: creativeBrief ? 0.5 : 0.3,
           maxTokens,
           signal: controller.signal,
         })) {
@@ -305,6 +306,10 @@ export function createAiEditor({ ctx }) {
         const design = {}
         const custom = normalizeCustomDesign(parsed.design.custom)
         if (custom !== null) design.custom = { ...custom, source: 'ai' }
+        else if (typeof parsed.design.themeId === 'string') {
+          // Compatibility for a model that still returns a legacy theme id.
+          design.custom = customDesignFromLegacy(parsed.design)
+        }
         if (Object.keys(design).length > 0) result.design = design
       }
       if (parsed.meta && typeof parsed.meta === 'object' && !Array.isArray(parsed.meta)) {

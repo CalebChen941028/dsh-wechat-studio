@@ -70,7 +70,7 @@ test('aiEdit sends the article and returns a structured text change', async () =
   assert.ok(calls[0].system.includes('JSON'))
 })
 
-test('aiEdit ignores legacy theme ids and only accepts custom designs', async () => {
+test('aiEdit converts a legacy theme reply into custom tokens as fallback', async () => {
   const { ctx } = fakeContext({
     chunks: jsonReply({
       reply: '换成暖色',
@@ -78,7 +78,8 @@ test('aiEdit ignores legacy theme ids and only accepts custom designs', async ()
     }),
   })
   const result = await createAiEditor({ ctx }).edit({ instruction: '换成暖色主题', text: ARTICLE })
-  assert.equal(result.design, undefined)
+  assert.equal(result.design.custom.name, '暖橙')
+  assert.equal(result.design.custom.palette.accent, '#C0603A')
   assert.equal(result.text, undefined)
 })
 

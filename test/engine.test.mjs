@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   parseArticle, parseInline, plainText, detectTopic, measure, composeDesign,
-  autoCompose, rankThemes, nextVariant, mixHex, readableOn, splitMarkdownChunks, normalizeCustomDesign,
+  autoCompose, rankThemes, nextVariant, mixHex, readableOn, splitMarkdownChunks, normalizeCustomDesign, customDesignFromLegacy,
   auditTypography, splitLongParagraphs, normalizeCjkPunctuation, tidyMarkdown, diffTextLines, replaceImageCaption, replaceImageSource, hashBlock, paletteFromPixels, replaceAllOccurrences, normalizeStyleGuide, auditHouseStyle, DEFAULT_STYLE_GUIDE,
 } from '../src/engine.mjs'
 import { THEMES } from '../src/themes.mjs'
@@ -546,4 +546,8 @@ test('AI 自定义设计不依赖主题库，并支持覆盖与兜底', () => {
   assert.equal(invalid.type.bodySize, 13)
   const lowContrast = normalizeCustomDesign({ palette: { bg: '#FFFFFF', accent: '#FFFF00' } })
   assert.notEqual(lowContrast.palette.accent, '#FFFF00')
+  const legacy = customDesignFromLegacy({ themeId: 'column', variantId: 'essay' })
+  assert.equal(legacy.name, '专栏')
+  assert.equal(legacy.titleStyle, 'kicker')
+  assert.equal(legacy.source, 'ai')
 })
