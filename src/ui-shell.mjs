@@ -357,8 +357,8 @@ function useDocumentStore() {
     updateDoc(current => ({ ...current, design: mutator(current.design) }), { coalesce: 'design' })
   }, [updateDoc])
 
-  const updateMeta = React.useCallback((patch) => {
-    updateDoc(current => ({ ...current, meta: { ...current.meta, ...patch } }), { coalesce: 'meta' })
+  const updateMeta = React.useCallback((patch, options = {}) => {
+    updateDoc(current => ({ ...current, meta: { ...current.meta, ...patch } }), { coalesce: 'meta', ...options })
   }, [updateDoc])
 
   const undo = React.useCallback(() => {

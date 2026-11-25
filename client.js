@@ -5057,8 +5057,8 @@ function useDocumentStore() {
     updateDoc(current => ({ ...current, design: mutator(current.design) }), { coalesce: 'design' })
   }, [updateDoc])
 
-  const updateMeta = React.useCallback((patch) => {
-    updateDoc(current => ({ ...current, meta: { ...current.meta, ...patch } }), { coalesce: 'meta' })
+  const updateMeta = React.useCallback((patch, options = {}) => {
+    updateDoc(current => ({ ...current, meta: { ...current.meta, ...patch } }), { coalesce: 'meta', ...options })
   }, [updateDoc])
 
   const undo = React.useCallback(() => {
@@ -8173,7 +8173,7 @@ function PublishSection(props) {
     if (doc.meta.coverCustom === true) return
     try {
       const generated = renderCover({ title, design, layout: coverLayout })
-      if (generated !== coverDataUrl) store.updateMeta({ coverDataUrl: generated })
+      if (generated !== coverDataUrl) store.updateMeta({ coverDataUrl: generated }, { history: false })
     } catch {
       // Canvas may be unavailable in unusual embedders; the publish step reports it.
     }

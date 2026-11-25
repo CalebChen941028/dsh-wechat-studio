@@ -1204,7 +1204,7 @@ function PublishSection(props) {
     if (doc.meta.coverCustom === true) return
     try {
       const generated = renderCover({ title, design, layout: coverLayout })
-      if (generated !== coverDataUrl) store.updateMeta({ coverDataUrl: generated })
+      if (generated !== coverDataUrl) store.updateMeta({ coverDataUrl: generated }, { history: false })
     } catch {
       // Canvas may be unavailable in unusual embedders; the publish step reports it.
     }

@@ -248,6 +248,11 @@ test('AI 返回 custom 设计后直接应用并保留', async () => {
     await new Promise(resolve => setTimeout(resolve, 260))
     assert.match(container.querySelector('.ws-brand .ws-badge').textContent, /夜色/)
     assert.equal(container.querySelectorAll('.ws-theme').length, 0)
+    const undo = [...container.querySelectorAll('.ws-msg button')].find(button => button.textContent.trim() === '撤销')
+    assert.ok(undo, 'undo action is offered')
+    undo.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 250))
+    assert.doesNotMatch(container.querySelector('.ws-brand .ws-badge').textContent, /夜色/, 'one click undoes the AI layout')
   } finally {
     root.unmount()
     dom.window.close()
