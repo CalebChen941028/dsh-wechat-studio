@@ -833,6 +833,8 @@ const UI_EN = {
   '做成构成感': 'Make it Bauhaus-like',
   'AI 自定义': 'AI custom',
   '已重新设计版式': 'The layout has been redesigned',
+  '模型只回了说明，没有返回可应用的版式；请再试一次，或直接说「改版式」。': 'The model replied without an applicable layout. Try again or say “change the layout”.',
+  '模型没有返回版式，请再试一次': 'The model returned no layout; try again',
   '已应用 AI 版式：{name}': 'Applied AI layout: {name}',
   '自定义': 'Custom',
   'AI 自定义版式还没有真实账号实测': 'This AI-designed layout has not been tested against a real account yet',
@@ -7194,14 +7196,18 @@ function AiSection(props) {
           diff: nextText === undefined ? [] : diffTextLines(sentText, nextText),
         })
       } else {
+        const designRequest = /设计|版式|排版|风格|海报|画册|杂志|创意|审美|模板|好看|丑/.test(instruction)
         setMessages(list => [...list, {
           role: 'assistant',
-          content: value.reply || t('已修改'),
+          content: designRequest && scopeLines === null
+            ? `${value.reply || t('已修改')}（${t('模型只回了说明，没有返回可应用的版式；请再试一次，或直接说「改版式」。')}）`
+            : (value.reply || t('已修改')),
           applied: changes,
           canUndo: false,
           model: value.model?.model ?? '',
           parseError: value.parseError === true,
         }])
+        if (designRequest && scopeLines === null) toast(t('模型没有返回版式，请再试一次'), 'error')
       }
     } catch (error) {
       setMessages(list => [...list, { role: 'error', content: error.message || t('修改失败'), code: error.code }])
